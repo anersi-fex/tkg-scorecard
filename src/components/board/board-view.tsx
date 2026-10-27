@@ -112,6 +112,11 @@ export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: "
     }
   }, [theme]);
 
+  // The owner's colorway from the latest poll (a change in Settings reaches the TV within 5 s).
+  useEffect(() => {
+    document.documentElement.setAttribute("data-colorway", snap.colorway);
+  }, [snap.colorway]);
+
   // Keys: F full screen, T flips light and dark.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -284,7 +289,7 @@ function LeaderRow({ line, max, count, today }: { line: AgentLine; max: number; 
         </div>
         <div className="mt-[0.45em] flex items-center gap-[0.8em]">
           <div className="h-[0.55em] flex-1 overflow-hidden rounded-full bg-track">
-            <div className={cn("h-full rounded-full transition-[width] duration-700", first ? "bg-tide" : "bg-blue-300")} style={{ width: `${pct}%` }} />
+            <div className={cn("h-full rounded-full transition-[width] duration-700", first ? "bg-tide" : "bg-bar")} style={{ width: `${pct}%` }} />
           </div>
           <p className="w-[9.5em] shrink-0 text-right text-[0.85em] font-semibold whitespace-nowrap text-gray-500">
             {line.policies} {line.policies === 1 ? "policy" : "policies"}

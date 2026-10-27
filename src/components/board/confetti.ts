@@ -1,8 +1,9 @@
 /**
- * A small confetti burst on a full-screen canvas (no library): paper pieces in the Tide colors
- * fall from the top and from two cannons at the sides. Stops on its own.
+ * A small confetti burst on a full-screen canvas (no library): paper pieces in the Crimson
+ * brand colors plus gold, green and white fall from the top and from two cannons at the sides.
+ * Stops on its own. (Paper, not UI: the one place a hex color is fine.)
  */
-const COLORS = ["#2f5bea", "#7b4dff", "#f5c451", "#34d399", "#ff6b57", "#ffffff"];
+const COLORS = ["#c42b32", "#ff6b57", "#f5c451", "#34d399", "#ffb4a8", "#ffffff"];
 
 interface Piece {
   x: number;

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { THEME_SCRIPT } from "@/lib/theme-script";
+import { loadColorway } from "@/lib/colorway-setting";
 import "./globals.css";
 
 /** iPhone screens (CSS width, height, pixel ratio) with a branded opening screen, light and dark. */
@@ -77,9 +78,11 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // The owner's colorway (Settings) colors every screen; the TV re-applies it from its 5-second poll.
+  const colorway = await loadColorway();
   return (
-    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+    <html lang="en" className="h-full antialiased" data-colorway={colorway} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>

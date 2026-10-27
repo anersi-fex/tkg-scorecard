@@ -43,8 +43,9 @@ function podiumPath(small) {
   return small ? steps : steps + starPath();
 }
 
-const GRAD_FROM = "#2f5bea";
-const GRAD_TO = "#7b4dff";
+// Crimson, the default colorway (owner pick, 2026-10-27): the icons stay Crimson whatever Settings says.
+const GRAD_FROM = "#c42b32";
+const GRAD_TO = "#ff6b57";
 const MARK_RADIUS = 0.27; // corner radius / size, as ScoreMark draws it
 
 // iPhone screens in CSS points and pixel ratio (the same list as Sales Coach's layout).
@@ -126,7 +127,7 @@ function ogHtml() {
   return page(
     band +
       `<main style="position:fixed;left:96px;top:130px;display:flex;align-items:center;gap:46px">` +
-      markHtml(220, 59, "box-shadow:0 2px 6px rgba(21,23,28,0.06),0 18px 40px rgba(47,91,234,0.24)") +
+      markHtml(220, 59, "box-shadow:0 2px 6px rgba(21,23,28,0.06),0 18px 40px rgba(196,43,50,0.24)") +
       `<div><div style="font-size:104px;font-weight:800;letter-spacing:-0.035em;line-height:1.05;color:${text}">Scorecard</div>` +
       `<div style="margin-top:14px;font-size:38px;font-weight:600;line-height:1.2;color:${muted}">by The Koka Group</div></div>` +
       `</main>`,

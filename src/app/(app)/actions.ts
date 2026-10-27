@@ -7,6 +7,7 @@ import { addAgent, deleteSale, getSale, insertSale, listAgents, saveSettings, se
 import { isDateKey, isMonthKey, todayInDetroit, addDays } from "@/lib/month";
 import { parseDollars } from "@/lib/money";
 import { DEFAULT_PRODUCTS } from "@/lib/types";
+import { isColorwayKey } from "@/lib/colorways";
 
 export type ActionResult = { ok: true; message?: string; id?: string } | { ok: false; error: string };
 
@@ -207,6 +208,20 @@ export async function savePersonGoal(month: string, agentId: string, form: FormD
     await setAgentGoal(month, agentId, cents);
     refresh();
     return { ok: true, message: cents ? "Goal saved." : "Goal cleared." };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}
+
+/** The colorway on every screen and the TV (Settings > Colorway). */
+export async function saveColorway(key: string): Promise<ActionResult> {
+  try {
+    await requireRole("owner");
+    if (!isColorwayKey(key)) return { ok: false, error: "That colorway isn't one of the choices." };
+    const current = await getSettings();
+    await saveSettings({ ...current, colorway: key });
+    refresh();
+    return { ok: true, message: "Saved. The TV changes within a few seconds." };
   } catch (err) {
     return { ok: false, error: message(err) };
   }

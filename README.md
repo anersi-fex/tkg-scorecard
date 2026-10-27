@@ -5,7 +5,7 @@ The team's month, live on the office TV: the leaderboard, team production agains
 - `/board`: the TV (full screen, refreshes itself, dark by default; F full screen, T light/dark)
 - `/`: this month on a phone or computer, with earlier months
 - `/log`: log a sale in three taps (who, how much, Log it)
-- `/team`, `/settings`: the people, their goals, the team goal, the board message
+- `/team`, `/settings`: the people, their goals, the team goal, the board message, the colorway (Crimson by default; Sky, Champion, Emerald)
 
 Setup for the owner is in `SETUP.md`. Working notes for Claude are in `CLAUDE.md` and `HANDOFF.md`.
 

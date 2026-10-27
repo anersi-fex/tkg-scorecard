@@ -1,10 +1,13 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { COLORWAYS, COLORWAY_KEYS, type ColorwayKey } from "@/lib/colorways";
+import { cn } from "@/components/ui";
 import type { AppSettings } from "@/lib/types";
 import { Button, Input, Label, Notice, Textarea } from "@/components/ui";
 import { ListCard, ListTitle } from "@/components/tide";
-import { saveBoardSettings, saveTeamGoal } from "../actions";
+import { saveBoardSettings, saveColorway, saveTeamGoal } from "../actions";
 import { toast } from "@/components/toaster";
 
 interface MonthGoal {
@@ -42,6 +45,12 @@ export function SettingsForms({
             </li>
           ))}
         </ListCard>
+      </section>
+
+      <section>
+        <ListTitle>Colorway</ListTitle>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">The color story on every phone and the TV. Crimson is the default; the app icon stays Crimson.</p>
+        <ColorwayPicker current={settings.colorway} />
       </section>
 
       <section>
@@ -93,6 +102,50 @@ export function SettingsForms({
           </li>
         </ListCard>
       </section>
+    </div>
+  );
+}
+
+function ColorwayPicker({ current }: { current: ColorwayKey }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [picked, setPicked] = useState<ColorwayKey>(current);
+  return (
+    <div role="radiogroup" aria-label="Colorway" className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {COLORWAY_KEYS.map((key) => {
+        const c = COLORWAYS[key];
+        const on = picked === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            disabled={pending}
+            onClick={() => {
+              setPicked(key);
+              // This screen changes at once; every other screen on the next load; the TV on its next poll.
+              document.documentElement.setAttribute("data-colorway", key);
+              start(async () => {
+                const r = await saveColorway(key);
+                toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+                if (r.ok) router.refresh();
+                else {
+                  setPicked(current);
+                  document.documentElement.setAttribute("data-colorway", current);
+                }
+              });
+            }}
+            className={cn("flex min-h-14 items-center gap-3 rounded-2xl bg-surface px-3 text-left shadow-card transition", on ? "outline-2 outline-accent" : "hover:bg-gray-50")}
+          >
+            <span aria-hidden className="h-9 w-9 shrink-0 rounded-xl" style={{ background: `linear-gradient(135deg, ${c.swatch[0]}, ${c.swatch[1]})` }} />
+            <span className="min-w-0">
+              <span className={cn("block text-[15px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{c.name}</span>
+              <span className="block truncate text-[12px] font-medium text-gray-500">{c.idea}</span>
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

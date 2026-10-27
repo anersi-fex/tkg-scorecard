@@ -117,7 +117,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
                 </div>
                 <div className="mt-1.5 flex items-center gap-2">
                   <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-track">
-                    <div className={cn("h-full rounded-full", a.rank === 1 && a.premiumCents > 0 ? "bg-tide" : "bg-blue-300")} style={{ width: `${a.goalCents > 0 ? Math.min(100, a.goalPct) : Math.round((a.premiumCents / maxPremium) * 100)}%` }} />
+                    <div className={cn("h-full rounded-full", a.rank === 1 && a.premiumCents > 0 ? "bg-tide" : "bg-bar")} style={{ width: `${a.goalCents > 0 ? Math.min(100, a.goalPct) : Math.round((a.premiumCents / maxPremium) * 100)}%` }} />
                   </div>
                   <span className="shrink-0 text-[12px] font-semibold text-gray-500">
                     {a.policies} {a.policies === 1 ? "policy" : "policies"}
