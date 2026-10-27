@@ -29,7 +29,8 @@ import { DEFAULT_COLORWAY, type ColorwayKey } from "./colorways";
 
 /** The TV's look (Settings > TV look): dark, or light. Browser-safe. */
 export type BoardTheme = "dark" | "light";
-export const BOARD_THEMES: BoardTheme[] = ["dark", "light"];
+/** Screen order (Light then Dark, like the app's Appearance control). */
+export const BOARD_THEMES: BoardTheme[] = ["light", "dark"];
 export const DEFAULT_BOARD_THEME: BoardTheme = "dark";
 export function isBoardTheme(v: unknown): v is BoardTheme {
   return v === "dark" || v === "light";

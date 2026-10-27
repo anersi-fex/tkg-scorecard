@@ -17,9 +17,9 @@ import { burst } from "./confetti";
  * The TV board. One screen, no scrolling, sized from the viewport (1em = about 1% of the width,
  * capped for 4K), so a 1080p TV, a 4K TV and a laptop all show the same layout. Polls /api/board
  * every few seconds; a sale that was not there before gets a celebration with confetti.
- * Dark or light comes from the owner's TV look (Settings) on every poll, unless the address pins
- * one (?theme=light). Keys: F full screen, T light/dark on this TV until the next change in
- * Settings or a reload. The cursor hides after a few seconds still.
+ * Dark or light is the owner's TV look (Settings), applied before paint and again from every poll,
+ * so the TV follows a change within 5 s; nothing on the TV itself changes it. Key: F full screen.
+ * The cursor hides after a few seconds still.
  */
 const POLL_MS = 5000;
 const CELEBRATE_MS = 9000;
@@ -81,7 +81,7 @@ function applyTheme(choice: BoardTheme) {
   document.documentElement.setAttribute("data-theme", choice);
 }
 
-export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: BoardTheme | null }) {
+export function BoardView({ initial }: { initial: MonthSnapshot }) {
   const router = useRouter();
   const [snap, setSnap] = useState(initial);
   const [offline, setOffline] = useState(0);
@@ -94,27 +94,23 @@ export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: B
   useWakeLock();
   useIdleCursor();
 
-  // The address pins the look (?theme=light); else the owner's TV look from the latest poll, so a
-  // change in Settings reaches the TV within 5 s. THEME_SCRIPT already applied it before paint, and
-  // the effect runs again only when the setting changes, so a T flip stays until then.
+  // The owner's TV look from the latest poll (a change in Settings reaches the TV within 5 s).
+  // THEME_SCRIPT already applied it before the first paint.
   useEffect(() => {
-    applyTheme(theme ?? snap.boardTheme);
-  }, [theme, snap.boardTheme]);
+    applyTheme(snap.boardTheme);
+  }, [snap.boardTheme]);
 
   // The owner's colorway from the latest poll (a change in Settings reaches the TV within 5 s).
   useEffect(() => {
     document.documentElement.setAttribute("data-colorway", snap.colorway);
   }, [snap.colorway]);
 
-  // Keys: F full screen, T flips light and dark.
+  // Key: F full screen.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "f" || e.key === "F") {
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
         else document.documentElement.requestFullscreen?.().catch(() => {});
-      }
-      if (e.key === "t" || e.key === "T") {
-        applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
       }
     };
     window.addEventListener("keydown", onKey);
@@ -237,7 +233,7 @@ export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: B
         <p className="min-w-0 truncate text-[1.1em] font-bold text-gray-700">{snap.message || " "}</p>
         <p className="shrink-0">
           {offline >= 3 ? <span className="text-amber-800">Reconnecting…</span> : <>Updated {formatClock(snap.generatedAt)}</>}
-          <span className="ml-[1em] text-gray-500">F full screen · T light/dark</span>
+          <span className="ml-[1em] text-gray-500">F full screen</span>
         </p>
       </footer>
 

@@ -36,12 +36,11 @@ test("the TV opens in the owner's TV look, dark when there is none", () => {
   assert.equal(decide({ path: "/board", boardTheme: "sepia" }), "dark");
 });
 
-test("the TV ignores this browser's saved app theme; the address pins a look", () => {
+test("the TV ignores this browser's saved app theme and anything in the address", () => {
   assert.equal(decide({ path: "/board", saved: "light" }), "dark");
   assert.equal(decide({ path: "/board", saved: "dark", boardTheme: "light" }), "light");
-  assert.equal(decide({ path: "/board", search: "?theme=light" }), "light");
-  assert.equal(decide({ path: "/board", search: "?theme=dark", boardTheme: "light" }), "dark");
-  assert.equal(decide({ path: "/board", search: "?theme=blue", boardTheme: "light" }), "light");
+  assert.equal(decide({ path: "/board", search: "?theme=light" }), "dark");
+  assert.equal(decide({ path: "/board", search: "?theme=dark", boardTheme: "light" }), "light");
 });
 
 test("the phone app follows its own saved choice and never the TV look", () => {

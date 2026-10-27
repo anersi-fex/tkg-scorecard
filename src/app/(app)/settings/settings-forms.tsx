@@ -55,7 +55,7 @@ export function SettingsForms({
 
       <section>
         <ListTitle>TV look</ListTitle>
-        <p className="mt-1 px-1 text-[13px] text-gray-500">Dark or light on the office TV. The TV follows this within a few seconds; pressing T on the TV flips it there until the next change here.</p>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">Light or dark on the office TV. The TV follows this within a few seconds.</p>
         <BoardThemePicker current={settings.boardTheme} />
       </section>
 
@@ -133,9 +133,15 @@ function ColorwayPicker({ current }: { current: ColorwayKey }) {
               // This screen changes at once; every other screen on the next load; the TV on its next poll.
               document.documentElement.setAttribute("data-colorway", key);
               start(async () => {
-                const r = await saveColorway(key);
-                toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-                if (r.ok) router.refresh();
+                let ok = false;
+                try {
+                  const r = await saveColorway(key);
+                  toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+                  ok = r.ok;
+                } catch {
+                  toast("Couldn't reach the server. Try again.", false);
+                }
+                if (ok) router.refresh();
                 else {
                   setPicked(current);
                   document.documentElement.setAttribute("data-colorway", current);
@@ -176,11 +182,17 @@ const BOARD_THEME_OPTIONS: Record<BoardTheme, { label: string; icon: React.React
   },
 };
 
-/** Dark / Light for the TV, saved on tap (like the colorway); the TV picks it up on its next poll. */
+/** Light / Dark for the TV, saved on tap (like the colorway); the TV picks it up on its next poll. */
 function BoardThemePicker({ current }: { current: BoardTheme }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [picked, setPicked] = useState<BoardTheme>(current);
+  // Follow the saved value when the page refreshes (a change made on another phone shows here).
+  const [seen, setSeen] = useState(current);
+  if (seen !== current) {
+    setSeen(current);
+    setPicked(current);
+  }
   return (
     <div role="radiogroup" aria-label="TV look" className="mt-2 grid grid-cols-2 gap-1 rounded-2xl bg-track p-1">
       {BOARD_THEMES.map((key) => {
@@ -194,18 +206,22 @@ function BoardThemePicker({ current }: { current: BoardTheme }) {
             aria-checked={on}
             disabled={pending}
             onClick={() => {
-              if (key === picked) return;
               setPicked(key);
               start(async () => {
-                const r = await saveBoardTheme(key);
-                toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-                if (r.ok) router.refresh();
-                else setPicked(current);
+                try {
+                  const r = await saveBoardTheme(key);
+                  toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+                  if (r.ok) router.refresh();
+                  else setPicked(current);
+                } catch {
+                  toast("Couldn't reach the server. Try again.", false);
+                  setPicked(current);
+                }
               });
             }}
             className={cn(
               "flex min-h-12 items-center justify-center gap-2 rounded-xl text-[15px] font-bold transition",
-              on ? "bg-segment text-accent-text shadow-card" : "text-gray-600 hover:text-gray-900",
+              on ? "bg-segment text-gray-900 shadow-card" : "text-gray-600 hover:text-gray-900",
             )}
           >
             {o.icon}

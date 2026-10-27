@@ -275,17 +275,12 @@ try {
   check(!tvOverflow, "board fits the TV with no scroll");
   await t.keyboard.press("t");
   await t.waitForTimeout(400);
-  check((await t.getAttribute("html", "data-theme")) === "light", "T flips the board to light");
-  await t.waitForTimeout(6000);
-  check((await t.getAttribute("html", "data-theme")) === "light", "a T flip stays through the next poll while Settings is unchanged");
+  check((await t.getAttribute("html", "data-theme")) === "dark", "nothing on the TV itself changes the look (T does nothing)");
   check((await t.evaluate(() => localStorage.getItem("theme"))) === null, "the TV never saves a look in the browser");
-  await t.keyboard.press("t");
-  await t.waitForTimeout(400);
-  check((await t.getAttribute("html", "data-theme")) === "dark", "T flips it back to dark");
-  // An address with ?theme= pins the look whatever Settings says
+  // Settings is the only control, whatever the address says
   const pinned = await tv.newPage();
   await pinned.goto(`${APP}/board?theme=light`, { waitUntil: "commit" });
-  check((await pinned.getAttribute("html", "data-theme")) === "light", "?theme=light pins the TV light while Settings says dark");
+  check((await pinned.getAttribute("html", "data-theme")) === "dark", "?theme=light in the address changes nothing");
   await pinned.close();
 
   // A Shortcut logs a sale: the board celebrates within a poll
