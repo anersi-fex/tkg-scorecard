@@ -418,7 +418,7 @@ function Feed({ sales, tones, today }: { sales: FeedSale[]; tones: Record<string
               <p className="min-w-0 flex-1 truncate text-[1em] font-bold">
                 {firstName(s.agentName)}
                 <span className="font-semibold text-gray-500">
-                  {s.client ? ` · ${s.client}` : ""}
+                  {s.carrier ? ` · ${s.carrier}` : ""}
                   {s.product ? ` · ${s.product}` : ""}
                   {s.policies > 1 ? ` · ${s.policies} policies` : ""}
                 </span>
@@ -450,8 +450,8 @@ function Celebration({ sale }: { sale: FeedSale }) {
         <p className="mt-[0.4em] font-mono text-[3.6em] leading-none font-bold tracking-[-0.035em] text-gray-900">{formatMoney(sale.premiumCents)}</p>
         <p className="mt-[0.6em] text-[1.2em] font-semibold text-gray-500">
           annual premium
+          {sale.carrier ? ` · ${sale.carrier}` : ""}
           {sale.product ? ` · ${sale.product}` : ""}
-          {sale.client ? ` · for ${sale.client}` : ""}
           {sale.policies > 1 ? ` · ${sale.policies} policies` : ""}
         </p>
       </div>

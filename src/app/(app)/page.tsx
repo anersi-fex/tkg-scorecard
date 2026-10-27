@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth";
 import { dbConfigured } from "@/lib/supabase";
 import { loadMonthSnapshot, type MonthSnapshot } from "@/lib/board";
+import { getSettings } from "@/lib/data";
 import { addMonths, dayLabel, isMonthKey, monthKeyOf, monthLabel, todayInDetroit } from "@/lib/month";
 import { formatDollars, formatMoney } from "@/lib/money";
 import { Avatar } from "@/components/avatar";
@@ -53,6 +54,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   }
   const line = paceLine(s);
   const monthSales = s.sales;
+  const carriers = (await getSettings()).carriers;
   const top = s.agents[0];
   const maxPremium = Math.max(1, ...s.agents.map((a) => a.premiumCents));
 
@@ -142,13 +144,13 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[15px] font-bold text-gray-900">{r.agentName}</p>
                 <p className="truncate text-[13px] font-medium text-gray-500">
-                  {[r.client, r.product, r.policies > 1 ? `${r.policies} policies` : null, r.soldOn === today ? `Today, ${formatClock(r.createdAt)}` : formatDate(r.soldOn, { year: false })]
+                  {[r.carrier, r.product, r.policies > 1 ? `${r.policies} policies` : null, r.soldOn === today ? `Today, ${formatClock(r.createdAt)}` : formatDate(r.soldOn, { year: false })]
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
               </div>
               <p className="shrink-0 font-mono text-[16px] font-bold text-gray-900">{formatMoney(r.premiumCents)}</p>
-              <SaleRowMenu sale={r} role={role} agents={s.agents.map((a) => ({ id: a.id, name: a.name }))} />
+              <SaleRowMenu sale={r} role={role} agents={s.agents.map((a) => ({ id: a.id, name: a.name }))} carriers={carriers} />
             </li>
           ))}
         </ListCard>

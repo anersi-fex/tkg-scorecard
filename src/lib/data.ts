@@ -28,6 +28,7 @@ function toSale(r: SaleRow): SaleWithAgent {
     premium_cents: Number(r.premium_cents),
     policies: r.policies,
     product: r.product,
+    carrier: r.carrier,
     client: r.client,
     note: r.note,
     sold_on: r.sold_on,
@@ -37,7 +38,7 @@ function toSale(r: SaleRow): SaleWithAgent {
   };
 }
 
-const SALE_COLUMNS = "id, agent_id, premium_cents, policies, product, client, note, sold_on, logged_by, created_at, agents(name)";
+const SALE_COLUMNS = "id, agent_id, premium_cents, policies, product, carrier, client, note, sold_on, logged_by, created_at, agents(name)";
 
 export async function listAgents(opts: { includeInactive?: boolean } = {}): Promise<Agent[]> {
   let q = db().from("agents").select("id, name, active, sort").order("sort").order("name");
@@ -103,6 +104,7 @@ export interface NewSale {
   premium_cents: number;
   policies: number;
   product: string | null;
+  carrier: string | null;
   client: string | null;
   note: string | null;
   sold_on: string;
@@ -175,10 +177,14 @@ export async function getSettings(): Promise<AppSettings> {
   const { data, error } = await db().from("settings").select("value").eq("key", "app").maybeSingle();
   if (error) fail("settings.get", error);
   const v = (data?.value ?? {}) as Partial<AppSettings>;
-  const products = Array.isArray(v.products) ? v.products.filter((p): p is string => typeof p === "string" && p.trim().length > 0).slice(0, 12) : DEFAULT_SETTINGS.products;
+  const list = (raw: unknown, fallback: string[]) => {
+    const items = Array.isArray(raw) ? raw.filter((p): p is string => typeof p === "string" && p.trim().length > 0).slice(0, 20) : fallback;
+    return items.length ? items : fallback;
+  };
   return {
     message: typeof v.message === "string" ? v.message.slice(0, 120) : "",
-    products: products.length ? products : DEFAULT_SETTINGS.products,
+    products: list(v.products, DEFAULT_SETTINGS.products),
+    carriers: list(v.carriers, DEFAULT_SETTINGS.carriers),
     colorway: isColorwayKey(v.colorway) ? v.colorway : DEFAULT_COLORWAY,
   };
 }

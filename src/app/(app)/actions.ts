@@ -6,7 +6,7 @@ import { requireRole } from "@/lib/auth";
 import { addAgent, deleteSale, getSale, insertSale, listAgents, saveSettings, setAgentGoal, setTeamGoal, updateAgent, updateSale, getSettings } from "@/lib/data";
 import { isDateKey, isMonthKey, todayInDetroit, addDays } from "@/lib/month";
 import { parseDollars } from "@/lib/money";
-import { DEFAULT_PRODUCTS } from "@/lib/types";
+import { DEFAULT_CARRIERS, DEFAULT_PRODUCTS } from "@/lib/types";
 import { isColorwayKey } from "@/lib/colorways";
 
 export type ActionResult = { ok: true; message?: string; id?: string } | { ok: false; error: string };
@@ -31,7 +31,7 @@ const SaleInput = z.object({
   premium: z.string().trim().min(1),
   policies: z.coerce.number().int().min(1).max(50).default(1),
   product: text(40).nullable().default(null),
-  client: text(40).nullable().default(null),
+  carrier: text(40).nullable().default(null),
   note: text(200).nullable().default(null),
   sold_on: z.string().trim().default(""),
 });
@@ -46,6 +46,7 @@ export async function logSale(form: FormData): Promise<ActionResult> {
     const cents = parseDollars(input.premium);
     if (cents == null) return { ok: false, error: "The annual premium needs to be an amount, like 1250 or 1,250.50." };
     if (cents === 0) return { ok: false, error: "The annual premium can't be $0." };
+    if (!input.carrier) return { ok: false, error: "Tap the carrier it was written with." };
     const today = todayInDetroit();
     const soldOn = input.sold_on || today;
     if (!isDateKey(soldOn)) return { ok: false, error: "That date isn't right." };
@@ -59,7 +60,8 @@ export async function logSale(form: FormData): Promise<ActionResult> {
       premium_cents: cents,
       policies: input.policies,
       product: input.product,
-      client: input.client,
+      carrier: input.carrier,
+      client: null,
       note: input.note,
       sold_on: soldOn,
       logged_by: role,
@@ -95,7 +97,7 @@ const EditInput = z.object({
   premium: z.string().trim().min(1),
   policies: z.coerce.number().int().min(1).max(50),
   product: text(40).nullable().default(null),
-  client: text(40).nullable().default(null),
+  carrier: text(40).nullable().default(null),
   note: text(200).nullable().default(null),
   sold_on: z.string().trim(),
   agent_id: z.string().uuid(),
@@ -119,7 +121,7 @@ export async function editSale(id: string, form: FormData): Promise<ActionResult
       premium_cents: cents,
       policies: input.policies,
       product: input.product,
-      client: input.client,
+      carrier: input.carrier,
       note: input.note,
       sold_on: input.sold_on,
     });
@@ -236,14 +238,16 @@ export async function saveBoardSettings(form: FormData): Promise<ActionResult> {
       .replace(/[\r\n\t]+/g, " ")
       .trim()
       .slice(0, 120);
-    const productsRaw = String(form.get("products") ?? "");
-    const products = productsRaw
-      .split(/[,\n]/)
-      .map((p) => p.trim().slice(0, 40))
-      .filter(Boolean)
-      .filter((p, i, all) => all.findIndex((q) => q.toLowerCase() === p.toLowerCase()) === i)
-      .slice(0, 12);
-    await saveSettings({ ...current, message: msg, products: products.length ? products : DEFAULT_PRODUCTS });
+    const chips = (raw: FormDataEntryValue | null, fallback: string[]) => {
+      const items = String(raw ?? "")
+        .split(/[,\n]/)
+        .map((p) => p.trim().slice(0, 40))
+        .filter(Boolean)
+        .filter((p, i, all) => all.findIndex((q) => q.toLowerCase() === p.toLowerCase()) === i)
+        .slice(0, 20);
+      return items.length ? items : fallback;
+    };
+    await saveSettings({ ...current, message: msg, products: chips(form.get("products"), DEFAULT_PRODUCTS), carriers: chips(form.get("carriers"), DEFAULT_CARRIERS) });
     refresh();
     return { ok: true, message: "Saved. The board updates within a few seconds." };
   } catch (err) {

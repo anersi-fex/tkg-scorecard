@@ -32,7 +32,7 @@ export default async function LogPage({ searchParams }: PageProps<"/log">) {
           )}
         </Notice>
       ) : (
-        <LogForm agents={agents.map((a) => ({ id: a.id, name: a.name, tone: tones[a.id] }))} products={settings.products} today={todayInDetroit()} preset={preset} />
+        <LogForm agents={agents.map((a) => ({ id: a.id, name: a.name, tone: tones[a.id] }))} products={settings.products} carriers={settings.carriers} today={todayInDetroit()} preset={preset} />
       )}
     </>
   );
