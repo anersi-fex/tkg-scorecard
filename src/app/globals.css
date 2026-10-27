@@ -1,0 +1,423 @@
+@import "tailwindcss";
+@import "@fontsource-variable/plus-jakarta-sans";
+@import "@fontsource-variable/space-grotesk";
+
+/*
+ * Tide, the TKG app theme (the same tokens as Sales Coach, so Scorecard reads as its sibling).
+ * Light by default, dark when the phone is dark or the viewer picks it (data-theme on <html>).
+ * Every color is a CSS variable below, so Tailwind's scales follow the mode:
+ *   gray-50 subtle fill … gray-900 main text; blue = the cobalt accent; ink = page; surface = cards.
+ * Plus Jakarta Sans for text, Space Grotesk (font-mono here) for times and numbers.
+ * Scorecard adds: up/down (ahead of or behind pace), the three medal tints, and the TV board tokens.
+ */
+@theme {
+  --font-sans: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Space Grotesk Variable", "Space Grotesk", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ink: var(--t-page);
+  --color-surface: var(--t-card);
+  --color-surface-2: var(--t-raised);
+
+  --color-gray-50: var(--t-gray-50);
+  --color-gray-100: var(--t-gray-100);
+  --color-gray-200: var(--t-gray-200);
+  --color-gray-300: var(--t-gray-300);
+  --color-gray-400: var(--t-gray-400);
+  --color-gray-500: var(--t-gray-500);
+  --color-gray-600: var(--t-gray-600);
+  --color-gray-700: var(--t-gray-700);
+  --color-gray-800: var(--t-gray-800);
+  --color-gray-900: var(--t-gray-900);
+
+  --color-blue-50: var(--t-blue-50);
+  --color-blue-100: var(--t-blue-100);
+  --color-blue-200: var(--t-blue-200);
+  --color-blue-300: var(--t-blue-300);
+  --color-blue-400: var(--t-blue-400);
+  --color-blue-500: var(--t-blue-500);
+  --color-blue-600: var(--t-blue-600);
+  --color-blue-700: var(--t-blue-700);
+  --color-blue-800: var(--t-blue-800);
+  --color-blue-900: var(--t-blue-900);
+
+  --color-green-50: var(--t-green-50);
+  --color-green-100: var(--t-green-100);
+  --color-green-200: var(--t-green-200);
+  --color-green-700: var(--t-green-700);
+  --color-green-800: var(--t-green-800);
+  --color-green-900: var(--t-green-900);
+
+  --color-amber-50: var(--t-amber-50);
+  --color-amber-100: var(--t-amber-100);
+  --color-amber-200: var(--t-amber-200);
+  --color-amber-300: var(--t-amber-300);
+  --color-amber-400: var(--t-amber-400);
+  --color-amber-800: var(--t-amber-800);
+  --color-amber-900: var(--t-amber-900);
+
+  --color-red-50: var(--t-red-50);
+  --color-red-100: var(--t-red-100);
+  --color-red-200: var(--t-red-200);
+  --color-red-300: var(--t-red-300);
+  --color-red-700: var(--t-red-700);
+  --color-red-800: var(--t-red-800);
+  --color-red-900: var(--t-red-900);
+
+  --color-purple-50: var(--t-purple-50);
+  --color-purple-100: var(--t-purple-100);
+  --color-purple-800: var(--t-purple-800);
+  --color-purple-900: var(--t-purple-900);
+
+  /* Named Tide tokens for new code: bg-line, text-muted, bg-tint, text-accent, bg-rep … */
+  --color-line: var(--t-line);
+  --color-muted: var(--t-gray-500);
+  --color-accent: var(--t-accent);
+  --color-accent-text: var(--t-accent-text);
+  --color-tint: var(--t-tint);
+  --color-track: var(--t-track);
+  --color-segment: var(--t-segment);
+  --color-gold: var(--t-gold);
+  --color-silver: var(--t-silver);
+  --color-bronze: var(--t-bronze);
+  --color-up: var(--t-up);
+  --color-down: var(--t-down);
+  --color-danger: var(--t-danger);
+  --color-chart-1: var(--t-chart-1);
+  --color-chart-2: var(--t-chart-2);
+}
+
+/* Light (default) */
+:root {
+  color-scheme: light;
+  --t-page: #f2f3f7;
+  --t-card: #ffffff;
+  --t-raised: #f6f7fa;
+  --t-line: #e6e8ee;
+  --t-track: #e4e6ec;
+  --t-segment: #ffffff;
+
+  --t-gray-50: #f2f3f7;
+  --t-gray-100: #ebedf2;
+  --t-gray-200: #e3e6ec;
+  --t-gray-300: #d3d7e0;
+  --t-gray-400: #9aa0ad;
+  --t-gray-500: #646a78;
+  --t-gray-600: #555b69;
+  --t-gray-700: #3d424d;
+  --t-gray-800: #262a33;
+  --t-gray-900: #15171c;
+
+  --t-blue-50: #eef2ff;
+  --t-blue-100: #e6ecff;
+  --t-blue-200: #ccd8ff;
+  --t-blue-300: #a9bcfb;
+  --t-blue-400: #5b7df0;
+  --t-blue-500: #3d66ee;
+  --t-blue-600: #2f5bea;
+  --t-blue-700: #2449c9;
+  --t-blue-800: #1d3a9f;
+  --t-blue-900: #172e7d;
+
+  --t-green-50: #eaf8f0;
+  --t-green-100: #dff5e8;
+  --t-green-200: #bde8cf;
+  --t-green-700: #167a45;
+  --t-green-800: #12663a;
+  --t-green-900: #0d4d2c;
+
+  --t-amber-50: #fff7e6;
+  --t-amber-100: #ffefc7;
+  --t-amber-200: #ffdf94;
+  --t-amber-300: #f5c451;
+  --t-amber-400: #d99a00;
+  --t-amber-800: #7a5000;
+  --t-amber-900: #5f3e00;
+
+  --t-red-50: #fdeeee;
+  --t-red-100: #fbdcdc;
+  --t-red-200: #f5b8b9;
+  --t-red-300: #ec8d8f;
+  --t-red-700: #c42b32;
+  --t-red-800: #a3242a;
+  --t-red-900: #7f1d22;
+
+  --t-purple-50: #f3edfe;
+  --t-purple-100: #e9dffd;
+  --t-purple-800: #5b2db0;
+  --t-purple-900: #4a2391;
+
+  --t-accent: #2f5bea;
+  --t-accent-text: #2449c9;
+  --t-tint: #e6ecff;
+  --t-grad-from: #2f5bea;
+  --t-grad-to: #7b4dff;
+  --t-grad: linear-gradient(135deg, var(--t-grad-from), var(--t-grad-to));
+  /* Buttons with a text label: white text stays at 4.5:1 or better */
+  --t-grad-strong: linear-gradient(135deg, #2f5bea, #7b4dff);
+  --t-danger: #c42b32;
+  --t-glow: rgba(76, 90, 255, 0.32);
+  --t-shadow: 0 1px 2px rgba(21, 23, 28, 0.04), 0 8px 24px rgba(21, 23, 28, 0.06);
+  --t-shadow-float: 0 2px 6px rgba(21, 23, 28, 0.06), 0 18px 40px rgba(21, 23, 28, 0.14);
+
+  --t-gold: #c98a00;
+  --t-silver: #6f7787;
+  --t-bronze: #a9622a;
+  --t-up: #15803d;
+  --t-down: #c42b32;
+  /* Chart fills: actual (cobalt) and the goal line (violet) */
+  --t-chart-1: #2f5bea;
+  --t-chart-2: #7b4dff;
+}
+
+/* Dark: the phone's setting, unless the viewer picked light */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --t-page: #0b0d12;
+    --t-card: #141823;
+    --t-raised: #1b2030;
+    --t-line: #262c3b;
+    --t-track: #1b2030;
+    --t-segment: #2a3142;
+
+    --t-gray-50: #10131a;
+    --t-gray-100: #171b26;
+    --t-gray-200: #232837;
+    --t-gray-300: #2e3445;
+    --t-gray-400: #6e768a;
+    --t-gray-500: #8c93a5;
+    --t-gray-600: #a3a9b8;
+    --t-gray-700: #c3c8d4;
+    --t-gray-800: #dcdfe6;
+    --t-gray-900: #eef0f5;
+
+    --t-blue-50: #161d33;
+    --t-blue-100: #1c2543;
+    --t-blue-200: #263160;
+    --t-blue-300: #34417d;
+    --t-blue-400: #7d98ff;
+    --t-blue-500: #6b8bff;
+    --t-blue-600: #3f66f2;
+    --t-blue-700: #8ea6ff;
+    --t-blue-800: #b4c4ff;
+    --t-blue-900: #d3ddff;
+
+    --t-green-50: #0f2418;
+    --t-green-100: #143221;
+    --t-green-200: #1f4a31;
+    --t-green-700: #4ade80;
+    --t-green-800: #86efac;
+    --t-green-900: #bbf7d0;
+
+    --t-amber-50: #2a1d07;
+    --t-amber-100: #3d2a0a;
+    --t-amber-200: #5a3d0e;
+    --t-amber-300: #7a5314;
+    --t-amber-400: #f5b83d;
+    --t-amber-800: #fcd34d;
+    --t-amber-900: #fde68a;
+
+    --t-red-50: #2a1210;
+    --t-red-100: #3d1a16;
+    --t-red-200: #5a2621;
+    --t-red-300: #7a3129;
+    --t-red-700: #f87171;
+    --t-red-800: #fca5a5;
+    --t-red-900: #fecaca;
+
+    --t-purple-50: #1f1430;
+    --t-purple-100: #2e1d47;
+    --t-purple-800: #d8b4fe;
+    --t-purple-900: #e9d5ff;
+
+    --t-accent: #6b8bff;
+    --t-accent-text: #8ea6ff;
+    --t-tint: #1f2950;
+    --t-grad-from: #4c74ff;
+    --t-grad-to: #9b6bff;
+    --t-grad: linear-gradient(135deg, var(--t-grad-from), var(--t-grad-to));
+    --t-grad-strong: linear-gradient(135deg, #3f66f2, #7c4ff0);
+    --t-danger: #d0353b;
+    --t-glow: rgba(110, 120, 255, 0.4);
+    --t-shadow: inset 0 0 0 1px #1d2230, 0 12px 32px rgba(0, 0, 0, 0.35);
+    --t-shadow-float: inset 0 0 0 1px #262c3b, 0 18px 44px rgba(0, 0, 0, 0.55);
+
+    --t-gold: #f5c451;
+    --t-silver: #b7bfcf;
+    --t-bronze: #e39a5c;
+    --t-up: #34d399;
+    --t-down: #fb7185;
+    --t-chart-1: #6b8bff;
+    --t-chart-2: #b48cff;
+  }
+}
+
+/* Dark picked by hand (the same values as above) */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --t-page: #0b0d12;
+  --t-card: #141823;
+  --t-raised: #1b2030;
+  --t-line: #262c3b;
+  --t-track: #1b2030;
+  --t-segment: #2a3142;
+
+  --t-gray-50: #10131a;
+  --t-gray-100: #171b26;
+  --t-gray-200: #232837;
+  --t-gray-300: #2e3445;
+  --t-gray-400: #6e768a;
+  --t-gray-500: #8c93a5;
+  --t-gray-600: #a3a9b8;
+  --t-gray-700: #c3c8d4;
+  --t-gray-800: #dcdfe6;
+  --t-gray-900: #eef0f5;
+
+  --t-blue-50: #161d33;
+  --t-blue-100: #1c2543;
+  --t-blue-200: #263160;
+  --t-blue-300: #34417d;
+  --t-blue-400: #7d98ff;
+  --t-blue-500: #6b8bff;
+  --t-blue-600: #3f66f2;
+  --t-blue-700: #8ea6ff;
+  --t-blue-800: #b4c4ff;
+  --t-blue-900: #d3ddff;
+
+  --t-green-50: #0f2418;
+  --t-green-100: #143221;
+  --t-green-200: #1f4a31;
+  --t-green-700: #4ade80;
+  --t-green-800: #86efac;
+  --t-green-900: #bbf7d0;
+
+  --t-amber-50: #2a1d07;
+  --t-amber-100: #3d2a0a;
+  --t-amber-200: #5a3d0e;
+  --t-amber-300: #7a5314;
+  --t-amber-400: #f5b83d;
+  --t-amber-800: #fcd34d;
+  --t-amber-900: #fde68a;
+
+  --t-red-50: #2a1210;
+  --t-red-100: #3d1a16;
+  --t-red-200: #5a2621;
+  --t-red-300: #7a3129;
+  --t-red-700: #f87171;
+  --t-red-800: #fca5a5;
+  --t-red-900: #fecaca;
+
+  --t-purple-50: #1f1430;
+  --t-purple-100: #2e1d47;
+  --t-purple-800: #d8b4fe;
+  --t-purple-900: #e9d5ff;
+
+  --t-accent: #6b8bff;
+  --t-accent-text: #8ea6ff;
+  --t-tint: #1f2950;
+  --t-grad-from: #4c74ff;
+  --t-grad-to: #9b6bff;
+  --t-grad: linear-gradient(135deg, var(--t-grad-from), var(--t-grad-to));
+  --t-grad-strong: linear-gradient(135deg, #3f66f2, #7c4ff0);
+  --t-danger: #d0353b;
+  --t-glow: rgba(110, 120, 255, 0.4);
+  --t-shadow: inset 0 0 0 1px #1d2230, 0 12px 32px rgba(0, 0, 0, 0.35);
+  --t-shadow-float: inset 0 0 0 1px #262c3b, 0 18px 44px rgba(0, 0, 0, 0.55);
+
+  --t-gold: #f5c451;
+  --t-silver: #b7bfcf;
+  --t-bronze: #e39a5c;
+  --t-up: #34d399;
+  --t-down: #fb7185;
+  --t-chart-1: #6b8bff;
+  --t-chart-2: #b48cff;
+}
+
+/* Tide helpers: the gradient (primary buttons, the logo, the goal ring), card and float shadows. */
+@utility bg-tide {
+  background-image: var(--t-grad);
+}
+/* The gradient behind white text labels (primary buttons): a touch deeper in dark mode */
+@utility bg-tide-strong {
+  background-image: var(--t-grad-strong);
+}
+@utility shadow-card {
+  box-shadow: var(--t-shadow);
+}
+@utility shadow-float {
+  box-shadow: var(--t-shadow-float);
+}
+@utility shadow-glow {
+  box-shadow: 0 8px 22px var(--t-glow);
+}
+
+/* Times and numbers line up */
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The body grows with the page (never a fixed 100%), so sticky bars stay pinned all the way down.
+   --nav-h starts at the header's height (60px plus its hairline) until the header measures itself. */
+html {
+  height: 100%;
+  --nav-h: 61px;
+}
+body {
+  min-height: 100%;
+  font-family: var(--font-sans);
+  background: var(--color-ink);
+  color: var(--color-gray-900);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Safe area for iPhones with a home indicator */
+.pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* The TV board: no cursor after it has been still, nothing to scroll, the page fills the screen. */
+.board-idle,
+.board-idle * {
+  cursor: none !important;
+}
+
+/* The goal ring fills in over a second when the board opens or the number changes. */
+@keyframes board-pop {
+  from {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.board-pop {
+  animation: board-pop 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes board-flash {
+  0% {
+    background-color: var(--t-tint);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.board-flash {
+  animation: board-flash 2.4s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-pop,
+  .board-flash {
+    animation: none;
+  }
+}
