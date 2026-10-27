@@ -183,7 +183,7 @@ export function LogForm({ agents, products, today, preset }: { agents: Person[];
               setPremium(e.target.value);
               setError(null);
             }}
-            className="h-16 w-full rounded-2xl border border-line bg-surface-2 pr-4 pl-10 font-mono text-[32px] font-bold text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none"
+            className="h-16 w-full rounded-2xl border border-line bg-surface-2 pr-4 pl-10 font-mono text-[32px] font-bold text-gray-900 placeholder:text-gray-400 focus:border-accent focus:ring-2 focus:ring-tint focus:outline-none"
           />
         </div>
         <div className="mt-3 flex items-center justify-between gap-3">

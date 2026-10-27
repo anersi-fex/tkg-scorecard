@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "./supabase";
 import { DEFAULT_SETTINGS, type Agent, type AppSettings, type LoggedBy, type Sale } from "./types";
 import { datesOfMonth, isMonthKey } from "./month";
+import { DEFAULT_COLORWAY, isColorwayKey } from "./colorways";
 
 /**
  * Every read and write, with the service key, after the caller checked the session. Rows come
@@ -178,6 +179,7 @@ export async function getSettings(): Promise<AppSettings> {
   return {
     message: typeof v.message === "string" ? v.message.slice(0, 120) : "",
     products: products.length ? products : DEFAULT_SETTINGS.products,
+    colorway: isColorwayKey(v.colorway) ? v.colorway : DEFAULT_COLORWAY,
   };
 }
 

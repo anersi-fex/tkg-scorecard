@@ -8,7 +8,9 @@
  * Every color is a CSS variable below, so Tailwind's scales follow the mode:
  *   gray-50 subtle fill … gray-900 main text; blue = the cobalt accent; ink = page; surface = cards.
  * Plus Jakarta Sans for text, Space Grotesk (font-mono here) for times and numbers.
- * Scorecard adds: up/down (ahead of or behind pace), the three medal tints, and the TV board tokens.
+ * Scorecard adds: up/down (ahead of or behind pace), the three medal tints, bar/chip tokens, and
+ * colorways: Crimson is the base below; Sky, Champion and Emerald override it through
+ * data-colorway on <html> (blocks written by scripts/gen-colorway-css.mjs from design/colorways.mjs).
  */
 @theme {
   --font-sans: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
@@ -84,6 +86,10 @@
   --color-danger: var(--t-danger);
   --color-chart-1: var(--t-chart-1);
   --color-chart-2: var(--t-chart-2);
+  /* Colorway tokens (Settings > Colorway): ranks 2+ bars, small pills */
+  --color-bar: var(--t-bar);
+  --color-chip: var(--t-chip-bg);
+  --color-chip-text: var(--t-chip-text);
 }
 
 /* Light (default) */
@@ -146,16 +152,20 @@
   --t-purple-800: #5b2db0;
   --t-purple-900: #4a2391;
 
-  --t-accent: #2f5bea;
-  --t-accent-text: #2449c9;
-  --t-tint: #e6ecff;
-  --t-grad-from: #2f5bea;
-  --t-grad-to: #7b4dff;
+  /* Crimson, the default colorway (owner pick, 2026-10-27): The Koka Group's red, coral on dark. */
+  --t-accent: #c42b32;
+  --t-accent-text: #a3242a;
+  --t-tint: #fdecec;
+  --t-grad-from: #c42b32;
+  --t-grad-to: #ff6b57;
   --t-grad: linear-gradient(135deg, var(--t-grad-from), var(--t-grad-to));
   /* Buttons with a text label: white text stays at 4.5:1 or better */
-  --t-grad-strong: linear-gradient(135deg, #2f5bea, #7b4dff);
+  --t-grad-strong: linear-gradient(135deg, #b8262d, #d1392c);
   --t-danger: #c42b32;
-  --t-glow: rgba(76, 90, 255, 0.32);
+  --t-glow: rgba(196, 43, 50, 0.32);
+  --t-bar: #f3a6a0;
+  --t-chip-bg: #fde3e1;
+  --t-chip-text: #9a1f26;
   --t-shadow: 0 1px 2px rgba(21, 23, 28, 0.04), 0 8px 24px rgba(21, 23, 28, 0.06);
   --t-shadow-float: 0 2px 6px rgba(21, 23, 28, 0.06), 0 18px 40px rgba(21, 23, 28, 0.14);
 
@@ -163,10 +173,11 @@
   --t-silver: #6f7787;
   --t-bronze: #a9622a;
   --t-up: #15803d;
-  --t-down: #c42b32;
-  /* Chart fills: actual (cobalt) and the goal line (violet) */
-  --t-chart-1: #2f5bea;
-  --t-chart-2: #7b4dff;
+  /* "Behind" must not wear the brand red: amber */
+  --t-down: #b45309;
+  /* Chart fills: production (the accent) and the goal line */
+  --t-chart-1: #c42b32;
+  --t-chart-2: #e59d26;
 }
 
 /* Dark: the phone's setting, unless the viewer picked light */
@@ -230,15 +241,18 @@
     --t-purple-800: #d8b4fe;
     --t-purple-900: #e9d5ff;
 
-    --t-accent: #6b8bff;
-    --t-accent-text: #8ea6ff;
-    --t-tint: #1f2950;
-    --t-grad-from: #4c74ff;
-    --t-grad-to: #9b6bff;
+    --t-accent: #ff6b57;
+    --t-accent-text: #ff8a78;
+    --t-tint: #3a1a1a;
+    --t-grad-from: #e5484d;
+    --t-grad-to: #ff8a5c;
     --t-grad: linear-gradient(135deg, var(--t-grad-from), var(--t-grad-to));
-    --t-grad-strong: linear-gradient(135deg, #3f66f2, #7c4ff0);
+    --t-grad-strong: linear-gradient(135deg, #c62f36, #d8503f);
     --t-danger: #d0353b;
-    --t-glow: rgba(110, 120, 255, 0.4);
+    --t-glow: rgba(255, 107, 87, 0.4);
+    --t-bar: #5a2a2d;
+    --t-chip-bg: #3d1a16;
+    --t-chip-text: #fca5a5;
     --t-shadow: inset 0 0 0 1px #1d2230, 0 12px 32px rgba(0, 0, 0, 0.35);
     --t-shadow-float: inset 0 0 0 1px #262c3b, 0 18px 44px rgba(0, 0, 0, 0.55);
 
@@ -246,9 +260,9 @@
     --t-silver: #b7bfcf;
     --t-bronze: #e39a5c;
     --t-up: #34d399;
-    --t-down: #fb7185;
-    --t-chart-1: #6b8bff;
-    --t-chart-2: #b48cff;
+    --t-down: #fbbf24;
+    --t-chart-1: #ff7a66;
+    --t-chart-2: #f5b942;
   }
 }
 
@@ -312,15 +326,18 @@
   --t-purple-800: #d8b4fe;
   --t-purple-900: #e9d5ff;
 
-  --t-accent: #6b8bff;
-  --t-accent-text: #8ea6ff;
-  --t-tint: #1f2950;
-  --t-grad-from: #4c74ff;
-  --t-grad-to: #9b6bff;
+  --t-accent: #ff6b57;
+  --t-accent-text: #ff8a78;
+  --t-tint: #3a1a1a;
+  --t-grad-from: #e5484d;
+  --t-grad-to: #ff8a5c;
   --t-grad: linear-gradient(135deg, var(--t-grad-from), var(--t-grad-to));
-  --t-grad-strong: linear-gradient(135deg, #3f66f2, #7c4ff0);
+  --t-grad-strong: linear-gradient(135deg, #c62f36, #d8503f);
   --t-danger: #d0353b;
-  --t-glow: rgba(110, 120, 255, 0.4);
+  --t-glow: rgba(255, 107, 87, 0.4);
+  --t-bar: #5a2a2d;
+  --t-chip-bg: #3d1a16;
+  --t-chip-text: #fca5a5;
   --t-shadow: inset 0 0 0 1px #1d2230, 0 12px 32px rgba(0, 0, 0, 0.35);
   --t-shadow-float: inset 0 0 0 1px #262c3b, 0 18px 44px rgba(0, 0, 0, 0.55);
 
@@ -328,10 +345,176 @@
   --t-silver: #b7bfcf;
   --t-bronze: #e39a5c;
   --t-up: #34d399;
-  --t-down: #fb7185;
-  --t-chart-1: #6b8bff;
-  --t-chart-2: #b48cff;
+  --t-down: #fbbf24;
+  --t-chart-1: #ff7a66;
+  --t-chart-2: #f5b942;
 }
+
+/* colorways:start (written by scripts/gen-colorway-css.mjs; edit design/colorways.mjs instead) */
+/* The default colorway is Crimson: its values are the base tokens above. The others apply through data-colorway on <html>. */
+/* Sky: Sky blue to cyan: lighter, brighter and cooler than Sales Coach's cobalt, still a blue family cousin. */
+html[data-colorway="sky"] {
+  --t-accent: #0369a1;
+  --t-accent-text: #075985;
+  --t-tint: #e0f2fe;
+  --t-grad-from: #0284c7;
+  --t-grad-to: #06b6d4;
+  --t-grad: linear-gradient(135deg, #0284c7, #06b6d4);
+  --t-grad-strong: linear-gradient(135deg, #0369a1, #0e7490);
+  --t-glow: rgba(2,132,199,0.3);
+  --t-bar: #7dd3fc;
+  --t-chip-bg: #e0f2fe;
+  --t-chip-text: #075985;
+  --t-chart-1: #0284c7;
+  --t-chart-2: #d98a00;
+}
+html[data-colorway="sky"][data-theme="dark"] {
+  --t-accent: #38bdf8;
+  --t-accent-text: #7dd3fc;
+  --t-tint: #0c2a3d;
+  --t-grad-from: #0ea5e9;
+  --t-grad-to: #22d3ee;
+  --t-grad: linear-gradient(135deg, #0ea5e9, #22d3ee);
+  --t-grad-strong: linear-gradient(135deg, #0369a1, #0e7490);
+  --t-glow: rgba(56,189,248,0.35);
+  --t-bar: #1e3a4f;
+  --t-chip-bg: #0c2a3d;
+  --t-chip-text: #bae6fd;
+  --t-chart-1: #38bdf8;
+  --t-chart-2: #f5c451;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-colorway="sky"]:not([data-theme="light"]) {
+    --t-accent: #38bdf8;
+    --t-accent-text: #7dd3fc;
+    --t-tint: #0c2a3d;
+    --t-grad-from: #0ea5e9;
+    --t-grad-to: #22d3ee;
+    --t-grad: linear-gradient(135deg, #0ea5e9, #22d3ee);
+    --t-grad-strong: linear-gradient(135deg, #0369a1, #0e7490);
+    --t-glow: rgba(56,189,248,0.35);
+    --t-bar: #1e3a4f;
+    --t-chip-bg: #0c2a3d;
+    --t-chip-text: #bae6fd;
+    --t-chart-1: #38bdf8;
+    --t-chart-2: #f5c451;
+  }
+}
+/* Champion: Gold to bronze on warm neutrals: trophy case, podium, awards night. The warmest of the set. */
+html[data-colorway="champion"] {
+  --t-page: #f6f4ef;
+  --t-card: #ffffff;
+  --t-raised: #f7f5f0;
+  --t-line: #e8e4dc;
+  --t-track: #e6e2d9;
+  --t-segment: #ffffff;
+  --t-accent: #a86a00;
+  --t-accent-text: #8a5600;
+  --t-tint: #fbefd6;
+  --t-grad-from: #b8741a;
+  --t-grad-to: #e0a030;
+  --t-grad: linear-gradient(135deg, #b8741a, #e0a030);
+  --t-grad-strong: linear-gradient(135deg, #8a5600, #a86a00);
+  --t-glow: rgba(168,106,0,0.3);
+  --t-bar: #f0cf86;
+  --t-chip-bg: #fbefd6;
+  --t-chip-text: #7a4d00;
+  --t-chart-1: #b8741a;
+  --t-chart-2: #5b6b8a;
+}
+html[data-colorway="champion"][data-theme="dark"] {
+  --t-page: #0f0d0a;
+  --t-card: #1a1712;
+  --t-raised: #221e17;
+  --t-line: #2e2920;
+  --t-track: #221e17;
+  --t-segment: #332d24;
+  --t-accent: #f5b942;
+  --t-accent-text: #f8c75e;
+  --t-tint: #3a2c10;
+  --t-grad-from: #d99a1a;
+  --t-grad-to: #f5c451;
+  --t-grad: linear-gradient(135deg, #d99a1a, #f5c451);
+  --t-grad-strong: linear-gradient(135deg, #a86a00, #c48300);
+  --t-glow: rgba(245,185,66,0.35);
+  --t-bar: #5a4420;
+  --t-chip-bg: #3d2a0a;
+  --t-chip-text: #fcd34d;
+  --t-chart-1: #f5b942;
+  --t-chart-2: #8da2c4;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-colorway="champion"]:not([data-theme="light"]) {
+    --t-page: #0f0d0a;
+    --t-card: #1a1712;
+    --t-raised: #221e17;
+    --t-line: #2e2920;
+    --t-track: #221e17;
+    --t-segment: #332d24;
+    --t-accent: #f5b942;
+    --t-accent-text: #f8c75e;
+    --t-tint: #3a2c10;
+    --t-grad-from: #d99a1a;
+    --t-grad-to: #f5c451;
+    --t-grad: linear-gradient(135deg, #d99a1a, #f5c451);
+    --t-grad-strong: linear-gradient(135deg, #a86a00, #c48300);
+    --t-glow: rgba(245,185,66,0.35);
+    --t-bar: #5a4420;
+    --t-chip-bg: #3d2a0a;
+    --t-chip-text: #fcd34d;
+    --t-chart-1: #f5b942;
+    --t-chart-2: #8da2c4;
+  }
+}
+/* Emerald: Deep green to mint: money, growth, in the black. Calm and premium on the same cool neutrals. */
+html[data-colorway="emerald"] {
+  --t-accent: #0f7a4f;
+  --t-accent-text: #0b6a44;
+  --t-tint: #e3f5ec;
+  --t-grad-from: #0b7a4f;
+  --t-grad-to: #22a36e;
+  --t-grad: linear-gradient(135deg, #0b7a4f, #22a36e);
+  --t-grad-strong: linear-gradient(135deg, #0b6e47, #15895a);
+  --t-glow: rgba(15,122,79,0.3);
+  --t-bar: #9bdcbb;
+  --t-chip-bg: #dcf3e7;
+  --t-chip-text: #0b5a3a;
+  --t-chart-1: #0f8f5a;
+  --t-chart-2: #c98a00;
+}
+html[data-colorway="emerald"][data-theme="dark"] {
+  --t-accent: #34d399;
+  --t-accent-text: #5ee3ad;
+  --t-tint: #10332a;
+  --t-grad-from: #22b37a;
+  --t-grad-to: #4ad99e;
+  --t-grad: linear-gradient(135deg, #22b37a, #4ad99e);
+  --t-grad-strong: linear-gradient(135deg, #138a5b, #1aa36c);
+  --t-glow: rgba(52,211,153,0.35);
+  --t-bar: #1f4a3a;
+  --t-chip-bg: #143221;
+  --t-chip-text: #86efac;
+  --t-chart-1: #34d399;
+  --t-chart-2: #f5c451;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-colorway="emerald"]:not([data-theme="light"]) {
+    --t-accent: #34d399;
+    --t-accent-text: #5ee3ad;
+    --t-tint: #10332a;
+    --t-grad-from: #22b37a;
+    --t-grad-to: #4ad99e;
+    --t-grad: linear-gradient(135deg, #22b37a, #4ad99e);
+    --t-grad-strong: linear-gradient(135deg, #138a5b, #1aa36c);
+    --t-glow: rgba(52,211,153,0.35);
+    --t-bar: #1f4a3a;
+    --t-chip-bg: #143221;
+    --t-chip-text: #86efac;
+    --t-chart-1: #34d399;
+    --t-chart-2: #f5c451;
+  }
+}
+/* colorways:end */
 
 /* Tide helpers: the gradient (primary buttons, the logo, the goal ring), card and float shadows. */
 @utility bg-tide {

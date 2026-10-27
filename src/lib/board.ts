@@ -4,6 +4,7 @@ import { goalsForMonth, listAgents, recentSales, salesForMonth, getSettings, typ
 import { datesOfMonth, monthClock, pace, todayInDetroit, type MonthClock, type Pace } from "./month";
 import { percentOf } from "./money";
 import type { Agent } from "./types";
+import { DEFAULT_COLORWAY, type ColorwayKey } from "./colorways";
 
 /**
  * Everything one screen needs for a month, computed in one place so the TV board, the Home page
@@ -76,6 +77,8 @@ export interface MonthSnapshot {
   sales: FeedSale[];
   daily: DayPoint[];
   message: string;
+  /** The colorway the owner picked (the TV applies it on each poll). */
+  colorway: ColorwayKey;
 }
 
 function toFeed(s: SaleWithAgent): FeedSale {
@@ -108,7 +111,7 @@ export async function loadMonthSnapshot(month: string, opts: { today?: string; r
     recentSales(opts.recentLimit ?? 12),
     getSettings(),
   ]);
-  return buildSnapshot({ month, today, agents, sales, goals, recent, message: settings.message });
+  return buildSnapshot({ month, today, agents, sales, goals, recent, message: settings.message, colorway: settings.colorway });
 }
 
 /** Pure: the snapshot from loaded rows (tests build it without a database). */
@@ -120,6 +123,7 @@ export function buildSnapshot(input: {
   goals: { teamCents: number; byAgent: Record<string, number> };
   recent: SaleWithAgent[];
   message: string;
+  colorway?: ColorwayKey;
   generatedAt?: string;
 }): MonthSnapshot {
   const { month, today, agents, sales, goals, recent, message } = input;
@@ -203,5 +207,6 @@ export function buildSnapshot(input: {
     sales: [...sales].sort((a, b) => b.created_at.localeCompare(a.created_at)).map(toFeed),
     daily,
     message,
+    colorway: input.colorway ?? DEFAULT_COLORWAY,
   };
 }

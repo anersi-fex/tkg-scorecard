@@ -42,7 +42,7 @@ export function Input({ className, ...props }: ComponentProps<"input">) {
     <input
       {...props}
       className={cn(
-        "min-h-11 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-gray-900 placeholder:text-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none",
+        "min-h-11 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-gray-900 placeholder:text-gray-500 focus:border-accent focus:ring-2 focus:ring-tint focus:outline-none",
         className,
       )}
     />
@@ -54,7 +54,7 @@ export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
     <textarea
       {...props}
       className={cn(
-        "w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-gray-900 placeholder:text-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none",
+        "w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-gray-900 placeholder:text-gray-500 focus:border-accent focus:ring-2 focus:ring-tint focus:outline-none",
         className,
       )}
     />
@@ -66,7 +66,7 @@ export function Select({ className, ...props }: ComponentProps<"select">) {
     <select
       {...props}
       className={cn(
-        "min-h-11 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-gray-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none",
+        "min-h-11 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-gray-900 focus:border-accent focus:ring-2 focus:ring-tint focus:outline-none",
         className,
       )}
     />
@@ -96,7 +96,7 @@ export function PageTitle({ children, action, sub }: { children: ReactNode; acti
 type BadgeTone = "gray" | "blue" | "green" | "amber" | "red" | "purple";
 const badgeTones: Record<BadgeTone, string> = {
   gray: "bg-gray-100 text-gray-700",
-  blue: "bg-blue-100 text-blue-800",
+  blue: "bg-chip text-chip-text",
   green: "bg-green-100 text-green-800",
   amber: "bg-amber-100 text-amber-800",
   red: "bg-red-100 text-red-800",

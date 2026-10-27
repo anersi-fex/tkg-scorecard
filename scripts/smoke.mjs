@@ -107,6 +107,16 @@ try {
   await o.fill("#message", "Finish strong. Every policy counts.");
   await o.locator("form:has(#message) button[type=submit]").click();
   await o.waitForSelector("text=Saved. The board updates");
+  check((await o.getAttribute("html", "data-colorway")) === "crimson", "Crimson is the default colorway");
+  await o.click("[role=radio]:has-text('Emerald')");
+  await o.waitForSelector("text=Saved. The TV changes");
+  await o.goto(`${APP}/`);
+  check((await o.getAttribute("html", "data-colorway")) === "emerald", "the colorway setting colors the next screen");
+  const boardJson = await owner.request.get(`${APP}/api/board`);
+  check((await boardJson.json()).colorway === "emerald", "the board feed carries the colorway");
+  await o.goto(`${APP}/settings`);
+  await o.click("[role=radio]:has-text('Crimson')");
+  await o.waitForSelector("text=Saved. The TV changes");
   await o.screenshot({ path: `${OUT}/03-settings.png`, fullPage: true });
 
   // Log sales through the form
