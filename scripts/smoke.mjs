@@ -36,7 +36,9 @@ async function signIn(page, password) {
 const browser = await chromium.launch();
 try {
   // --- Signed out: everything bounces to /login, the API refuses ---
-  const anon = await browser.newContext();
+  // The signed-out checks come from their own address (a fresh one per run: the lockout they
+  // trigger lasts 15 minutes in the server's memory), so it never touches the rest.
+  const anon = await browser.newContext({ extraHTTPHeaders: { "x-forwarded-for": `198.51.100.${1 + Math.floor(Math.random() * 250)}` } });
   const a = await anon.newPage();
   await a.goto(`${APP}/board`);
   check(a.url().includes("/login") && a.url().includes("next=%2Fboard"), "signed out: /board goes to /login?next=/board");
@@ -48,6 +50,23 @@ try {
   await a.click("button[type=submit]");
   await a.waitForSelector("text=That password isn't right");
   check(true, "wrong password is refused");
+  // Each try must finish (React resets the form after the action) before the next one is typed.
+  const tryOnce = async (password) => {
+    await a.fill("#password", password);
+    await a.click("button[type=submit]");
+    await a.waitForFunction(() => document.querySelector("#password")?.value === "" && !document.querySelector("form button[type=submit]")?.disabled);
+  };
+  for (let i = 0; i < 11; i++) await tryOnce("wrong-password");
+  await tryOnce(OWNER);
+  await a.waitForSelector("text=Too many tries");
+  check(true, "12 wrong tries lock that address for 15 minutes, even with the right password");
+  const other = await browser.newContext();
+  const b = await other.newPage();
+  await b.goto(`${APP}/login`);
+  await b.fill("#password", OWNER);
+  await Promise.all([b.waitForURL((u) => !u.pathname.startsWith("/login")), b.click("button[type=submit]")]);
+  check(!b.url().includes("/login"), "another address still signs in");
+  await other.close();
   await anon.close();
 
   // --- Owner ---
@@ -55,6 +74,8 @@ try {
   const o = await owner.newPage();
   await signIn(o, OWNER);
   check(o.url() === `${APP}/`, "owner signs in and lands on This month");
+  await o.goto(`${APP}/login?next=/board`);
+  check(o.url() === `${APP}/board`, "signed in, /login?next=/board goes straight to the board");
   await o.screenshot({ path: `${OUT}/01-home-empty.png`, fullPage: true });
 
   // Team page: add seven people
@@ -151,6 +172,25 @@ try {
   await o.waitForSelector("text=Removed.");
   check(true, "owner removed a sale");
 
+  // A sale dated last month shows up in that month's own list, fixable there
+  const lastMonthDay = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1) - 86400000 * 3).toISOString().slice(0, 10);
+  const lastMonth = lastMonthDay.slice(0, 7);
+  await o.goto(`${APP}/log`);
+  await o.click(`[role=radio]:has-text("James Park")`);
+  await o.fill("#premium", "777");
+  await o.click("button:has-text('Client name, day, note')");
+  await o.fill("#sold_on", lastMonthDay);
+  await o.click("button[type=submit]:has-text('Log')");
+  await o.waitForSelector("h2:has-text('Logged')");
+  await o.goto(`${APP}/?month=${lastMonth}`);
+  await o.waitForSelector("text=Leaderboard");
+  check((await o.textContent("body")).includes("$777") && (await o.locator("button[aria-label=More]").count()) === 1, "a past month lists its own sales with the row menu");
+  // A sale dated in the future is refused by the server (the day field's max already stops it in the browser)
+  const tomorrow = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+  if (TOKEN) {
+    const future = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "James Park", premium: "5", date: tomorrow } });
+    check(future.status() === 400, `a sale dated in the future is refused (${future.status()})`);
+  }
   // Past month view
   await o.goto(`${APP}/?month=2026-09`);
   await o.waitForSelector("text=September 2026");
@@ -180,10 +220,10 @@ try {
   const tv = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   await tv.addCookies(await owner.cookies());
   const t = await tv.newPage();
-  await t.goto(`${APP}/board`);
+  await t.goto(`${APP}/board`, { waitUntil: "commit" });
+  check((await t.getAttribute("html", "data-theme")) === "dark", "board is dark before the first paint");
   await t.waitForSelector("text=Leaderboard");
   await t.waitForTimeout(1200);
-  check((await t.getAttribute("html", "data-theme")) === "dark", "board opens dark by default");
   await t.screenshot({ path: `${OUT}/10-board-dark.png` });
   const tvOverflow = await t.evaluate(() => document.documentElement.scrollHeight > document.documentElement.clientHeight + 1);
   check(!tvOverflow, "board fits the TV with no scroll");
@@ -237,6 +277,10 @@ try {
   await m.locator("button[aria-label=More]").first().click();
   check(await m.locator("button:has-text('Undo (just logged)')").isVisible(), "team can undo a fresh sale from Home");
   check((await m.locator("button:has-text('Fix this sale')").count()) === 0, "team cannot fix a sale");
+  await m.goto(`${APP}/`);
+  await m.click("button[aria-label^='Account:']");
+  await Promise.all([m.waitForURL(`${APP}/login`), m.click("button:has-text('Sign out')")]);
+  check(m.url() === `${APP}/login`, "sign out from the menu works");
   await team.close();
   void agentsRes;
 

@@ -22,7 +22,8 @@ export const ROW_INSET = {
 
 /** The white (night, in dark mode) rounded card that holds grouped rows. */
 export function ListCard({ children, className }: { children: ReactNode; className?: string }) {
-  return <ul className={cn("overflow-hidden rounded-[22px] bg-surface shadow-card", className)}>{children}</ul>;
+  // No overflow clip: a row's menu (the "…" on a sale) opens past the card's edge; rows paint no full-width fills.
+  return <ul className={cn("rounded-[22px] bg-surface shadow-card", className)}>{children}</ul>;
 }
 
 /**

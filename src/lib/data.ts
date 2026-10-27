@@ -114,9 +114,11 @@ export async function insertSale(sale: NewSale): Promise<SaleWithAgent> {
   return toSale(data as SaleRow);
 }
 
-export async function updateSale(id: string, patch: Partial<Omit<NewSale, "logged_by">>): Promise<void> {
-  const { error } = await db().from("sales").update(patch).eq("id", id).is("deleted_at", null);
+/** Returns false when the sale is gone (deleted meanwhile), so the screen can say so. */
+export async function updateSale(id: string, patch: Partial<Omit<NewSale, "logged_by">>): Promise<boolean> {
+  const { data, error } = await db().from("sales").update(patch).eq("id", id).is("deleted_at", null).select("id");
   if (error) fail("sales.update", error);
+  return (data?.length ?? 0) > 0;
 }
 
 /** Soft delete: the row stays with deleted_at set. Returns false when there was nothing to delete. */

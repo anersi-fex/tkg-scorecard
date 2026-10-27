@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Avatar } from "@/components/avatar";
 import { Button, Input, Label, cn } from "@/components/ui";
 import { formatMoney, parseDollars } from "@/lib/money";
+import { todayInDetroit } from "@/lib/month";
 import { logSale, removeSale } from "../actions";
 import { toast } from "@/components/toaster";
 
@@ -42,6 +43,9 @@ export function LogForm({ agents, products, today, preset }: { agents: Person[];
   const [product, setProduct] = useState<string | null>(null);
   const [client, setClient] = useState("");
   const [date, setDate] = useState(today);
+  // Only a day the person picked is sent; otherwise the server stamps its own Detroit today, so a
+  // screen left open past midnight never dates a sale to yesterday.
+  const [dateTouched, setDateTouched] = useState(false);
   const [more, setMore] = useState(false);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +67,7 @@ export function LogForm({ agents, products, today, preset }: { agents: Person[];
     if (product) form.set("product", product);
     if (client.trim()) form.set("client", client.trim());
     if (note.trim()) form.set("note", note.trim());
-    form.set("sold_on", date);
+    form.set("sold_on", dateTouched ? date : "");
     start(async () => {
       const r = await logSale(form);
       if (!r.ok) {
@@ -88,7 +92,8 @@ export function LogForm({ agents, products, today, preset }: { agents: Person[];
     setProduct(null);
     setClient("");
     setNote("");
-    setDate(today);
+    setDate(todayInDetroit());
+    setDateTouched(false);
     setError(null);
   };
 
@@ -230,7 +235,17 @@ export function LogForm({ agents, products, today, preset }: { agents: Person[];
             </div>
             <div>
               <Label htmlFor="sold_on">Day it counts for</Label>
-              <Input id="sold_on" name="sold_on" type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} />
+              <Input
+                id="sold_on"
+                name="sold_on"
+                type="date"
+                value={date}
+                max={todayInDetroit()}
+                onChange={(e) => {
+                  setDate(e.target.value);
+                  setDateTouched(true);
+                }}
+              />
             </div>
             <div>
               <Label htmlFor="note">Note (only in the app)</Label>

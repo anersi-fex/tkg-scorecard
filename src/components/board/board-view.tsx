@@ -220,11 +220,7 @@ export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: "
           <section className="grid shrink-0 grid-cols-3 gap-[0.7em]">
             <Tile label={month.position === "current" ? "Today" : "Best day"} value={month.position === "current" ? formatDollars(team.todayCents) : team.bestDay ? formatDollars(team.bestDay.cents) : "–"} sub={month.position === "current" ? `${team.todayPolicies} ${team.todayPolicies === 1 ? "policy" : "policies"}` : team.bestDay ? dayLabel(team.bestDay.date) : ""} tone={team.todayCents > 0 ? "up" : undefined} />
             <Tile label="Policies" value={String(team.policies)} sub={team.averageCents ? `${formatDollars(team.averageCents)} avg` : "this month"} />
-            <Tile
-              label={team.pace.status === "done" ? "Over the goal" : team.goalCents > 0 ? "Needed a day" : "On pace for"}
-              value={team.pace.status === "done" ? formatDollars(team.productionCents - team.goalCents) : team.goalCents > 0 ? formatDollars(team.pace.neededPerDayCents) : formatDollars(team.pace.projectedCents)}
-              sub={team.pace.status === "done" ? "keep going" : team.goalCents > 0 ? `to hit ${formatDollars(team.goalCents)}` : "set a goal in Settings"}
-            />
+            <NeededTile snap={snap} />
           </section>
           <section className="min-h-0 flex-1 rounded-[1.4em] bg-surface p-[1em] shadow-card">
             <div className="flex items-baseline justify-between">
@@ -247,7 +243,7 @@ export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: "
         <p className="min-w-0 truncate text-[1.1em] font-bold text-gray-700">{snap.message || " "}</p>
         <p className="shrink-0">
           {offline >= 3 ? <span className="text-amber-800">Reconnecting…</span> : <>Updated {formatClock(snap.generatedAt)}</>}
-          <span className="ml-[1em] text-gray-400">F full screen · T light/dark</span>
+          <span className="ml-[1em] text-gray-500">F full screen · T light/dark</span>
         </p>
       </footer>
 
@@ -274,7 +270,7 @@ function BoardLockup() {
 function LeaderRow({ line, max, count, today }: { line: AgentLine; max: number; count: number; today: boolean }) {
   const pct = line.goalCents > 0 ? Math.min(100, line.goalPct) : Math.round((line.premiumCents / max) * 100);
   const first = line.rank === 1 && line.premiumCents > 0;
-  const medal = line.premiumCents > 0 ? (line.rank === 1 ? "text-gold" : line.rank === 2 ? "text-silver" : line.rank === 3 ? "text-bronze" : "text-gray-500") : "text-gray-400";
+  const medal = line.premiumCents > 0 ? (line.rank === 1 ? "text-gold" : line.rank === 2 ? "text-silver" : line.rank === 3 ? "text-bronze" : "text-gray-500") : "text-gray-500";
   // Fewer people, taller rows: the type grows a little when there is room.
   const scale = count <= 5 ? 1.15 : count <= 7 ? 1 : 0.86;
   return (
@@ -320,12 +316,18 @@ function GoalCard({ snap }: { snap: MonthSnapshot }) {
   if (clock.position === "past") {
     line = team.goalCents <= 0 ? "Finished" : team.productionCents >= team.goalCents ? "Goal hit" : `${formatDollars(team.goalCents - team.productionCents)} short`;
     tone = team.productionCents >= team.goalCents && team.goalCents > 0 ? "text-up" : "text-gray-600";
-  } else if (pace.status === "none") {
-    line = clock.elapsed > 0 ? `On pace for ${formatDollars(pace.projectedCents)}` : "The month starts soon";
-    tone = "text-gray-600";
   } else if (pace.status === "done") {
     line = `Goal hit, ${formatDollars(team.productionCents - team.goalCents)} over`;
     tone = "text-up";
+  } else if (clock.elapsed === 0) {
+    line = clock.position === "future" ? "The month hasn't started" : "The month starts Monday";
+    tone = "text-gray-600";
+  } else if (pace.status === "none") {
+    line = `On pace for ${formatDollars(pace.projectedCents)}`;
+    tone = "text-gray-600";
+  } else if (clock.remaining === 0) {
+    line = `${formatDollars(team.goalCents - team.productionCents)} short · no business days left`;
+    tone = "text-down";
   } else if (pace.status === "ahead") {
     line = `Ahead by ${formatDollars(pace.aheadCents)} · on pace for ${formatDollars(pace.projectedCents)}`;
     tone = "text-up";
@@ -376,6 +378,15 @@ function GoalCard({ snap }: { snap: MonthSnapshot }) {
       </div>
     </section>
   );
+}
+
+/** The third tile: what each remaining day needs, or how the goal stands when there are no days left. */
+function NeededTile({ snap }: { snap: MonthSnapshot }) {
+  const { team, clock } = snap;
+  if (team.goalCents <= 0) return <Tile label="On pace for" value={formatDollars(team.pace.projectedCents)} sub="set a goal in Settings" />;
+  if (team.pace.status === "done") return <Tile label="Over the goal" value={formatDollars(team.productionCents - team.goalCents)} sub="keep going" />;
+  if (clock.remaining === 0) return <Tile label="Short by" value={formatDollars(team.goalCents - team.productionCents)} sub="no business days left" />;
+  return <Tile label="Needed a day" value={formatDollars(team.pace.neededPerDayCents)} sub={`to hit ${formatDollars(team.goalCents)}`} />;
 }
 
 function Tile({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: "up" }) {

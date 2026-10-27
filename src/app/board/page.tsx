@@ -16,13 +16,13 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
   const theme = params.theme === "light" ? "light" : params.theme === "dark" ? "dark" : null;
   let initial: MonthSnapshot | null = null;
   let problem: string | null = null;
-  if (!dbConfigured()) problem = "The database isn't connected yet (SETUP.md, step 3).";
+  if (!dbConfigured()) problem = "The database isn't connected yet. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel (SETUP.md, step 5).";
   else {
     try {
       const today = todayInDetroit();
       initial = await loadMonthSnapshot(monthKeyOf(today), { today, recentLimit: 12 });
     } catch {
-      problem = "The database didn't answer. Check that the setup SQL ran (SETUP.md, step 2).";
+      problem = "The database didn't answer. Check that the setup SQL ran (SETUP.md, step 3).";
     }
   }
   if (!initial) {

@@ -24,7 +24,7 @@ export async function login(_prev: LoginState, form: FormData): Promise<LoginSta
     await recordLoginFailure(ip);
     return { error: "That password isn't right." };
   }
-  clearLoginFailures(ip);
+  await clearLoginFailures(ip);
   const token = await createSessionToken(role, SESSION_TTL_SECONDS);
   const store = await cookies();
   store.set(SESSION_COOKIE, token, {

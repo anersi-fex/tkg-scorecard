@@ -11,6 +11,8 @@ import { db } from "./supabase";
  * Two roles: the owner (full control) and the team (log sales, see everything).
  */
 export const OWNER_NAME = "Anersi Koka";
+/** The Shortcut token must be at least this long (the route refuses shorter ones; Settings says so). */
+export const LOG_TOKEN_MIN = 12;
 
 export async function currentRole(): Promise<Role | null> {
   try {
@@ -55,11 +57,12 @@ export function roleForPassword(supplied: string): Role | null {
   return found;
 }
 
-// Login throttle: a per-instance map plus a shared count in login_attempts (holds across
-// serverless instances). A team of seven never fails this often by accident.
+// Login throttle: a per-instance map plus a shared per-address count in login_attempts (holds
+// across serverless instances), and a high flood cap across every address, so one stranger
+// typing wrong passwords locks only themselves out, never the owner or the TV.
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_PER_IP = 10;
-const MAX_GLOBAL = 40;
+const MAX_GLOBAL = 500;
 const failures = new Map<string, { count: number; resetAt: number }>();
 
 export async function loginThrottled(ip: string): Promise<boolean> {
@@ -67,9 +70,12 @@ export async function loginThrottled(ip: string): Promise<boolean> {
   if (entry && entry.resetAt >= Date.now() && entry.count >= MAX_PER_IP) return true;
   try {
     const since = new Date(Date.now() - WINDOW_MS).toISOString();
-    const { count, error } = await db().from("login_attempts").select("id", { count: "exact", head: true }).gte("at", since);
-    if (error || count == null) return false;
-    return count >= MAX_GLOBAL;
+    const recent = () => db().from("login_attempts").select("id", { count: "exact", head: true }).gte("at", since);
+    const mine = await recent().eq("ip", ip.slice(0, 64));
+    if (!mine.error && mine.count != null && mine.count >= MAX_PER_IP) return true;
+    const all = await recent();
+    if (all.error || all.count == null) return false;
+    return all.count >= MAX_GLOBAL;
   } catch {
     return false;
   }
@@ -91,6 +97,12 @@ export async function recordLoginFailure(ip: string): Promise<void> {
   }
 }
 
-export function clearLoginFailures(ip: string): void {
+/** A right password clears that address's count (here and in the table), so an earlier typo never counts. */
+export async function clearLoginFailures(ip: string): Promise<void> {
   failures.delete(ip);
+  try {
+    await db().from("login_attempts").delete().eq("ip", ip.slice(0, 64));
+  } catch {
+    /* best effort */
+  }
 }

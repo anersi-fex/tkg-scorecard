@@ -48,7 +48,7 @@ export async function logSale(form: FormData): Promise<ActionResult> {
     const today = todayInDetroit();
     const soldOn = input.sold_on || today;
     if (!isDateKey(soldOn)) return { ok: false, error: "That date isn't right." };
-    if (soldOn > addDays(today, 1)) return { ok: false, error: "That date is in the future." };
+    if (soldOn > today) return { ok: false, error: "That date is in the future." };
     if (soldOn < addDays(today, -400)) return { ok: false, error: "That date is over a year ago." };
     const agents = await listAgents();
     const agent = agents.find((a) => a.id === input.agent_id);
@@ -113,7 +113,7 @@ export async function editSale(id: string, form: FormData): Promise<ActionResult
     if (!isDateKey(input.sold_on)) return { ok: false, error: "That date isn't right." };
     const agents = await listAgents({ includeInactive: true });
     if (!agents.some((a) => a.id === input.agent_id)) return { ok: false, error: "That person isn't on the team." };
-    await updateSale(id, {
+    const found = await updateSale(id, {
       agent_id: input.agent_id,
       premium_cents: cents,
       policies: input.policies,
@@ -123,6 +123,7 @@ export async function editSale(id: string, form: FormData): Promise<ActionResult
       sold_on: input.sold_on,
     });
     refresh();
+    if (!found) return { ok: false, error: "That sale is already gone." };
     return { ok: true, message: "Saved." };
   } catch (err) {
     return { ok: false, error: message(err) };

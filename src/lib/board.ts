@@ -72,6 +72,8 @@ export interface MonthSnapshot {
   agents: AgentLine[];
   /** The newest sales across every month, newest first (the board's feed and celebrations). */
   recent: FeedSale[];
+  /** Every sale of this month, newest first (the Home list, where a sale is fixed or removed). */
+  sales: FeedSale[];
   daily: DayPoint[];
   message: string;
 }
@@ -198,6 +200,7 @@ export function buildSnapshot(input: {
     },
     agents: rankAgents(lines),
     recent: recent.map(toFeed),
+    sales: [...sales].sort((a, b) => b.created_at.localeCompare(a.created_at)).map(toFeed),
     daily,
     message,
   };

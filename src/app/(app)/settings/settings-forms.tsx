@@ -14,7 +14,22 @@ interface MonthGoal {
   current: boolean;
 }
 
-export function SettingsForms({ settings, months, shortcutReady, teamPasswordSet, base }: { settings: AppSettings; months: MonthGoal[]; shortcutReady: boolean; teamPasswordSet: boolean; base: string }) {
+export function SettingsForms({
+  settings,
+  months,
+  shortcutReady,
+  shortcutTooShort,
+  teamPasswordSet,
+  base,
+}: {
+  settings: AppSettings;
+  months: MonthGoal[];
+  shortcutReady: boolean;
+  /** LOG_TOKEN is set but shorter than the route accepts. */
+  shortcutTooShort: boolean;
+  teamPasswordSet: boolean;
+  base: string;
+}) {
   return (
     <div className="space-y-6">
       <section>
@@ -64,6 +79,11 @@ export function SettingsForms({ settings, months, shortcutReady, teamPasswordSet
                   <code className="rounded bg-surface-2 px-1 font-mono text-[12px]">{base || ""}/api/sales</code> with your LOG_TOKEN.
                 </p>
               </>
+            ) : shortcutTooShort ? (
+              <>
+                <p className="font-bold text-gray-900">LOG_TOKEN is too short</p>
+                <p className="mt-0.5 text-gray-600">Use at least 12 characters (24 or more is best) in Vercel, then redeploy. Until then every Shortcut call is refused.</p>
+              </>
             ) : (
               <>
                 <p className="font-bold text-gray-900">Not set up yet</p>
@@ -81,12 +101,14 @@ function GoalForm({ month }: { month: MonthGoal }) {
   const [pending, start] = useTransition();
   return (
     <form
-      action={(form) =>
+      onSubmit={(e) => {
+        e.preventDefault();
+        const form = new FormData(e.currentTarget);
         start(async () => {
           const r = await saveTeamGoal(month.key, form);
           toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-        })
-      }
+        });
+      }}
       className="flex items-end gap-2"
     >
       <div className="min-w-0 flex-1">
@@ -110,12 +132,14 @@ function BoardForm({ settings }: { settings: AppSettings }) {
   const [pending, start] = useTransition();
   return (
     <form
-      action={(form) =>
+      onSubmit={(e) => {
+        e.preventDefault();
+        const form = new FormData(e.currentTarget);
         start(async () => {
           const r = await saveBoardSettings(form);
           toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-        })
-      }
+        });
+      }}
       className="mt-2 space-y-3 rounded-[22px] bg-surface p-4 shadow-card"
     >
       <div>

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { insertSale, listAgents } from "@/lib/data";
 import { addDays, isDateKey, todayInDetroit } from "@/lib/month";
 import { parseDollars } from "@/lib/money";
+import { LOG_TOKEN_MIN } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ const Body = z.object({
 
 function tokenOk(header: string | null): boolean {
   const expected = process.env.LOG_TOKEN;
-  if (!expected || expected.length < 12) return false;
+  if (!expected || expected.length < LOG_TOKEN_MIN) return false;
   const supplied = header?.replace(/^Bearer\s+/i, "").trim() ?? "";
   if (!supplied) return false;
   const a = createHash("sha256").update(supplied).digest();
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
   if (cents == null || cents === 0) return NextResponse.json({ ok: false, error: "premium must be an amount over 0" }, { status: 400 });
   const today = todayInDetroit();
   const soldOn = body.date || today;
-  if (!isDateKey(soldOn) || soldOn > addDays(today, 1) || soldOn < addDays(today, -400)) return NextResponse.json({ ok: false, error: "date must be YYYY-MM-DD, not in the future" }, { status: 400 });
+  if (!isDateKey(soldOn) || soldOn > today || soldOn < addDays(today, -400)) return NextResponse.json({ ok: false, error: "date must be YYYY-MM-DD, not in the future" }, { status: 400 });
 
   const agents = await listAgents();
   const want = body.agent.toLowerCase();

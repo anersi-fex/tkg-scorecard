@@ -4,6 +4,8 @@ import { dbConfigured } from "@/lib/supabase";
 import { getSettings, goalsForMonth } from "@/lib/data";
 import { addMonths, monthKeyOf, monthLabel, todayInDetroit } from "@/lib/month";
 import { PageTitle } from "@/components/ui";
+import { appBase } from "@/lib/app-url";
+import { LOG_TOKEN_MIN } from "@/lib/auth";
 import { SettingsForms } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -23,9 +25,10 @@ export default async function SettingsPage() {
           { key: month, label: monthLabel(month), cents: goals.teamCents, current: true },
           { key: next, label: monthLabel(next), cents: nextGoals.teamCents, current: false },
         ]}
-        shortcutReady={!!process.env.LOG_TOKEN}
+        shortcutReady={(process.env.LOG_TOKEN?.length ?? 0) >= LOG_TOKEN_MIN}
+        shortcutTooShort={!!process.env.LOG_TOKEN && process.env.LOG_TOKEN.length < LOG_TOKEN_MIN}
         teamPasswordSet={!!process.env.TEAM_PASSWORD}
-        base={process.env.APP_URL?.replace(/\/$/, "") ?? ""}
+        base={await appBase()}
       />
     </>
   );

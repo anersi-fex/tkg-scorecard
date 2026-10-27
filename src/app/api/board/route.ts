@@ -11,7 +11,8 @@ export async function GET() {
   try {
     const today = todayInDetroit();
     const snapshot = await loadMonthSnapshot(monthKeyOf(today), { today, recentLimit: 12 });
-    return NextResponse.json(snapshot, { headers: { "Cache-Control": "private, no-store" } });
+    // The TV reads the feed and the totals; the month's full list is for the Home page.
+    return NextResponse.json({ ...snapshot, sales: [] }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (err) {
     // The class only; never a row.
     console.error("board_snapshot_failed", err instanceof Error ? err.name : "error");

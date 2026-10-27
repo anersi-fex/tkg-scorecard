@@ -101,16 +101,18 @@ function AddPerson() {
 
 function PersonEditor({ person, month, base, onClose }: { person: Person; month: string; base: string; onClose: () => void }) {
   const [pending, start] = useTransition();
-  const link = `${base || ""}/log?agent=${person.id}`;
+  const link = `${base}/log?agent=${person.id}`;
   return (
     <div className="mt-3 space-y-3 rounded-2xl bg-surface-2 p-3">
       <form
-        action={(form) =>
+        onSubmit={(e) => {
+          e.preventDefault();
+          const form = new FormData(e.currentTarget);
           start(async () => {
             const r = await renamePerson(person.id, form);
             toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-          })
-        }
+          });
+        }}
         className="flex items-end gap-2"
       >
         <div className="min-w-0 flex-1">
@@ -122,12 +124,14 @@ function PersonEditor({ person, month, base, onClose }: { person: Person; month:
         </Button>
       </form>
       <form
-        action={(form) =>
+        onSubmit={(e) => {
+          e.preventDefault();
+          const form = new FormData(e.currentTarget);
           start(async () => {
             const r = await savePersonGoal(month, person.id, form);
             toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-          })
-        }
+          });
+        }}
         className="flex items-end gap-2"
       >
         <div className="min-w-0 flex-1">

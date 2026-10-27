@@ -8,6 +8,7 @@ import { cn } from "@/components/ui";
 import { ScoreLockup } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { initials } from "@/components/avatar";
+import { logout } from "@/app/login/actions";
 
 /**
  * Tide app shell (the same as Sales Coach). The header (logo, and on a computer the main links)
@@ -258,7 +259,7 @@ function AccountMenu({ role }: { role: Role }) {
               Settings
             </MenuRow>
           )}
-          <form action="/api/signout" method="post">
+          <form action={logout}>
             <button type="submit" className="flex min-h-11 w-full items-center gap-3 rounded-2xl px-2.5 text-left text-[15px] font-semibold text-red-700 hover:bg-red-50">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11" />

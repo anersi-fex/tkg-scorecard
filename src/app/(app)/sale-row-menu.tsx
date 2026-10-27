@@ -91,17 +91,20 @@ function EditSheet({ sale, agents, onClose }: { sale: FeedSale; agents: Array<{ 
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-gray-900/40 p-3 sm:items-center" role="dialog" aria-modal="true" aria-label="Fix this sale">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/70 p-3 sm:items-center" role="dialog" aria-modal="true" aria-label="Fix this sale">
+      {/* onSubmit, not a form action: React 19 resets a form's fields after an action, which would wipe a typo the owner is fixing. */}
       <form
-        action={(form) =>
+        onSubmit={(e) => {
+          e.preventDefault();
+          const form = new FormData(e.currentTarget);
           start(async () => {
             const r = await editSale(sale.id, form);
             if (r.ok) {
               toast(r.message ?? "Saved.");
               onClose();
             } else setError(r.error);
-          })
-        }
+          });
+        }}
         className="w-full max-w-md rounded-[26px] bg-surface p-5 shadow-float"
       >
         <h2 className="text-[20px] font-extrabold tracking-[-0.02em] text-gray-900">Fix this sale</h2>

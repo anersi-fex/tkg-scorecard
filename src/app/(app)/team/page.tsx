@@ -5,6 +5,7 @@ import { goalsForMonth, listAgents, salesForMonth } from "@/lib/data";
 import { monthKeyOf, monthLabel, todayInDetroit } from "@/lib/month";
 import { teamTones } from "@/components/avatar";
 import { PageTitle } from "@/components/ui";
+import { appBase } from "@/lib/app-url";
 import { TeamEditor } from "./team-editor";
 
 export const metadata: Metadata = { title: "Team" };
@@ -32,7 +33,7 @@ export default async function TeamPage() {
     policies: totals.get(a.id)?.policies ?? 0,
     goalCents: goals.byAgent[a.id] ?? 0,
   }));
-  const base = process.env.APP_URL?.replace(/\/$/, "") ?? "";
+  const base = await appBase();
   return (
     <>
       <PageTitle sub={`${monthLabel(month)} so far`}>Team</PageTitle>

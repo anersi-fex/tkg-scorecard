@@ -22,8 +22,10 @@ function paceLine(s: MonthSnapshot): { text: string; tone: "green" | "amber" | "
       ? { text: `Goal hit: ${formatDollars(s.team.productionCents)} of ${formatDollars(s.team.goalCents)}.`, tone: "green" }
       : { text: `Finished ${formatDollars(s.team.goalCents - s.team.productionCents)} short of the goal.`, tone: "red" };
   }
-  if (pace.status === "none") return { text: clock.elapsed > 0 ? `On pace for ${formatDollars(pace.projectedCents)} this month. Set a goal in Settings.` : "The month hasn't started.", tone: "gray" };
   if (pace.status === "done") return { text: `Goal hit, ${formatDollars(s.team.productionCents - s.team.goalCents)} over. Keep going.`, tone: "green" };
+  if (clock.elapsed === 0) return { text: clock.position === "future" ? "The month hasn't started." : "The month starts Monday.", tone: "gray" };
+  if (pace.status === "none") return { text: `On pace for ${formatDollars(pace.projectedCents)} this month. Set a goal in Settings.`, tone: "gray" };
+  if (clock.remaining === 0) return { text: `${formatDollars(s.team.goalCents - s.team.productionCents)} short of the goal. No business days left this month.`, tone: "amber" };
   const per = `${formatDollars(pace.neededPerDayCents)} a day for ${clock.remaining} ${clock.remaining === 1 ? "day" : "days"} gets there.`;
   if (pace.status === "ahead") return { text: `Ahead by ${formatDollars(pace.aheadCents)}. On pace for ${formatDollars(pace.projectedCents)}. ${per}`, tone: "green" };
   if (pace.status === "on") return { text: `Right on the goal line. On pace for ${formatDollars(pace.projectedCents)}. ${per}`, tone: "blue" };
@@ -45,12 +47,12 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
     return (
       <>
         <PageHeader month={month} current={current} />
-        <Notice tone="red">The database answered with an error: {err instanceof Error ? err.message : "unknown"}. Check that the setup SQL ran (SETUP.md, step 2).</Notice>
+        <Notice tone="red">The database answered with an error: {err instanceof Error ? err.message : "unknown"}. Check that the setup SQL ran (SETUP.md, step 3).</Notice>
       </>
     );
   }
   const line = paceLine(s);
-  const monthSales = s.recent.filter((r) => monthKeyOf(r.soldOn) === month);
+  const monthSales = s.sales;
   const top = s.agents[0];
   const maxPremium = Math.max(1, ...s.agents.map((a) => a.premiumCents));
 
@@ -103,7 +105,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
           )}
           {s.agents.map((a) => (
             <li key={a.id} className={cn("flex items-center gap-3 px-4 py-3", ROW_INSET.avatar)}>
-              <span className={cn("w-5 shrink-0 text-center font-mono text-[15px] font-bold", a.rank === 1 && a.premiumCents > 0 ? "text-gold" : "text-gray-500")}>{a.rank}</span>
+              <span className={cn("w-5 shrink-0 text-center font-mono text-[15px] font-bold", a.rank === 1 && a.premiumCents > 0 ? "text-amber-800" : "text-gray-500")}>{a.rank}</span>
               <Avatar name={a.name} tone={a.tone} size={40} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-3">
@@ -149,9 +151,6 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
               <SaleRowMenu sale={r} role={role} agents={s.agents.map((a) => ({ id: a.id, name: a.name }))} />
             </li>
           ))}
-          {monthSales.length >= 12 && s.team.salesCount > monthSales.length && (
-            <li className="px-4 py-3 text-[13px] text-gray-500">The newest {monthSales.length} of {s.team.salesCount}. The leaderboard counts every one.</li>
-          )}
         </ListCard>
       </div>
 
