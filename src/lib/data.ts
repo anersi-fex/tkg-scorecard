@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./supabase";
-import { DEFAULT_SETTINGS, type Agent, type AppSettings, type LoggedBy, type Sale } from "./types";
+import { DEFAULT_SETTINGS, isBoardTheme, type Agent, type AppSettings, type LoggedBy, type Sale } from "./types";
 import { datesOfMonth, isMonthKey } from "./month";
 import { DEFAULT_COLORWAY, isColorwayKey } from "./colorways";
 
@@ -186,6 +186,7 @@ export async function getSettings(): Promise<AppSettings> {
     products: list(v.products, DEFAULT_SETTINGS.products),
     carriers: list(v.carriers, DEFAULT_SETTINGS.carriers),
     colorway: isColorwayKey(v.colorway) ? v.colorway : DEFAULT_COLORWAY,
+    boardTheme: isBoardTheme(v.boardTheme) ? v.boardTheme : DEFAULT_SETTINGS.boardTheme,
   };
 }
 

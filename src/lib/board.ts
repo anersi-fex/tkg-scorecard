@@ -3,7 +3,7 @@ import { teamTones } from "@/components/avatar";
 import { goalsForMonth, listAgents, recentSales, salesForMonth, getSettings, type SaleWithAgent } from "./data";
 import { datesOfMonth, monthClock, pace, todayInDetroit, type MonthClock, type Pace } from "./month";
 import { percentOf } from "./money";
-import type { Agent } from "./types";
+import { DEFAULT_BOARD_THEME, type Agent, type BoardTheme } from "./types";
 import { DEFAULT_COLORWAY, type ColorwayKey } from "./colorways";
 
 /**
@@ -79,6 +79,8 @@ export interface MonthSnapshot {
   message: string;
   /** The colorway the owner picked (the TV applies it on each poll). */
   colorway: ColorwayKey;
+  /** The TV look the owner picked, dark or light (the TV applies it on each poll). */
+  boardTheme: BoardTheme;
 }
 
 function toFeed(s: SaleWithAgent): FeedSale {
@@ -111,7 +113,7 @@ export async function loadMonthSnapshot(month: string, opts: { today?: string; r
     recentSales(opts.recentLimit ?? 12),
     getSettings(),
   ]);
-  return buildSnapshot({ month, today, agents, sales, goals, recent, message: settings.message, colorway: settings.colorway });
+  return buildSnapshot({ month, today, agents, sales, goals, recent, message: settings.message, colorway: settings.colorway, boardTheme: settings.boardTheme });
 }
 
 /** Pure: the snapshot from loaded rows (tests build it without a database). */
@@ -124,6 +126,7 @@ export function buildSnapshot(input: {
   recent: SaleWithAgent[];
   message: string;
   colorway?: ColorwayKey;
+  boardTheme?: BoardTheme;
   generatedAt?: string;
 }): MonthSnapshot {
   const { month, today, agents, sales, goals, recent, message } = input;
@@ -208,5 +211,6 @@ export function buildSnapshot(input: {
     daily,
     message,
     colorway: input.colorway ?? DEFAULT_COLORWAY,
+    boardTheme: input.boardTheme ?? DEFAULT_BOARD_THEME,
   };
 }

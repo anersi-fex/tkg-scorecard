@@ -24,6 +24,25 @@ const check = (ok, what) => {
   console.log(`${ok ? "ok  " : "FAIL"} ${what}`);
   if (!ok) failures++;
 };
+/** True once fn() holds on the page, false after ms. */
+const settles = async (page, fn, ms) => {
+  try {
+    await page.waitForFunction(fn, null, { timeout: ms });
+    return true;
+  } catch {
+    return false;
+  }
+};
+/** The board feed once fn(json) holds (the settings save landed), else the last answer. */
+const feedUntil = async (ctx, fn, tries = 20) => {
+  let json = null;
+  for (let i = 0; i < tries; i++) {
+    json = await (await ctx.request.get(`${APP}/api/board`)).json();
+    if (fn(json)) return json;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return json;
+};
 
 const PEOPLE = ["Anersi Koka", "Alex Alekseyev", "Mark Dusevic", "Moe Karim", "Brandon Lee", "Maira Santos", "James Park"];
 
@@ -117,6 +136,12 @@ try {
   await o.goto(`${APP}/settings`);
   await o.click("[role=radio]:has-text('Crimson')");
   await o.waitForSelector("text=Saved. The TV changes");
+  // TV look: dark by default, Light saved on tap, carried by the feed (the TV checks below)
+  const tvLook = "[role=radiogroup][aria-label='TV look']";
+  check((await o.getAttribute(`${tvLook} [role=radio][aria-checked=true]`, "aria-checked")) === "true" && (await o.textContent(`${tvLook} [role=radio][aria-checked=true]`)).includes("Dark"), "the TV look starts on Dark");
+  check((await o.getAttribute("html", "data-board-theme")) === "dark", "the page carries the TV look for the pre-paint script");
+  await o.click(`${tvLook} [role=radio]:has-text('Light')`);
+  check((await feedUntil(owner, (j) => j.boardTheme === "light")).boardTheme === "light", "the board feed carries the TV look (light)");
   await o.screenshot({ path: `${OUT}/03-settings.png`, fullPage: true });
 
   // Log sales through the form
@@ -234,18 +259,34 @@ try {
   const tv = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   await tv.addCookies(await owner.cookies());
   const t = await tv.newPage();
+  // Settings says Light (set above): the TV opens light before its first paint
   await t.goto(`${APP}/board`, { waitUntil: "commit" });
-  check((await t.getAttribute("html", "data-theme")) === "dark", "board is dark before the first paint");
+  check((await t.getAttribute("html", "data-theme")) === "light", "the TV opens in the owner's TV look (light) before the first paint");
   await t.waitForSelector("text=Leaderboard");
   await t.waitForTimeout(1200);
+  await t.screenshot({ path: `${OUT}/11-board-light.png` });
+  // Back to Dark on the owner's phone: the TV follows on its next poll
+  await o.goto(`${APP}/settings`);
+  await o.click(`${tvLook} [role=radio]:has-text('Dark')`);
+  check(await settles(t, () => document.documentElement.getAttribute("data-theme") === "dark", 12000), "a TV look change in Settings reaches the TV within a poll");
+  await t.waitForTimeout(400);
   await t.screenshot({ path: `${OUT}/10-board-dark.png` });
   const tvOverflow = await t.evaluate(() => document.documentElement.scrollHeight > document.documentElement.clientHeight + 1);
   check(!tvOverflow, "board fits the TV with no scroll");
   await t.keyboard.press("t");
   await t.waitForTimeout(400);
   check((await t.getAttribute("html", "data-theme")) === "light", "T flips the board to light");
-  await t.screenshot({ path: `${OUT}/11-board-light.png` });
+  await t.waitForTimeout(6000);
+  check((await t.getAttribute("html", "data-theme")) === "light", "a T flip stays through the next poll while Settings is unchanged");
+  check((await t.evaluate(() => localStorage.getItem("theme"))) === null, "the TV never saves a look in the browser");
   await t.keyboard.press("t");
+  await t.waitForTimeout(400);
+  check((await t.getAttribute("html", "data-theme")) === "dark", "T flips it back to dark");
+  // An address with ?theme= pins the look whatever Settings says
+  const pinned = await tv.newPage();
+  await pinned.goto(`${APP}/board?theme=light`, { waitUntil: "commit" });
+  check((await pinned.getAttribute("html", "data-theme")) === "light", "?theme=light pins the TV light while Settings says dark");
+  await pinned.close();
 
   // A Shortcut logs a sale: the board celebrates within a poll
   if (TOKEN) {

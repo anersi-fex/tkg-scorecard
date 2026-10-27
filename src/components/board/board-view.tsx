@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AgentLine, FeedSale, MonthSnapshot } from "@/lib/board";
+import type { BoardTheme } from "@/lib/types";
 import { formatDollars, formatMoney } from "@/lib/money";
 import { dayLabel } from "@/lib/month";
 import { TEAM_TIME_ZONE } from "@/lib/timezone";
@@ -16,7 +17,9 @@ import { burst } from "./confetti";
  * The TV board. One screen, no scrolling, sized from the viewport (1em = about 1% of the width,
  * capped for 4K), so a 1080p TV, a 4K TV and a laptop all show the same layout. Polls /api/board
  * every few seconds; a sale that was not there before gets a celebration with confetti.
- * Keys: F full screen, T light/dark. The cursor hides after a few seconds still.
+ * Dark or light comes from the owner's TV look (Settings) on every poll, unless the address pins
+ * one (?theme=light). Keys: F full screen, T light/dark on this TV until the next change in
+ * Settings or a reload. The cursor hides after a few seconds still.
  */
 const POLL_MS = 5000;
 const CELEBRATE_MS = 9000;
@@ -73,19 +76,12 @@ function useIdleCursor() {
   }, []);
 }
 
-function applyTheme(choice: "light" | "dark" | null) {
-  const root = document.documentElement;
-  if (!choice) root.removeAttribute("data-theme");
-  else root.setAttribute("data-theme", choice);
-  try {
-    if (!choice) localStorage.removeItem("theme");
-    else localStorage.setItem("theme", choice);
-  } catch {
-    /* private mode */
-  }
+/** The TV's look lives on <html> only, never in this browser's storage: Settings is the source. */
+function applyTheme(choice: BoardTheme) {
+  document.documentElement.setAttribute("data-theme", choice);
 }
 
-export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: "light" | "dark" | null }) {
+export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: BoardTheme | null }) {
   const router = useRouter();
   const [snap, setSnap] = useState(initial);
   const [offline, setOffline] = useState(0);
@@ -98,19 +94,12 @@ export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: "
   useWakeLock();
   useIdleCursor();
 
-  // The board is dark unless the address or this browser's saved choice says light.
+  // The address pins the look (?theme=light); else the owner's TV look from the latest poll, so a
+  // change in Settings reaches the TV within 5 s. THEME_SCRIPT already applied it before paint, and
+  // the effect runs again only when the setting changes, so a T flip stays until then.
   useEffect(() => {
-    if (theme) applyTheme(theme);
-    else {
-      let saved: string | null = null;
-      try {
-        saved = localStorage.getItem("theme");
-      } catch {
-        saved = null;
-      }
-      if (saved !== "light" && saved !== "dark") document.documentElement.setAttribute("data-theme", "dark");
-    }
-  }, [theme]);
+    applyTheme(theme ?? snap.boardTheme);
+  }, [theme, snap.boardTheme]);
 
   // The owner's colorway from the latest poll (a change in Settings reaches the TV within 5 s).
   useEffect(() => {

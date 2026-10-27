@@ -27,6 +27,14 @@ export interface Sale {
 
 import { DEFAULT_COLORWAY, type ColorwayKey } from "./colorways";
 
+/** The TV's look (Settings > TV look): dark, or light. Browser-safe. */
+export type BoardTheme = "dark" | "light";
+export const BOARD_THEMES: BoardTheme[] = ["dark", "light"];
+export const DEFAULT_BOARD_THEME: BoardTheme = "dark";
+export function isBoardTheme(v: unknown): v is BoardTheme {
+  return v === "dark" || v === "light";
+}
+
 export interface AppSettings {
   /** One line under the board's title ("Q4 push: every policy counts"). */
   message: string;
@@ -36,10 +44,18 @@ export interface AppSettings {
   carriers: string[];
   /** The color story on every screen and the TV (Settings > Colorway). */
   colorway: ColorwayKey;
+  /** Dark or light on the TV (Settings > TV look); the TV follows it from its poll. */
+  boardTheme: BoardTheme;
 }
 
 export const DEFAULT_PRODUCTS = ["Term", "Whole life", "Final expense", "IUL", "Other"];
 /** The owner's carriers (2026-10-27). */
 export const DEFAULT_CARRIERS = ["AHL", "AmAm", "Americo", "Foresters", "Newbridge", "Royal", "UHL"];
 
-export const DEFAULT_SETTINGS: AppSettings = { message: "", products: DEFAULT_PRODUCTS, carriers: DEFAULT_CARRIERS, colorway: DEFAULT_COLORWAY };
+export const DEFAULT_SETTINGS: AppSettings = {
+  message: "",
+  products: DEFAULT_PRODUCTS,
+  carriers: DEFAULT_CARRIERS,
+  colorway: DEFAULT_COLORWAY,
+  boardTheme: DEFAULT_BOARD_THEME,
+};
