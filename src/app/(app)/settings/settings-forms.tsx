@@ -200,6 +200,10 @@ function BoardForm({ settings }: { settings: AppSettings }) {
         <Input id="message" name="message" defaultValue={settings.message} maxLength={120} placeholder="Every policy counts. Finish strong." />
       </div>
       <div>
+        <Label htmlFor="carriers">Carriers on Log a sale (one per line; a sale always names one)</Label>
+        <Textarea id="carriers" name="carriers" defaultValue={settings.carriers.join("\n")} rows={7} className="font-medium" />
+      </div>
+      <div>
         <Label htmlFor="products">Product chips on Log a sale (one per line)</Label>
         <Textarea id="products" name="products" defaultValue={settings.products.join("\n")} rows={5} className="font-medium" />
       </div>

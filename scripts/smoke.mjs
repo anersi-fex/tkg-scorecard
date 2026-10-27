@@ -123,26 +123,23 @@ try {
   await o.goto(`${APP}/log`);
   await o.screenshot({ path: `${OUT}/04-log-empty.png`, fullPage: true });
   const sales = [
-    ["Alex Alekseyev", "12450", "Term", "Maria"],
-    ["Mark Dusevic", "8200.50", "Whole life", ""],
-    ["Anersi Koka", "15000", "IUL", "Dana"],
-    ["Moe Karim", "6100", "Final expense", ""],
-    ["Alex Alekseyev", "9300", "Term", "Luis"],
-    ["Brandon Lee", "4350", "", ""],
+    ["Alex Alekseyev", "12450", "Term", "Americo"],
+    ["Mark Dusevic", "8200.50", "Whole life", "Foresters"],
+    ["Anersi Koka", "15000", "IUL", "AHL"],
+    ["Moe Karim", "6100", "Final expense", "Royal"],
+    ["Alex Alekseyev", "9300", "Term", "UHL"],
+    ["Brandon Lee", "4350", "", "AmAm"],
   ];
-  for (const [who, premium, product, client] of sales) {
+  for (const [who, premium, product, carrier] of sales) {
     await o.goto(`${APP}/log`);
     await o.click(`[role=radio]:has-text("${who}")`);
     await o.fill("#premium", premium);
     if (product) await o.click(`button[aria-pressed]:has-text("${product}")`);
-    if (client) {
-      await o.click("button:has-text('Client name, day, note')");
-      await o.fill("#client", client);
-    }
+    await o.click(`[role=radiogroup][aria-label=Carrier] [role=radio]:has-text("${carrier}")`);
     await o.click("button[type=submit]:has-text('Log')");
     await o.waitForSelector("h2:has-text('Logged')");
   }
-  check(true, "six sales logged through the form");
+  check(true, "six sales logged through the form, each with a carrier");
   await o.screenshot({ path: `${OUT}/05-log-done.png`, fullPage: true });
 
   // Undo the last one, then log it again
@@ -151,9 +148,14 @@ try {
   check(true, "undo after logging works");
   await o.click(`[role=radio]:has-text("Brandon Lee")`);
   await o.fill("#premium", "4350");
+  await o.click(`[role=radiogroup][aria-label=Carrier] [role=radio]:has-text("AmAm")`);
   await o.click("button[type=submit]:has-text('Log')");
   await o.waitForSelector("h2:has-text('Logged')");
 
+  await o.goto(`${APP}/log`);
+  await o.click(`[role=radio]:has-text("Moe Karim")`);
+  await o.fill("#premium", "500");
+  check(await o.locator("form:has(#premium) button[type=submit]").isDisabled(), "no carrier keeps the button off");
   // A sale with a bad amount is refused
   await o.goto(`${APP}/log`);
   await o.click(`[role=radio]:has-text("Moe Karim")`);
@@ -167,6 +169,7 @@ try {
   check(body.includes("$55,401") || body.includes("$55,400"), `team production shows on Home (${body.match(/\$5\d,\d{3}/)?.[0]})`);
   check(body.includes("of $150,000"), "goal shows on Home");
   check(body.includes("Alex Alekseyev"), "leader on Home");
+  check(body.includes("Americo") && body.includes("Foresters"), "the sales rows on Home name the carrier");
   await o.screenshot({ path: `${OUT}/06-home.png`, fullPage: true });
 
   // Owner fixes a sale and removes one
@@ -188,7 +191,8 @@ try {
   await o.goto(`${APP}/log`);
   await o.click(`[role=radio]:has-text("James Park")`);
   await o.fill("#premium", "777");
-  await o.click("button:has-text('Client name, day, note')");
+  await o.click(`[role=radiogroup][aria-label=Carrier] [role=radio]:has-text("Newbridge")`);
+  await o.click("button:has-text('Day and note')");
   await o.fill("#sold_on", lastMonthDay);
   await o.click("button[type=submit]:has-text('Log')");
   await o.waitForSelector("h2:has-text('Logged')");
@@ -198,7 +202,7 @@ try {
   // A sale dated in the future is refused by the server (the day field's max already stops it in the browser)
   const tomorrow = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
   if (TOKEN) {
-    const future = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "James Park", premium: "5", date: tomorrow } });
+    const future = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "James Park", premium: "5", carrier: "AHL", date: tomorrow } });
     check(future.status() === 400, `a sale dated in the future is refused (${future.status()})`);
   }
   // Past month view
@@ -245,19 +249,23 @@ try {
 
   // A Shortcut logs a sale: the board celebrates within a poll
   if (TOKEN) {
-    const api = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "maira", premium: "2,750", product: "Term", client: "Rosa" } });
-    check(api.ok(), `Shortcut endpoint logs a sale (${api.status()})`);
+    const api = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "maira", premium: "2,750", product: "Term", carrier: "americo" } });
+    check(api.ok() && (await api.json()).sale.carrier === "Americo", `Shortcut endpoint logs a sale with the carrier (${api.status()})`);
+    const noCarrier = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "maira", premium: "10" } });
+    check(noCarrier.status() === 400, "Shortcut endpoint needs a carrier");
+    const badCarrier = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "maira", premium: "10", carrier: "Nope" } });
+    check(badCarrier.status() === 400 && (await badCarrier.json()).carriers.length === 7, "Shortcut endpoint lists the carriers on a wrong one");
     const people = await owner.request.get(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` } });
     check(people.ok() && (await people.json()).people.length === 7, "Shortcut endpoint lists the people");
-    const bad = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "Nobody", premium: "100" } });
+    const bad = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "Nobody", premium: "100", carrier: "AHL" } });
     check(bad.status() === 404, "Shortcut endpoint refuses an unknown person");
-    const wrongTok = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer nope-nope-nope-nope` }, data: { agent: "Alex", premium: "100" } });
+    const wrongTok = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer nope-nope-nope-nope` }, data: { agent: "Alex", premium: "100", carrier: "AHL" } });
     check(wrongTok.status() === 401, "Shortcut endpoint refuses a wrong token");
     await t.waitForSelector("text=New sale", { timeout: 15000 });
     await t.waitForTimeout(900);
     await t.screenshot({ path: `${OUT}/12-board-celebration.png` });
     const celebrate = await t.textContent("[role=status]");
-    check(celebrate.includes("Maira Santos") && celebrate.includes("$2,750"), "the board celebrates the new sale with the name and the amount");
+    check(celebrate.includes("Maira Santos") && celebrate.includes("$2,750") && celebrate.includes("Americo"), "the board celebrates the new sale with the name, the amount and the carrier");
   } else {
     console.log("skip Shortcut endpoint (no LOG_TOKEN)");
   }
@@ -278,6 +286,7 @@ try {
   await m.goto(`${APP}/log`);
   await m.click(`[role=radio]:has-text("James Park")`);
   await m.fill("#premium", "1999");
+  await m.click(`[role=radiogroup][aria-label=Carrier] [role=radio]:has-text("Royal")`);
   await m.click("button[type=submit]:has-text('Log')");
   await m.waitForSelector("h2:has-text('Logged')");
   check(true, "team logs a sale");

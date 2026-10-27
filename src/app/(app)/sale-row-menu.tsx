@@ -14,7 +14,7 @@ const UNDO_WINDOW_MS = 15 * 60 * 1000;
  * The "…" at the end of a sale row: the owner can fix or remove any sale; the team can take back
  * one logged in the last 15 minutes.
  */
-export function SaleRowMenu({ sale, role, agents }: { sale: FeedSale; role: Role; agents: Array<{ id: string; name: string }> }) {
+export function SaleRowMenu({ sale, role, agents, carriers }: { sale: FeedSale; role: Role; agents: Array<{ id: string; name: string }>; carriers: string[] }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
@@ -82,12 +82,14 @@ export function SaleRowMenu({ sale, role, agents }: { sale: FeedSale; role: Role
           )}
         </div>
       )}
-      {editing && <EditSheet sale={sale} agents={agents} onClose={() => setEditing(false)} />}
+      {editing && <EditSheet sale={sale} agents={agents} carriers={carriers} onClose={() => setEditing(false)} />}
     </div>
   );
 }
 
-function EditSheet({ sale, agents, onClose }: { sale: FeedSale; agents: Array<{ id: string; name: string }>; onClose: () => void }) {
+function EditSheet({ sale, agents, carriers, onClose }: { sale: FeedSale; agents: Array<{ id: string; name: string }>; carriers: string[]; onClose: () => void }) {
+  // The row's carrier stays pickable even if it left the Settings list.
+  const carrierChoices = sale.carrier && !carriers.includes(sale.carrier) ? [sale.carrier, ...carriers] : carriers;
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   return (
@@ -133,8 +135,15 @@ function EditSheet({ sale, agents, onClose }: { sale: FeedSale; agents: Array<{ 
             <Input id="e-product" name="product" defaultValue={sale.product ?? ""} maxLength={40} />
           </div>
           <div>
-            <Label htmlFor="e-client">Client first name</Label>
-            <Input id="e-client" name="client" defaultValue={sale.client ?? ""} maxLength={40} />
+            <Label htmlFor="e-carrier">Carrier</Label>
+            <Select id="e-carrier" name="carrier" defaultValue={sale.carrier ?? ""}>
+              <option value="">Not set</option>
+              {carrierChoices.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
           </div>
           <div className="col-span-2">
             <Label htmlFor="e-date">Day</Label>

@@ -33,3 +33,6 @@ yarn-error.log*
 
 # rendered colorway mockups (design/render-colorways.mjs)
 /design/out/
+
+# data pastes made for the owner (team numbers, not code)
+/imports/

@@ -37,7 +37,7 @@ export interface FeedSale {
   premiumCents: number;
   policies: number;
   product: string | null;
-  client: string | null;
+  carrier: string | null;
   note: string | null;
   soldOn: string;
   createdAt: string;
@@ -89,7 +89,7 @@ function toFeed(s: SaleWithAgent): FeedSale {
     premiumCents: s.premium_cents,
     policies: s.policies,
     product: s.product,
-    client: s.client,
+    carrier: s.carrier,
     note: s.note,
     soldOn: s.sold_on,
     createdAt: s.created_at,

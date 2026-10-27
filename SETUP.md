@@ -19,6 +19,7 @@ Vercel builds the `main` branch, and right now `main` holds only a one-line READ
 1. Open https://github.com/anersi-fex/tkg-scorecard/blob/main/supabase/migrations/0001_init.sql, tap the **Raw** button, select all, copy.
 2. In Supabase, open **SQL Editor** (left menu), tap **New query**, paste, tap **Run**.
 3. You should see **Success. No rows returned**.
+4. Do the same with `0002_carrier.sql` (the carrier a sale was written with; added 2026-10-27). Done already on the live project if Log a sale shows the carrier chips.
 
 ### Step 4. Copy two values
 1. **Project Settings** (gear) > **Data API**: copy the **Project URL** (it looks like `https://abcd.supabase.co`, nothing after `.co`).
@@ -72,12 +73,13 @@ That is release 1. Send Claude a photo of the TV: that is the proof.
 2. On an iPhone, open **Shortcuts** > **+** and add these actions in order:
    - **Choose from Menu** (or **Choose from List** with the team's names): the person.
    - **Ask for Input**, Number, prompt "Annual premium?".
-   - **Get Contents of URL**: the address + `/api/sales`, Method **POST**, Headers `Authorization` = `Bearer ` + your LOG_TOKEN, Request Body **JSON**: `agent` = the chosen name, `premium` = the number.
+   - **Choose from List** with the carriers (AHL, AmAm, Americo, Foresters, Newbridge, Royal, UHL).
+   - **Get Contents of URL**: the address + `/api/sales`, Method **POST**, Headers `Authorization` = `Bearer ` + your LOG_TOKEN, Request Body **JSON**: `agent` = the chosen name, `premium` = the number, `carrier` = the chosen carrier.
    - **Show Result**: the contents.
 3. Name it "Log a sale". Tap it once to test: the board celebrates within 5 seconds.
 4. NFC: Shortcuts > **Automation** > **+** > **NFC** > scan a tag > run "Log a sale". One tag per desk, or one shared tag.
 
-`agent` can be a first name when nobody shares it ("Alex"), else the full name. Optional fields: `policies`, `product`, `client` (first name), `date` (`YYYY-MM-DD`).
+`agent` can be a first name when nobody shares it ("Alex"), else the full name; `carrier` must be one of the names in Settings (any case). Optional fields: `policies`, `product`, `date` (`YYYY-MM-DD`).
 
 ## Reference: all settings
 - Required: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OWNER_PASSWORD`.

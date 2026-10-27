@@ -28,11 +28,11 @@ function readSavedWho(): string | null {
 }
 
 /**
- * Three taps: who, how much, Log it. The person a desk tag opens (`?agent=`) or the last person
- * picked on this phone is preselected. After logging, the screen offers Undo for a bit, Log
- * another, and the board.
+ * Four taps: who, how much, which carrier, Log it. The person a desk tag opens (`?agent=`) or the
+ * last person picked on this phone is preselected. After logging, the screen offers Undo for a
+ * bit, Log another, and the board.
  */
-export function LogForm({ agents, products, today, preset }: { agents: Person[]; products: string[]; today: string; preset: string | null }) {
+export function LogForm({ agents, products, carriers, today, preset }: { agents: Person[]; products: string[]; carriers: string[]; today: string; preset: string | null }) {
   const saved = useSyncExternalStore(noSubscribe, readSavedWho, () => null);
   const [picked, setPicked] = useState<string | null>(null);
   // A desk tag's person wins, then the last one picked on this phone, then whoever taps.
@@ -41,7 +41,7 @@ export function LogForm({ agents, products, today, preset }: { agents: Person[];
   const [premium, setPremium] = useState("");
   const [policies, setPolicies] = useState(1);
   const [product, setProduct] = useState<string | null>(null);
-  const [client, setClient] = useState("");
+  const [carrier, setCarrier] = useState<string | null>(null);
   const [date, setDate] = useState(today);
   // Only a day the person picked is sent; otherwise the server stamps its own Detroit today, so a
   // screen left open past midnight never dates a sale to yesterday.
@@ -49,23 +49,24 @@ export function LogForm({ agents, products, today, preset }: { agents: Person[];
   const [more, setMore] = useState(false);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ id: string; who: string; cents: number } | null>(null);
+  const [done, setDone] = useState<{ id: string; who: string; cents: number; carrier: string | null } | null>(null);
   const [pending, start] = useTransition();
   const premiumRef = useRef<HTMLInputElement | null>(null);
 
   const cents = parseDollars(premium);
-  const ready = !!who && cents != null && cents > 0;
+  const ready = !!who && cents != null && cents > 0 && !!carrier;
 
   const submit = () => {
     if (!who) return setError("Tap who sold it.");
     if (cents == null || cents === 0) return setError("Type the annual premium, like 1250.");
+    if (!carrier) return setError("Tap the carrier it was written with.");
     setError(null);
     const form = new FormData();
     form.set("agent_id", who);
     form.set("premium", premium);
     form.set("policies", String(policies));
     if (product) form.set("product", product);
-    if (client.trim()) form.set("client", client.trim());
+    form.set("carrier", carrier);
     if (note.trim()) form.set("note", note.trim());
     form.set("sold_on", dateTouched ? date : "");
     start(async () => {
@@ -80,7 +81,7 @@ export function LogForm({ agents, products, today, preset }: { agents: Person[];
         /* private mode */
       }
       const person = agents.find((a) => a.id === who)?.name ?? "Someone";
-      setDone({ id: r.id!, who: person, cents: cents });
+      setDone({ id: r.id!, who: person, cents: cents, carrier });
       toast(r.message ?? "Logged.");
     });
   };
@@ -90,7 +91,7 @@ export function LogForm({ agents, products, today, preset }: { agents: Person[];
     setPremium("");
     setPolicies(1);
     setProduct(null);
-    setClient("");
+    setCarrier(null);
     setNote("");
     setDate(todayInDetroit());
     setDateTouched(false);
@@ -107,7 +108,8 @@ export function LogForm({ agents, products, today, preset }: { agents: Person[];
         </div>
         <h2 className="mt-4 text-[22px] font-extrabold tracking-[-0.03em] text-gray-900">Logged</h2>
         <p className="mt-1 text-[15px] text-gray-600">
-          <span className="font-semibold text-gray-900">{done.who}</span> · <span className="font-mono font-semibold text-gray-900">{formatMoney(done.cents)}</span> annual premium. The board is celebrating.
+          <span className="font-semibold text-gray-900">{done.who}</span> · <span className="font-mono font-semibold text-gray-900">{formatMoney(done.cents)}</span> annual premium
+          {done.carrier ? ` with ${done.carrier}` : ""}. The board is celebrating.
         </p>
         <div className="mt-6 grid gap-2">
           <Button type="button" className="h-12 w-full rounded-2xl text-[15px]" onClick={reset}>
@@ -201,6 +203,30 @@ export function LogForm({ agents, products, today, preset }: { agents: Person[];
       </section>
 
       <section>
+        <h2 className="mb-2 px-1 text-[13px] font-bold tracking-[0.06em] text-gray-500 uppercase">Carrier</h2>
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Carrier">
+          {carriers.map((c) => {
+            const on = carrier === c;
+            return (
+              <button
+                key={c}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => {
+                  setCarrier(c);
+                  setError(null);
+                }}
+                className={cn("min-h-11 rounded-full px-4 text-[14px] font-bold transition", on ? "bg-tide-strong text-white shadow-glow" : "bg-surface text-gray-700 shadow-card hover:bg-gray-50")}
+              >
+                {c}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section>
         <h2 className="mb-2 px-1 text-[13px] font-bold tracking-[0.06em] text-gray-500 uppercase">Product (optional)</h2>
         <div className="flex flex-wrap gap-2">
           {products.map((p) => {
@@ -222,17 +248,13 @@ export function LogForm({ agents, products, today, preset }: { agents: Person[];
 
       <section className="rounded-[26px] bg-surface p-4 shadow-card">
         <button type="button" onClick={() => setMore((m) => !m)} aria-expanded={more} className="flex min-h-11 w-full items-center justify-between text-left text-[15px] font-bold text-gray-900">
-          Client name, day, note
+          Day and note
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={cn("text-gray-400 transition-transform", more && "rotate-90")}>
             <path d="M9 6l6 6-6 6" />
           </svg>
         </button>
         {more && (
           <div className="mt-2 grid gap-3">
-            <div>
-              <Label htmlFor="client">Client&apos;s first name (shows on the board)</Label>
-              <Input id="client" name="client" value={client} onChange={(e) => setClient(e.target.value)} maxLength={40} autoComplete="off" placeholder="Maria" />
-            </div>
             <div>
               <Label htmlFor="sold_on">Day it counts for</Label>
               <Input

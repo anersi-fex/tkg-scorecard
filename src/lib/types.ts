@@ -15,6 +15,9 @@ export interface Sale {
   premium_cents: number;
   policies: number;
   product: string | null;
+  /** The carrier the policy was written with (Settings > Carriers). */
+  carrier: string | null;
+  /** Unused since 2026-10-27 (the screens ask for the carrier instead); kept for older rows. */
   client: string | null;
   note: string | null;
   sold_on: string;
@@ -29,10 +32,14 @@ export interface AppSettings {
   message: string;
   /** The product chips on the Log a sale screen. */
   products: string[];
+  /** The carrier chips on the Log a sale screen (a sale always names one). */
+  carriers: string[];
   /** The color story on every screen and the TV (Settings > Colorway). */
   colorway: ColorwayKey;
 }
 
 export const DEFAULT_PRODUCTS = ["Term", "Whole life", "Final expense", "IUL", "Other"];
+/** The owner's carriers (2026-10-27). */
+export const DEFAULT_CARRIERS = ["AHL", "AmAm", "Americo", "Foresters", "Newbridge", "Royal", "UHL"];
 
-export const DEFAULT_SETTINGS: AppSettings = { message: "", products: DEFAULT_PRODUCTS, colorway: DEFAULT_COLORWAY };
+export const DEFAULT_SETTINGS: AppSettings = { message: "", products: DEFAULT_PRODUCTS, carriers: DEFAULT_CARRIERS, colorway: DEFAULT_COLORWAY };

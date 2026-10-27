@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual, createHash } from "crypto";
 import { z } from "zod";
-import { insertSale, listAgents } from "@/lib/data";
+import { getSettings, insertSale, listAgents } from "@/lib/data";
 import { addDays, isDateKey, todayInDetroit } from "@/lib/month";
 import { parseDollars } from "@/lib/money";
 import { LOG_TOKEN_MIN } from "@/lib/auth";
@@ -11,15 +11,16 @@ export const dynamic = "force-dynamic";
 /**
  * An iPhone Shortcut (or an NFC tag that runs one) logs a sale here with the LOG_TOKEN:
  *   POST /api/sales   Authorization: Bearer <LOG_TOKEN>
- *   { "agent": "Alex", "premium": "1250", "policies": 1, "product": "Term", "client": "Maria", "date": "2026-10-27" }
- * `agent` is a name (first name is enough when it is unique) or an id. Answers { ok, sale }.
+ *   { "agent": "Alex", "premium": "1250", "carrier": "Americo", "policies": 1, "product": "Term", "date": "2026-10-27" }
+ * `agent` is a name (first name is enough when it is unique) or an id; `carrier` is one of the
+ * names in Settings (any case). Answers { ok, sale }.
  */
 const Body = z.object({
   agent: z.string().trim().min(1).max(80),
   premium: z.union([z.string(), z.number()]),
   policies: z.coerce.number().int().min(1).max(50).optional(),
   product: z.string().trim().max(40).optional(),
-  client: z.string().trim().max(40).optional(),
+  carrier: z.string().trim().min(1).max(40),
   note: z.string().trim().max(200).optional(),
   date: z.string().trim().optional(),
 });
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Send JSON" }, { status: 400 });
   }
   const parsed = Body.safeParse(json);
-  if (!parsed.success) return NextResponse.json({ ok: false, error: "Send agent and premium" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ ok: false, error: "Send agent, premium and carrier" }, { status: 400 });
   const body = parsed.data;
   const cents = parseDollars(String(body.premium));
   if (cents == null || cents === 0) return NextResponse.json({ ok: false, error: "premium must be an amount over 0" }, { status: 400 });
@@ -51,7 +52,9 @@ export async function POST(request: Request) {
   const soldOn = body.date || today;
   if (!isDateKey(soldOn) || soldOn > today || soldOn < addDays(today, -400)) return NextResponse.json({ ok: false, error: "date must be YYYY-MM-DD, not in the future" }, { status: 400 });
 
-  const agents = await listAgents();
+  const [agents, settings] = await Promise.all([listAgents(), getSettings()]);
+  const carrier = settings.carriers.find((c) => c.toLowerCase() === body.carrier.toLowerCase());
+  if (!carrier) return NextResponse.json({ ok: false, error: "No such carrier", carriers: settings.carriers }, { status: 400 });
   const want = body.agent.toLowerCase();
   const byId = agents.find((a) => a.id === body.agent);
   const byName = agents.filter((a) => a.name.toLowerCase() === want);
@@ -67,12 +70,13 @@ export async function POST(request: Request) {
       premium_cents: cents,
       policies: body.policies ?? 1,
       product: body.product || null,
-      client: body.client || null,
+      carrier,
+      client: null,
       note: body.note || null,
       sold_on: soldOn,
       logged_by: "shortcut",
     });
-    return NextResponse.json({ ok: true, sale: { id: sale.id, agent: sale.agent_name, premium_cents: sale.premium_cents, sold_on: sale.sold_on } });
+    return NextResponse.json({ ok: true, sale: { id: sale.id, agent: sale.agent_name, premium_cents: sale.premium_cents, carrier: sale.carrier, sold_on: sale.sold_on } });
   } catch (err) {
     console.error("sale_api_failed", err instanceof Error ? err.name : "error");
     return NextResponse.json({ ok: false, error: "The database didn't answer" }, { status: 503 });
@@ -83,8 +87,8 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   if (!tokenOk(request.headers.get("authorization"))) return NextResponse.json({ ok: false, error: "Not allowed" }, { status: 401 });
   try {
-    const agents = await listAgents();
-    return NextResponse.json({ ok: true, people: agents.map((a) => a.name) });
+    const [agents, settings] = await Promise.all([listAgents(), getSettings()]);
+    return NextResponse.json({ ok: true, people: agents.map((a) => a.name), carriers: settings.carriers });
   } catch {
     return NextResponse.json({ ok: false, error: "The database didn't answer" }, { status: 503 });
   }
