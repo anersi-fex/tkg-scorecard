@@ -95,8 +95,14 @@ export interface MonthClock {
   businessDays: number;
   /** Business days up to and including today (0 before the month starts, all of them after it ends). */
   elapsed: number;
-  /** Business days from today to the end of the month, today included (0 after the month ends). */
+  /**
+   * Business days left after today (owner, 2026-10-27: "only weekdays, working days": on a Tuesday
+   * that is Wednesday to Friday, 3). 0 on the last business day and after; elapsed + remaining is
+   * the month's business days.
+   */
   remaining: number;
+  /** True when today is a business day of this month (the last one when remaining is 0). */
+  todayBusiness: boolean;
   /** Calendar days from today to the end of the month, today included. */
   calendarRemaining: number;
   /** 0 to 1: how far through its business days the month is. */
@@ -111,7 +117,8 @@ export function monthClock(key: string, today: string): MonthClock {
   const last = dates[dates.length - 1];
   const position: MonthClock["position"] = today < first ? "future" : today > last ? "past" : "current";
   const elapsed = position === "future" ? 0 : position === "past" ? business.length : business.filter((d) => d <= today).length;
-  const remaining = position === "past" ? 0 : position === "future" ? business.length : business.filter((d) => d >= today).length;
+  const remaining = position === "past" ? 0 : position === "future" ? business.length : business.filter((d) => d > today).length;
+  const todayBusiness = position === "current" && isBusinessDay(today);
   const calendarRemaining = position === "past" ? 0 : position === "future" ? dates.length : dates.filter((d) => d >= today).length;
   return {
     key,
@@ -121,9 +128,16 @@ export function monthClock(key: string, today: string): MonthClock {
     businessDays: business.length,
     elapsed,
     remaining,
+    todayBusiness,
     calendarRemaining,
     progress: business.length ? elapsed / business.length : 0,
   };
+}
+
+/** "3 business days left" (the days after today), "Last business day", or none left (a weekend after it). */
+export function daysLeftLabel(clock: Pick<MonthClock, "remaining" | "todayBusiness">): string {
+  if (clock.remaining > 0) return `${clock.remaining} business ${clock.remaining === 1 ? "day" : "days"} left`;
+  return clock.todayBusiness ? "Last business day" : "No business days left";
 }
 
 export interface Pace {
@@ -133,7 +147,10 @@ export interface Pace {
   expectedCents: number;
   /** Production minus the expectation: positive is ahead, negative behind. */
   aheadCents: number;
-  /** What each remaining business day needs to average to reach the goal (0 when done or over). */
+  /**
+   * What each business day left after today needs to average to reach the goal; on the last
+   * business day (and after), all of what is left (0 when done or over).
+   */
   neededPerDayCents: number;
   /** "ahead" / "behind" / "on" (within 2% of the goal line) / "done" (goal reached) / "none" (no goal). */
   status: "ahead" | "behind" | "on" | "done" | "none";

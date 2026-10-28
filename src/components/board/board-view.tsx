@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { AgentLine, FeedSale, MonthSnapshot } from "@/lib/board";
 import type { BoardTheme } from "@/lib/types";
 import { formatDollars, formatMoney } from "@/lib/money";
-import { dayLabel } from "@/lib/month";
+import { dayLabel, daysLeftLabel } from "@/lib/month";
 import { TEAM_TIME_ZONE } from "@/lib/timezone";
 import { Avatar, firstName, shortName } from "@/components/avatar";
 import { ScoreMark, TkgMark } from "@/components/brand";
@@ -178,7 +178,7 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
         <div className="flex items-center gap-[0.8em]">
           {month.position === "current" && (
             <span className={cn("rounded-full px-[0.9em] py-[0.35em] text-[0.9em] font-bold", month.remaining <= 3 ? "bg-amber-100 text-amber-800" : "bg-tint text-accent-text")}>
-              {month.remaining} business {month.remaining === 1 ? "day" : "days"} left
+              {daysLeftLabel(month)}
             </span>
           )}
           <p className="min-w-[4.6em] text-right font-mono text-[1.75em] leading-none font-bold tracking-[-0.02em]">{clock}</p>
@@ -315,6 +315,9 @@ function GoalCard({ snap }: { snap: MonthSnapshot }) {
   } else if (pace.status === "none") {
     line = `On pace for ${formatDollars(pace.projectedCents)}`;
     tone = "text-gray-600";
+  } else if (clock.remaining === 0 && clock.todayBusiness) {
+    line = `${formatDollars(team.goalCents - team.productionCents)} to go · last business day`;
+    tone = pace.status === "ahead" ? "text-up" : pace.status === "on" ? "text-accent-text" : "text-down";
   } else if (clock.remaining === 0) {
     line = `${formatDollars(team.goalCents - team.productionCents)} short · no business days left`;
     tone = "text-down";
@@ -370,11 +373,12 @@ function GoalCard({ snap }: { snap: MonthSnapshot }) {
   );
 }
 
-/** The third tile: what each remaining day needs, or how the goal stands when there are no days left. */
+/** The third tile: what each day left needs, or what today needs on the last business day. */
 function NeededTile({ snap }: { snap: MonthSnapshot }) {
   const { team, clock } = snap;
   if (team.goalCents <= 0) return <Tile label="On pace for" value={formatDollars(team.pace.projectedCents)} sub="set a goal in Settings" />;
   if (team.pace.status === "done") return <Tile label="Over the goal" value={formatDollars(team.productionCents - team.goalCents)} sub="keep going" />;
+  if (clock.remaining === 0 && clock.todayBusiness) return <Tile label="Needed today" value={formatDollars(team.goalCents - team.productionCents)} sub="last business day" />;
   if (clock.remaining === 0) return <Tile label="Short by" value={formatDollars(team.goalCents - team.productionCents)} sub="no business days left" />;
   return <Tile label="Needed a day" value={formatDollars(team.pace.neededPerDayCents)} sub={`to hit ${formatDollars(team.goalCents)}`} />;
 }

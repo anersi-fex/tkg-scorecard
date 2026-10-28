@@ -8,7 +8,7 @@
 ## Live state (2026-10-27, about 11 AM Detroit)
 - Merged by the owner: PR #1 (release 1), PR #2 (Crimson colorway + mockup tooling), PR #3 (carriers). Vercel deploys `main`; Supabase has `0001` and `0002` applied (the owner pasted both). The October 1 to 26 import (`imports/build.py` -> `imports/2026-10-sales.sql`, gitignored; read off the owner's dialer leaderboard screenshots, one row per person per day: 68 rows, $161,253, 118 policies; the owner's own $60,495 equals the dialer's month-to-date figure) was pasted by the owner and shows on the Team page. The seven people on the board: Anersi Koka, Alex Alekseyev, Moe Karim, Tina Kehrig, Matt Fouchey, Maira Angulo, Samantha Marty. Next on the owner's side: the Mac mini on `/board`, the team's phones.
 - Kept for later from the screenshots (in `imports/build.py`): appointments and calls made per person per day; no table for them yet.
-- Open question for the owner: the team sells on Saturdays (Oct 3, 10, 17 had sales); pace counts Monday to Friday.
+- Settled (owner, 2026-10-27, from a Home screenshot reading "4 business days left" on a Tuesday): "days left" counts only the weekdays after today (a Tuesday shows 3), the last business day reads "Last business day" with "Needed today", and a weekend after it "No business days left". Saturday sales still count toward the month; pace stays Monday to Friday.
 
 ## Carriers (2026-10-27, owner: "instead of the client's name ... which carrier")
 - Log a sale asks for the carrier (chips, required: AHL, AmAm, Americo, Foresters, Newbridge, Royal, UHL; editable in Settings > Carriers) and no longer asks for a client's name. `sales.carrier` comes from `0002_carrier.sql`, which the owner pastes before merging. The TV feed, the celebration, Home's sales rows, the Fix sheet and the Shortcut endpoint (`carrier` required, matched to the list in any case) all carry it. The `client` column stays, unused.
@@ -19,7 +19,7 @@
 ## Decisions made for the owner (say so in the first reply; easy to change)
 - Two passwords (owner, team) instead of per-person accounts: the TV and seven phones sign in once; the team can log sales and take back their own within 15 minutes; the owner fixes or removes anything.
 - The TV look (owner, 2026-10-27: "change the TV broadcast to light mode ... on my admin side ... reflect on the TV screen upon saving"): Settings > TV look, Light or Dark, saved on tap; the TV follows it on its next poll (within 5 s) and opens in it before the first paint (`<html data-board-theme>` from `loadLook()`, read by `theme-script.ts`). Settings is the only control: the T key and the `?theme=` address pin of release 1 are gone (a review found a T-flipped TV could not be brought back from the phone). The phone app follows the phone's own setting, never the TV look.
-- Pace counts business days Mon to Fri, today included in both elapsed and remaining.
+- Pace counts business days Mon to Fri: `elapsed` includes today, `remaining` is the days after today (they add up to the month's business days), and "needed a day" is spread over the days after today, so today's sales lower it as they land.
 - Leaderboard order: annual premium, then policies, then name. Rank 1 gets the crown and the gradient bar; a person's bar is against their own goal when set, else against the leader.
 - "Policies" per sale defaults to 1; a bundle can be logged as one sale with N policies.
 - A client's first name is optional and shows on the board ("Alex · Maria · Term"). Nothing else about the client is stored.
