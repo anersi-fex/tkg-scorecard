@@ -2,6 +2,8 @@
 
 **Owner:** Anersi Koka (The Koka Group, Troy MI). Licensed MI P&C and life producer at Goosehead; runs a life-insurance phone sales team of seven. Not a developer: one step at a time, verdict first, visual when possible, receipts before "done". Short replies.
 
+**How to work with the owner (owner, 2026-10-28):** the owner only answers yes or no. The session does the GitHub work itself, merging included (`merge_pull_request` after marking the PR ready; the owner never opens GitHub or Vercel for a merge). Before anything that changes the live site, say in plain words what is about to happen, show a picture (a screenshot or a rendered card, sent as a file: the owner reads on a phone), and ask for a yes, a no or a change. Keep words few; the picture carries the explanation. Only what nobody else can do stays with the owner (passwords, Vercel settings, a Supabase SQL paste), each as one picture with the exact taps and the text to copy in a code block.
+
 ## What this is
 A sibling of Sales Coach (`anersi-fex/tkg-sales-coach`) with the same Tide look: a TV board for the office (a Mac mini on HDMI) showing the team's month, and a small phone app to feed it. Release 1 (2026-10-27, built overnight for a 7 AM deadline): the board (`/board`), This month (`/`, earlier months with `?month=`), Log a sale (`/log`, `?agent=<id>` preselects a person for a desk NFC tag), Team (`/team`), Settings (`/settings`, owner only), a Shortcut endpoint (`POST /api/sales` with `LOG_TOKEN`). Later, as the owner asked: deeper data from Sales Coach and the CRM (which leads, states, numbers, dial time), then everything folds into one CRM.
 
