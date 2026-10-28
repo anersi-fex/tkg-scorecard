@@ -51,7 +51,7 @@ Vercel builds the `main` branch, and right now `main` holds only a one-line READ
 ### Step 8. The TV (Mac mini)
 1. On the Mac mini, open Safari or Chrome and go to the address + `/board` (for example `https://tkg-scorecard-xxxx.vercel.app/board`).
 2. Sign in with the **team** password. The board opens dark. It stays signed in for 180 days.
-3. Press **F** for full screen. Light or dark, and the colorway, are set on your phone under Settings (TV look, Colorway); the TV follows within 5 seconds.
+3. Full screen: press **Control+Command+F** (the Mac's own full screen, which stays on when the page reloads itself after an update; the page's **F** key also works, but drops after a reload). Light or dark, and the colorway, are set on your phone under Settings (TV look, Colorway); the TV follows within 5 seconds.
 4. System Settings > **Lock Screen**: set "Turn display off" to **Never** while the board is up. The page also asks the Mac to keep the screen awake.
 5. Plug the HDMI transmitter into the Mac mini, the receiver into the TV. The board refreshes itself every 5 seconds; a new sale gets confetti.
 

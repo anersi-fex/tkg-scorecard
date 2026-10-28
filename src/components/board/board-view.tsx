@@ -18,8 +18,9 @@ import { burst } from "./confetti";
  * capped for 4K), so a 1080p TV, a 4K TV and a laptop all show the same layout. Polls /api/board
  * every few seconds; a sale that was not there before gets a celebration with confetti.
  * Dark or light is the owner's TV look (Settings), applied before paint and again from every poll,
- * so the TV follows a change within 5 s; nothing on the TV itself changes it. Key: F full screen.
- * The cursor hides after a few seconds still.
+ * so the TV follows a change within 5 s; nothing on the TV itself changes it. When a poll comes
+ * from a newer deploy the page reloads itself once, so the TV never runs last week's code. Key: F
+ * full screen. The cursor hides after a few seconds still.
  */
 const POLL_MS = 5000;
 const CELEBRATE_MS = 9000;
@@ -90,6 +91,7 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
   // Sales waiting for their moment, and the timer of the one on screen.
   const queue = useRef<FeedSale[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reloading = useRef(false);
   const clock = useClock();
   useWakeLock();
   useIdleCursor();
@@ -139,6 +141,12 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
       }
       if (!res.ok) throw new Error(String(res.status));
       const next = (await res.json()) as MonthSnapshot;
+      // A new deploy is live: the TV was opened once and left, so it reloads itself (once) to run it.
+      if (next.build && initial.build && next.build !== initial.build && !reloading.current) {
+        reloading.current = true;
+        window.location.reload();
+        return;
+      }
       setOffline(0);
       // New sales, oldest first, each gets its moment.
       const fresh = next.recent.filter((r) => !known.current.has(r.id)).reverse();
@@ -151,7 +159,7 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
     } catch {
       setOffline((n) => n + 1);
     }
-  }, [router, showNext]);
+  }, [router, showNext, initial.build]);
 
   useEffect(() => {
     const id = setInterval(refresh, POLL_MS);
@@ -177,7 +185,7 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
         </div>
         <div className="flex items-center gap-[0.8em]">
           {month.position === "current" && (
-            <span className={cn("rounded-full px-[0.9em] py-[0.35em] text-[0.9em] font-bold", month.remaining <= 3 ? "bg-amber-100 text-amber-800" : "bg-tint text-accent-text")}>
+            <span className={cn("rounded-full px-[0.9em] py-[0.35em] text-[0.9em] font-bold", month.remaining <= 2 ? "bg-amber-100 text-amber-800" : "bg-tint text-accent-text")}>
               {daysLeftLabel(month)}
             </span>
           )}
@@ -319,7 +327,7 @@ function GoalCard({ snap }: { snap: MonthSnapshot }) {
     line = `${formatDollars(team.goalCents - team.productionCents)} to go · last business day`;
     tone = pace.status === "ahead" ? "text-up" : pace.status === "on" ? "text-accent-text" : "text-down";
   } else if (clock.remaining === 0) {
-    line = `${formatDollars(team.goalCents - team.productionCents)} short · no business days left`;
+    line = `${formatDollars(team.goalCents - team.productionCents)} to go · no business days left`;
     tone = "text-down";
   } else if (pace.status === "ahead") {
     line = `Ahead by ${formatDollars(pace.aheadCents)} · on pace for ${formatDollars(pace.projectedCents)}`;
@@ -379,7 +387,7 @@ function NeededTile({ snap }: { snap: MonthSnapshot }) {
   if (team.goalCents <= 0) return <Tile label="On pace for" value={formatDollars(team.pace.projectedCents)} sub="set a goal in Settings" />;
   if (team.pace.status === "done") return <Tile label="Over the goal" value={formatDollars(team.productionCents - team.goalCents)} sub="keep going" />;
   if (clock.remaining === 0 && clock.todayBusiness) return <Tile label="Needed today" value={formatDollars(team.goalCents - team.productionCents)} sub="last business day" />;
-  if (clock.remaining === 0) return <Tile label="Short by" value={formatDollars(team.goalCents - team.productionCents)} sub="no business days left" />;
+  if (clock.remaining === 0) return <Tile label="To go" value={formatDollars(team.goalCents - team.productionCents)} sub="no business days left" />;
   return <Tile label="Needed a day" value={formatDollars(team.pace.neededPerDayCents)} sub={`to hit ${formatDollars(team.goalCents)}`} />;
 }
 

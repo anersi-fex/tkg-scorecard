@@ -26,7 +26,7 @@ function paceLine(s: MonthSnapshot): { text: string; tone: "green" | "amber" | "
   if (pace.status === "done") return { text: `Goal hit, ${formatDollars(s.team.productionCents - s.team.goalCents)} over. Keep going.`, tone: "green" };
   if (clock.elapsed === 0) return { text: clock.position === "future" ? "The month hasn't started." : "The month starts Monday.", tone: "gray" };
   if (pace.status === "none") return { text: `On pace for ${formatDollars(pace.projectedCents)} this month. Set a goal in Settings.`, tone: "gray" };
-  if (clock.remaining === 0 && !clock.todayBusiness) return { text: `${formatDollars(s.team.goalCents - s.team.productionCents)} short of the goal. No business days left this month.`, tone: "amber" };
+  if (clock.remaining === 0 && !clock.todayBusiness) return { text: `${formatDollars(s.team.goalCents - s.team.productionCents)} to go. No business days left this month.`, tone: "amber" };
   const per =
     clock.remaining === 0
       ? `Last business day: ${formatDollars(s.team.goalCents - s.team.productionCents)} today gets there.`
@@ -63,7 +63,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
 
   return (
     <>
-      <PageHeader month={month} current={current} daysLeft={s.clock.position === "current" ? { text: daysLeftLabel(s.clock), amber: s.clock.remaining <= 3 } : null} />
+      <PageHeader month={month} current={current} daysLeft={s.clock.position === "current" ? { text: daysLeftLabel(s.clock), amber: s.clock.remaining <= 2 } : null} />
 
       {/* The goal */}
       <Card className="relative overflow-hidden p-5">

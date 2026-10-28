@@ -55,6 +55,8 @@ export interface DayPoint {
 
 export interface MonthSnapshot {
   generatedAt: string;
+  /** The deploy that answered (Vercel's commit id; "local" elsewhere): the TV reloads once it changes. */
+  build: string;
   clock: MonthClock;
   team: {
     productionCents: number;
@@ -192,6 +194,7 @@ export function buildSnapshot(input: {
 
   return {
     generatedAt: input.generatedAt ?? new Date().toISOString(),
+    build: process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_DEPLOYMENT_ID || "local",
     clock,
     team: {
       productionCents,
