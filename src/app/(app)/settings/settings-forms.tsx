@@ -4,10 +4,10 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { COLORWAYS, COLORWAY_KEYS, type ColorwayKey } from "@/lib/colorways";
 import { cn } from "@/components/ui";
-import type { AppSettings } from "@/lib/types";
+import { BOARD_THEMES, type AppSettings, type BoardTheme } from "@/lib/types";
 import { Button, Input, Label, Notice, Textarea } from "@/components/ui";
 import { ListCard, ListTitle } from "@/components/tide";
-import { saveBoardSettings, saveColorway, saveTeamGoal } from "../actions";
+import { saveBoardSettings, saveBoardTheme, saveColorway, saveTeamGoal } from "../actions";
 import { toast } from "@/components/toaster";
 
 interface MonthGoal {
@@ -51,6 +51,12 @@ export function SettingsForms({
         <ListTitle>Colorway</ListTitle>
         <p className="mt-1 px-1 text-[13px] text-gray-500">The color story on every phone and the TV. Crimson is the default; the app icon stays Crimson.</p>
         <ColorwayPicker current={settings.colorway} />
+      </section>
+
+      <section>
+        <ListTitle>TV look</ListTitle>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">Light or dark on the office TV. The TV follows this within a few seconds.</p>
+        <BoardThemePicker current={settings.boardTheme} />
       </section>
 
       <section>
@@ -127,9 +133,15 @@ function ColorwayPicker({ current }: { current: ColorwayKey }) {
               // This screen changes at once; every other screen on the next load; the TV on its next poll.
               document.documentElement.setAttribute("data-colorway", key);
               start(async () => {
-                const r = await saveColorway(key);
-                toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-                if (r.ok) router.refresh();
+                let ok = false;
+                try {
+                  const r = await saveColorway(key);
+                  toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+                  ok = r.ok;
+                } catch {
+                  toast("Couldn't reach the server. Try again.", false);
+                }
+                if (ok) router.refresh();
                 else {
                   setPicked(current);
                   document.documentElement.setAttribute("data-colorway", current);
@@ -143,6 +155,77 @@ function ColorwayPicker({ current }: { current: ColorwayKey }) {
               <span className={cn("block text-[15px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{c.name}</span>
               <span className="block truncate text-[12px] font-medium text-gray-500">{c.idea}</span>
             </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const BOARD_THEME_OPTIONS: Record<BoardTheme, { label: string; icon: React.ReactNode }> = {
+  dark: {
+    label: "Dark",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
+      </svg>
+    ),
+  },
+  light: {
+    label: "Light",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+        <circle cx="12" cy="12" r="4" />
+        <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+      </svg>
+    ),
+  },
+};
+
+/** Light / Dark for the TV, saved on tap (like the colorway); the TV picks it up on its next poll. */
+function BoardThemePicker({ current }: { current: BoardTheme }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [picked, setPicked] = useState<BoardTheme>(current);
+  // Follow the saved value when the page refreshes (a change made on another phone shows here).
+  const [seen, setSeen] = useState(current);
+  if (seen !== current) {
+    setSeen(current);
+    setPicked(current);
+  }
+  return (
+    <div role="radiogroup" aria-label="TV look" className="mt-2 grid grid-cols-2 gap-1 rounded-2xl bg-track p-1">
+      {BOARD_THEMES.map((key) => {
+        const o = BOARD_THEME_OPTIONS[key];
+        const on = picked === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            disabled={pending}
+            onClick={() => {
+              setPicked(key);
+              start(async () => {
+                try {
+                  const r = await saveBoardTheme(key);
+                  toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+                  if (r.ok) router.refresh();
+                  else setPicked(current);
+                } catch {
+                  toast("Couldn't reach the server. Try again.", false);
+                  setPicked(current);
+                }
+              });
+            }}
+            className={cn(
+              "flex min-h-12 items-center justify-center gap-2 rounded-xl text-[15px] font-bold transition",
+              on ? "bg-segment text-gray-900 shadow-card" : "text-gray-600 hover:text-gray-900",
+            )}
+          >
+            {o.icon}
+            {o.label}
           </button>
         );
       })}

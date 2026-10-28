@@ -4,7 +4,7 @@ import { requirePage } from "@/lib/auth";
 import { dbConfigured } from "@/lib/supabase";
 import { loadMonthSnapshot, type MonthSnapshot } from "@/lib/board";
 import { getSettings } from "@/lib/data";
-import { addMonths, dayLabel, isMonthKey, monthKeyOf, monthLabel, todayInDetroit } from "@/lib/month";
+import { addMonths, dayLabel, daysLeftLabel, isMonthKey, monthKeyOf, monthLabel, todayInDetroit } from "@/lib/month";
 import { formatDollars, formatMoney } from "@/lib/money";
 import { Avatar } from "@/components/avatar";
 import { MonthChart } from "@/components/month-chart";
@@ -26,8 +26,11 @@ function paceLine(s: MonthSnapshot): { text: string; tone: "green" | "amber" | "
   if (pace.status === "done") return { text: `Goal hit, ${formatDollars(s.team.productionCents - s.team.goalCents)} over. Keep going.`, tone: "green" };
   if (clock.elapsed === 0) return { text: clock.position === "future" ? "The month hasn't started." : "The month starts Monday.", tone: "gray" };
   if (pace.status === "none") return { text: `On pace for ${formatDollars(pace.projectedCents)} this month. Set a goal in Settings.`, tone: "gray" };
-  if (clock.remaining === 0) return { text: `${formatDollars(s.team.goalCents - s.team.productionCents)} short of the goal. No business days left this month.`, tone: "amber" };
-  const per = `${formatDollars(pace.neededPerDayCents)} a day for ${clock.remaining} ${clock.remaining === 1 ? "day" : "days"} gets there.`;
+  if (clock.remaining === 0 && !clock.todayBusiness) return { text: `${formatDollars(s.team.goalCents - s.team.productionCents)} to go. No business days left this month.`, tone: "amber" };
+  const per =
+    clock.remaining === 0
+      ? `Last business day: ${formatDollars(s.team.goalCents - s.team.productionCents)} today gets there.`
+      : `${formatDollars(pace.neededPerDayCents)} a day for ${clock.remaining} ${clock.remaining === 1 ? "day" : "days"} gets there.`;
   if (pace.status === "ahead") return { text: `Ahead by ${formatDollars(pace.aheadCents)}. On pace for ${formatDollars(pace.projectedCents)}. ${per}`, tone: "green" };
   if (pace.status === "on") return { text: `Right on the goal line. On pace for ${formatDollars(pace.projectedCents)}. ${per}`, tone: "blue" };
   return { text: `Behind by ${formatDollars(-pace.aheadCents)}. On pace for ${formatDollars(pace.projectedCents)}. ${per}`, tone: "amber" };
@@ -60,7 +63,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
 
   return (
     <>
-      <PageHeader month={month} current={current} daysLeft={s.clock.position === "current" ? s.clock.remaining : null} />
+      <PageHeader month={month} current={current} daysLeft={s.clock.position === "current" ? { text: daysLeftLabel(s.clock), amber: s.clock.remaining <= 2 } : null} />
 
       {/* The goal */}
       <Card className="relative overflow-hidden p-5">
@@ -189,7 +192,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
-function PageHeader({ month, current, daysLeft }: { month: string; current: string; daysLeft?: number | null }) {
+function PageHeader({ month, current, daysLeft }: { month: string; current: string; daysLeft?: { text: string; amber: boolean } | null }) {
   const prev = addMonths(month, -1);
   const next = addMonths(month, 1);
   const isCurrent = month === current;
@@ -199,11 +202,7 @@ function PageHeader({ month, current, daysLeft }: { month: string; current: stri
         <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.035em] text-gray-900">{isCurrent ? "This month" : monthLabel(month)}</h1>
         <p className="mt-0.5 flex items-center gap-2 text-[14px] font-medium text-gray-500">
           {isCurrent ? monthLabel(month) : month < current ? "Finished" : "Coming up"}
-          {daysLeft != null && (
-            <Badge tone={daysLeft <= 3 ? "amber" : "blue"}>
-              {daysLeft} business {daysLeft === 1 ? "day" : "days"} left
-            </Badge>
-          )}
+          {daysLeft != null && <Badge tone={daysLeft.amber ? "amber" : "blue"}>{daysLeft.text}</Badge>}
         </p>
       </div>
       <nav aria-label="Month" className="flex shrink-0 items-center gap-1">

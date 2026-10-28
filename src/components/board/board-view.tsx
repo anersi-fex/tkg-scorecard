@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AgentLine, FeedSale, MonthSnapshot } from "@/lib/board";
+import type { BoardTheme } from "@/lib/types";
 import { formatDollars, formatMoney } from "@/lib/money";
-import { dayLabel } from "@/lib/month";
+import { dayLabel, daysLeftLabel } from "@/lib/month";
 import { TEAM_TIME_ZONE } from "@/lib/timezone";
 import { Avatar, firstName, shortName } from "@/components/avatar";
 import { ScoreMark, TkgMark } from "@/components/brand";
@@ -16,7 +17,10 @@ import { burst } from "./confetti";
  * The TV board. One screen, no scrolling, sized from the viewport (1em = about 1% of the width,
  * capped for 4K), so a 1080p TV, a 4K TV and a laptop all show the same layout. Polls /api/board
  * every few seconds; a sale that was not there before gets a celebration with confetti.
- * Keys: F full screen, T light/dark. The cursor hides after a few seconds still.
+ * Dark or light is the owner's TV look (Settings), applied before paint and again from every poll,
+ * so the TV follows a change within 5 s; nothing on the TV itself changes it. When a poll comes
+ * from a newer deploy the page reloads itself once, so the TV never runs last week's code. Key: F
+ * full screen. The cursor hides after a few seconds still.
  */
 const POLL_MS = 5000;
 const CELEBRATE_MS = 9000;
@@ -73,19 +77,12 @@ function useIdleCursor() {
   }, []);
 }
 
-function applyTheme(choice: "light" | "dark" | null) {
-  const root = document.documentElement;
-  if (!choice) root.removeAttribute("data-theme");
-  else root.setAttribute("data-theme", choice);
-  try {
-    if (!choice) localStorage.removeItem("theme");
-    else localStorage.setItem("theme", choice);
-  } catch {
-    /* private mode */
-  }
+/** The TV's look lives on <html> only, never in this browser's storage: Settings is the source. */
+function applyTheme(choice: BoardTheme) {
+  document.documentElement.setAttribute("data-theme", choice);
 }
 
-export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: "light" | "dark" | null }) {
+export function BoardView({ initial }: { initial: MonthSnapshot }) {
   const router = useRouter();
   const [snap, setSnap] = useState(initial);
   const [offline, setOffline] = useState(0);
@@ -94,38 +91,28 @@ export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: "
   // Sales waiting for their moment, and the timer of the one on screen.
   const queue = useRef<FeedSale[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reloading = useRef(false);
   const clock = useClock();
   useWakeLock();
   useIdleCursor();
 
-  // The board is dark unless the address or this browser's saved choice says light.
+  // The owner's TV look from the latest poll (a change in Settings reaches the TV within 5 s).
+  // THEME_SCRIPT already applied it before the first paint.
   useEffect(() => {
-    if (theme) applyTheme(theme);
-    else {
-      let saved: string | null = null;
-      try {
-        saved = localStorage.getItem("theme");
-      } catch {
-        saved = null;
-      }
-      if (saved !== "light" && saved !== "dark") document.documentElement.setAttribute("data-theme", "dark");
-    }
-  }, [theme]);
+    applyTheme(snap.boardTheme);
+  }, [snap.boardTheme]);
 
   // The owner's colorway from the latest poll (a change in Settings reaches the TV within 5 s).
   useEffect(() => {
     document.documentElement.setAttribute("data-colorway", snap.colorway);
   }, [snap.colorway]);
 
-  // Keys: F full screen, T flips light and dark.
+  // Key: F full screen.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "f" || e.key === "F") {
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
         else document.documentElement.requestFullscreen?.().catch(() => {});
-      }
-      if (e.key === "t" || e.key === "T") {
-        applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
       }
     };
     window.addEventListener("keydown", onKey);
@@ -154,6 +141,12 @@ export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: "
       }
       if (!res.ok) throw new Error(String(res.status));
       const next = (await res.json()) as MonthSnapshot;
+      // A new deploy is live: the TV was opened once and left, so it reloads itself (once) to run it.
+      if (next.build && initial.build && next.build !== initial.build && !reloading.current) {
+        reloading.current = true;
+        window.location.reload();
+        return;
+      }
       setOffline(0);
       // New sales, oldest first, each gets its moment.
       const fresh = next.recent.filter((r) => !known.current.has(r.id)).reverse();
@@ -166,7 +159,7 @@ export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: "
     } catch {
       setOffline((n) => n + 1);
     }
-  }, [router, showNext]);
+  }, [router, showNext, initial.build]);
 
   useEffect(() => {
     const id = setInterval(refresh, POLL_MS);
@@ -192,8 +185,8 @@ export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: "
         </div>
         <div className="flex items-center gap-[0.8em]">
           {month.position === "current" && (
-            <span className={cn("rounded-full px-[0.9em] py-[0.35em] text-[0.9em] font-bold", month.remaining <= 3 ? "bg-amber-100 text-amber-800" : "bg-tint text-accent-text")}>
-              {month.remaining} business {month.remaining === 1 ? "day" : "days"} left
+            <span className={cn("rounded-full px-[0.9em] py-[0.35em] text-[0.9em] font-bold", month.remaining <= 2 ? "bg-amber-100 text-amber-800" : "bg-tint text-accent-text")}>
+              {daysLeftLabel(month)}
             </span>
           )}
           <p className="min-w-[4.6em] text-right font-mono text-[1.75em] leading-none font-bold tracking-[-0.02em]">{clock}</p>
@@ -248,7 +241,7 @@ export function BoardView({ initial, theme }: { initial: MonthSnapshot; theme: "
         <p className="min-w-0 truncate text-[1.1em] font-bold text-gray-700">{snap.message || " "}</p>
         <p className="shrink-0">
           {offline >= 3 ? <span className="text-amber-800">Reconnecting…</span> : <>Updated {formatClock(snap.generatedAt)}</>}
-          <span className="ml-[1em] text-gray-500">F full screen · T light/dark</span>
+          <span className="ml-[1em] text-gray-500">F full screen</span>
         </p>
       </footer>
 
@@ -330,8 +323,11 @@ function GoalCard({ snap }: { snap: MonthSnapshot }) {
   } else if (pace.status === "none") {
     line = `On pace for ${formatDollars(pace.projectedCents)}`;
     tone = "text-gray-600";
+  } else if (clock.remaining === 0 && clock.todayBusiness) {
+    line = `${formatDollars(team.goalCents - team.productionCents)} to go · last business day`;
+    tone = pace.status === "ahead" ? "text-up" : pace.status === "on" ? "text-accent-text" : "text-down";
   } else if (clock.remaining === 0) {
-    line = `${formatDollars(team.goalCents - team.productionCents)} short · no business days left`;
+    line = `${formatDollars(team.goalCents - team.productionCents)} to go · no business days left`;
     tone = "text-down";
   } else if (pace.status === "ahead") {
     line = `Ahead by ${formatDollars(pace.aheadCents)} · on pace for ${formatDollars(pace.projectedCents)}`;
@@ -385,12 +381,13 @@ function GoalCard({ snap }: { snap: MonthSnapshot }) {
   );
 }
 
-/** The third tile: what each remaining day needs, or how the goal stands when there are no days left. */
+/** The third tile: what each day left needs, or what today needs on the last business day. */
 function NeededTile({ snap }: { snap: MonthSnapshot }) {
   const { team, clock } = snap;
   if (team.goalCents <= 0) return <Tile label="On pace for" value={formatDollars(team.pace.projectedCents)} sub="set a goal in Settings" />;
   if (team.pace.status === "done") return <Tile label="Over the goal" value={formatDollars(team.productionCents - team.goalCents)} sub="keep going" />;
-  if (clock.remaining === 0) return <Tile label="Short by" value={formatDollars(team.goalCents - team.productionCents)} sub="no business days left" />;
+  if (clock.remaining === 0 && clock.todayBusiness) return <Tile label="Needed today" value={formatDollars(team.goalCents - team.productionCents)} sub="last business day" />;
+  if (clock.remaining === 0) return <Tile label="To go" value={formatDollars(team.goalCents - team.productionCents)} sub="no business days left" />;
   return <Tile label="Needed a day" value={formatDollars(team.pace.neededPerDayCents)} sub={`to hit ${formatDollars(team.goalCents)}`} />;
 }
 

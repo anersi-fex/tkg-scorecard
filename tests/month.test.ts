@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addDays, addMonths, datesOfMonth, isBusinessDay, isDateKey, isMonthKey, monthClock, monthLabel, pace, todayInDetroit } from "../src/lib/month";
+import { addDays, addMonths, datesOfMonth, daysLeftLabel, isBusinessDay, isDateKey, isMonthKey, monthClock, monthLabel, pace, todayInDetroit } from "../src/lib/month";
 import { formatCompact, formatDollars, formatMoney, parseDollars, percentOf } from "../src/lib/money";
 
 test("today in Detroit rolls over at midnight Eastern, not UTC", () => {
@@ -30,24 +30,46 @@ test("business days", () => {
   const c = monthClock("2026-10", "2026-10-27");
   assert.equal(c.businessDays, 22);
   assert.equal(c.elapsed, 19); // Oct 1 to Oct 27, weekdays, today included
-  assert.equal(c.remaining, 4); // Oct 27, 28, 29, 30
+  assert.equal(c.remaining, 3); // the days after today: Oct 28, 29, 30 (never Saturday the 31st)
+  assert.ok(c.todayBusiness);
+  assert.equal(daysLeftLabel(c), "3 business days left");
   assert.equal(c.calendarRemaining, 5);
   assert.equal(c.position, "current");
+  // Every day of the month: elapsed and remaining add up to the month's business days.
+  for (const d of datesOfMonth("2026-10")) {
+    const k = monthClock("2026-10", d);
+    assert.equal(k.elapsed + k.remaining, 22, d);
+  }
+  const thu = monthClock("2026-10", "2026-10-29");
+  assert.equal(thu.remaining, 1);
+  assert.equal(daysLeftLabel(thu), "1 business day left");
+  const fri = monthClock("2026-10", "2026-10-30"); // the last business day
+  assert.equal(fri.remaining, 0);
+  assert.ok(fri.todayBusiness);
+  assert.equal(daysLeftLabel(fri), "Last business day");
 });
 
 test("the clock on a weekend and outside the month", () => {
   const sat = monthClock("2026-10", "2026-10-31");
   assert.equal(sat.elapsed, 22);
   assert.equal(sat.remaining, 0);
+  assert.ok(!sat.todayBusiness);
+  assert.equal(daysLeftLabel(sat), "No business days left");
   assert.equal(sat.calendarRemaining, 1);
+  const sun = monthClock("2026-11", "2026-11-01"); // a month that starts on a weekend
+  assert.equal(sun.elapsed, 0);
+  assert.equal(sun.remaining, 21);
+  assert.ok(!sun.todayBusiness);
   const past = monthClock("2026-09", "2026-10-27");
   assert.equal(past.position, "past");
   assert.equal(past.elapsed, past.businessDays);
   assert.equal(past.remaining, 0);
+  assert.ok(!past.todayBusiness);
   const future = monthClock("2026-11", "2026-10-27");
   assert.equal(future.position, "future");
   assert.equal(future.elapsed, 0);
   assert.equal(future.remaining, future.businessDays);
+  assert.ok(!future.todayBusiness);
 });
 
 test("pace", () => {
@@ -56,7 +78,10 @@ test("pace", () => {
   assert.equal(p.projectedCents, Math.round((100_000_00 / 19) * 22));
   assert.equal(p.expectedCents, Math.round(150_000_00 * (19 / 22)));
   assert.equal(p.status, "behind");
-  assert.equal(p.neededPerDayCents, Math.ceil(50_000_00 / 4));
+  assert.equal(p.neededPerDayCents, Math.ceil(50_000_00 / 3)); // over Wednesday to Friday
+  // The last business day needs all of what is left today; so does a weekend after it.
+  assert.equal(pace(100_000_00, 150_000_00, monthClock("2026-10", "2026-10-30")).neededPerDayCents, 50_000_00);
+  assert.equal(pace(100_000_00, 150_000_00, monthClock("2026-10", "2026-10-31")).neededPerDayCents, 50_000_00);
   assert.equal(pace(160_000_00, 150_000_00, c).status, "done");
   assert.equal(pace(0, 0, c).status, "none");
   const start = monthClock("2026-11", "2026-10-27");

@@ -10,10 +10,8 @@ export const metadata: Metadata = { title: "TV board" };
 export const dynamic = "force-dynamic";
 
 /** The TV: full screen, no menus, refreshes itself. Opened once on the Mac mini and left there. */
-export default async function BoardPage({ searchParams }: PageProps<"/board">) {
+export default async function BoardPage() {
   await requirePage();
-  const params = await searchParams;
-  const theme = params.theme === "light" ? "light" : params.theme === "dark" ? "dark" : null;
   let initial: MonthSnapshot | null = null;
   let problem: string | null = null;
   if (!dbConfigured()) problem = "The database isn't connected yet. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel (SETUP.md, step 5).";
@@ -33,5 +31,5 @@ export default async function BoardPage({ searchParams }: PageProps<"/board">) {
       </main>
     );
   }
-  return <BoardView initial={initial} theme={theme} />;
+  return <BoardView initial={initial} />;
 }

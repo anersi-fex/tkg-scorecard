@@ -6,7 +6,7 @@ import { requireRole } from "@/lib/auth";
 import { addAgent, deleteSale, getSale, insertSale, listAgents, saveSettings, setAgentGoal, setTeamGoal, updateAgent, updateSale, getSettings } from "@/lib/data";
 import { isDateKey, isMonthKey, todayInDetroit, addDays } from "@/lib/month";
 import { parseDollars } from "@/lib/money";
-import { DEFAULT_CARRIERS, DEFAULT_PRODUCTS } from "@/lib/types";
+import { DEFAULT_CARRIERS, DEFAULT_PRODUCTS, isBoardTheme } from "@/lib/types";
 import { isColorwayKey } from "@/lib/colorways";
 
 export type ActionResult = { ok: true; message?: string; id?: string } | { ok: false; error: string };
@@ -222,6 +222,20 @@ export async function saveColorway(key: string): Promise<ActionResult> {
     if (!isColorwayKey(key)) return { ok: false, error: "That colorway isn't one of the choices." };
     const current = await getSettings();
     await saveSettings({ ...current, colorway: key });
+    refresh();
+    return { ok: true, message: "Saved. The TV changes within a few seconds." };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}
+
+/** Settings > TV look: dark or light on the TV, which follows it on its next poll. */
+export async function saveBoardTheme(theme: string): Promise<ActionResult> {
+  try {
+    await requireRole("owner");
+    if (!isBoardTheme(theme)) return { ok: false, error: "The TV look is Dark or Light." };
+    const current = await getSettings();
+    await saveSettings({ ...current, boardTheme: theme });
     refresh();
     return { ok: true, message: "Saved. The TV changes within a few seconds." };
   } catch (err) {

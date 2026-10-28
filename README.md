@@ -2,7 +2,7 @@
 
 The team's month, live on the office TV: the leaderboard, team production against the goal, pace, today's sales, and confetti when a sale lands. A sibling of Sales Coach (same Tide look), for The Koka Group.
 
-- `/board`: the TV (full screen, refreshes itself, dark by default; F full screen, T light/dark)
+- `/board`: the TV (full screen, refreshes itself, light or dark as set under Settings > TV look; F full screen)
 - `/`: this month on a phone or computer, with earlier months
 - `/log`: log a sale in four taps (who, how much, which carrier, Log it)
 - `/team`, `/settings`: the people, their goals, the team goal, the board message, the colorway (Crimson by default; Sky, Champion, Emerald)
