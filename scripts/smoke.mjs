@@ -249,7 +249,44 @@ try {
   check(!overflow, "phone Home has no sideways scroll");
   await p.goto(`${APP}/log`);
   await p.screenshot({ path: `${OUT}/08-phone-log.png`, fullPage: true });
+  // The Wrap: today's top producer, everybody, the carriers; one iPhone screenshot above the tab bar,
+  // measured on the fullest day: everyone sells.
+  if (TOKEN) {
+    for (const who of ["Brandon Lee", "James Park", "Maira Santos"]) {
+      const r = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: who, premium: "1,250", carrier: "Royal", product: "Term" } });
+      check(r.ok(), `a sale for ${who} before the Wrap (${r.status()})`);
+    }
+  }
+  await p.goto(`${APP}/wrap`);
+  await p.waitForSelector("text=Player of the day");
+  const wrapText = await p.textContent("body");
+  check(wrapText.includes("Alex Alekseyev") && wrapText.includes("$21,750"), "the Wrap names today's player of the day with the day's premium");
+  check(wrapText.includes("Everybody today") && wrapText.includes("Best deal"), "the Wrap lists everybody and the best deal");
+  check(wrapText.includes("Day won") || wrapText.includes("short of") || /(Saturday|Sunday)/.test(wrapText), "the Wrap judges the day against what the goal needed (or names the weekend)");
+  const footBottom = await p.evaluate(() => document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom);
+  check(footBottom <= 760, `the Wrap fits one iPhone screenshot above the tab bar (ends at ${Math.round(footBottom)}px of 844)`);
+  const wrapOverflow = await p.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+  check(!wrapOverflow, "the Wrap has no sideways scroll");
+  const tabs = await p.evaluate(() => {
+    const pill = document.querySelector("nav[aria-label=Main] > div");
+    return { right: pill.getBoundingClientRect().right, links: pill.querySelectorAll("a").length, width: window.innerWidth };
+  });
+  check(tabs.links === 4 && tabs.right <= tabs.width, `the phone tab bar holds four tabs inside the screen (${Math.round(tabs.right)} of ${tabs.width}px)`);
+  await p.screenshot({ path: `${OUT}/14-phone-wrap.png`, fullPage: true });
+  // The last business day before today has no sales in this run
+  const lastBusiness = (() => {
+    const d = new Date();
+    do d.setDate(d.getDate() - 1);
+    while (d.getDay() === 0 || d.getDay() === 6);
+    return d.toLocaleDateString("en-CA", { timeZone: "America/Detroit" });
+  })();
+  await p.goto(`${APP}/wrap?day=${lastBusiness}`);
+  await p.waitForSelector("text=Player of the day");
+  check((await p.textContent("body")).includes("No sales"), "a day without sales says so");
   await p.emulateMedia({ colorScheme: "dark" });
+  await p.goto(`${APP}/wrap`);
+  await p.waitForSelector("text=Player of the day");
+  await p.screenshot({ path: `${OUT}/15-phone-wrap-dark.png`, fullPage: true });
   await p.goto(`${APP}/`);
   await p.waitForSelector("text=Leaderboard");
   await p.screenshot({ path: `${OUT}/09-phone-home-dark.png`, fullPage: true });
