@@ -3,54 +3,86 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth";
 import { dbConfigured } from "@/lib/supabase";
 import { loadMonthSnapshot } from "@/lib/board";
-import { buildWrap, carrierSummary, dayRankLabel, type DayWrap, type WrapLine } from "@/lib/wrap";
-import { addDays, dayLabel, dayLabelLong, isDateKey, monthKeyOf, monthName, todayInDetroit, weekday } from "@/lib/month";
+import { buildWrap, carrierSummary, isWrapView, periodFor, periodNav, WRAP_VIEWS, type PeriodWrap, type WrapLine, type WrapPeriod, type WrapView } from "@/lib/wrap";
+import { datesOfMonth, dayLabelLong, isDateKey, monthKeyOf, monthName, todayInDetroit, weekday } from "@/lib/month";
 import { formatDollars } from "@/lib/money";
 import { Avatar, firstName } from "@/components/avatar";
 import { Eyebrow, ListCard, ROW_INSET } from "@/components/tide";
-import { Badge, Notice, cn, formatClock } from "@/components/ui";
+import { Badge, Notice, cn, formatClock, formatDate } from "@/components/ui";
 
 export const metadata: Metadata = { title: "Wrap" };
 
+type Tone = "green" | "amber" | "gray" | "blue";
+
+/** The words that change with the view. */
+const WORDS: Record<WrapView, { name: string; player: string; now: string; then: string; here: string; nobodyNow: string; nobodyThen: string; won: string }> = {
+  day: { name: "Day", player: "Player of the day", now: "Everybody today", then: "Everybody that day", here: "Today", nobodyNow: "Nobody yet. First sale takes it.", nobodyThen: "Nobody sold that day.", won: "Day won" },
+  week: { name: "Week", player: "Player of the week", now: "Everybody this week", then: "Everybody that week", here: "This week", nobodyNow: "Nobody yet this week.", nobodyThen: "Nobody sold that week.", won: "Week won" },
+  month: { name: "Month", player: "Player of the month", now: "Everybody this month", then: "Everybody that month", here: "This month", nobodyNow: "Nobody yet this month.", nobodyThen: "Nobody sold that month.", won: "Month won" },
+};
+
+/** The address of a view on a day; today's day view is the plain /wrap. */
+function wrapHref(view: WrapView, day: string, today: string): string {
+  const q = new URLSearchParams();
+  if (view !== "day") q.set("view", view);
+  if (day !== today) q.set("day", day);
+  const s = q.toString();
+  return s ? `/wrap?${s}` : "/wrap";
+}
+
+/** "Oct 26 – 29", or "Oct 26" for one day (a period never crosses a month). */
+function rangeLabel(from: string, to: string): string {
+  const start = formatDate(from, { year: false });
+  return from === to ? start : `${start} – ${Number(to.slice(8))}`;
+}
+
 /**
- * The Wrap: one day of the team's month on one iPhone screenshot (owner, 2026-10-29: "super
- * screenshotable and tells you a lot"). Who sold what, the day's top producer, the best deal, the
- * carriers, and whether the day beat what the goal needed. Arrows walk back a day at a time.
+ * The Wrap: the team's day, week or month on one iPhone screenshot (owner, 2026-10-29: "super
+ * screenshotable and tells you a lot"). Who sold what, the period's top producer and best deal,
+ * the month's top three carriers, and whether the period beat what the goal needed. Arrows walk
+ * back a day, a week or a month at a time.
  */
 export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
   await requirePage();
   const params = await searchParams;
   const today = todayInDetroit();
   const day = typeof params.day === "string" && isDateKey(params.day) && params.day <= today ? params.day : today;
-  if (!dbConfigured()) return <Header day={day} today={today} />;
+  const view: WrapView = isWrapView(params.view) ? params.view : "day";
+  const period = periodFor(view, day, today);
+  if (!dbConfigured()) return <Header period={period} day={day} today={today} />;
 
-  let wrap: DayWrap;
+  let wrap: PeriodWrap;
   try {
-    wrap = buildWrap(await loadMonthSnapshot(monthKeyOf(day), { today }), day);
+    wrap = buildWrap(await loadMonthSnapshot(monthKeyOf(day), { today }), day, view);
   } catch (err) {
     return (
       <>
-        <Header day={day} today={today} />
+        <Header period={period} day={day} today={today} />
         <Notice tone="red">The database answered with an error: {err instanceof Error ? err.message : "unknown"}. Check that the setup SQL ran (SETUP.md, step 3).</Notice>
       </>
     );
   }
+  const words = WORDS[view];
   const verdict = verdictBadge(wrap);
   const best = wrap.bestSale;
   const sold = wrap.lines.filter((l) => l.premiumCents > 0);
   const quiet = wrap.lines.filter((l) => l.premiumCents === 0);
   // Seven people fit one screenshot as rows, every one of them selling; past seven, the no-sale names share one line.
   const fold = wrap.lines.length > 7;
+  const month = monthName(wrap.month.key);
+  const monthDates = datesOfMonth(wrap.month.key);
+  // The carriers are the month's, as they stood at the period's end.
+  const asOf = wrap.current ? `${month} so far` : wrap.to === monthDates[monthDates.length - 1] ? month : `through ${formatDate(wrap.to, { year: false })}`;
 
   return (
     <>
-      <Header day={day} today={today} badge={verdict} total={wrap.teamCents > 0 ? `${formatDollars(wrap.teamCents)} · ${wrap.policies} ${wrap.policies === 1 ? "policy" : "policies"}` : undefined} />
+      <Header period={period} day={day} today={today} badge={verdict} total={wrap.teamCents > 0 ? `${formatDollars(wrap.teamCents)} · ${wrap.policies} ${wrap.policies === 1 ? "policy" : "policies"}` : undefined} />
 
-      {/* Player of the day */}
+      {/* Player of the period */}
       {wrap.player ? (
         <div className="relative overflow-hidden rounded-[22px] bg-tide-strong p-4 text-white shadow-card">
           <Crown className="absolute top-4 right-4 h-7 w-7" />
-          <Eyebrow className="text-white">Player of the day</Eyebrow>
+          <Eyebrow className="text-white">{words.player}</Eyebrow>
           <p className="mt-1 font-mono text-[32px] leading-none font-bold tracking-[-0.03em]">{formatDollars(wrap.player.premiumCents)}</p>
           <div className="mt-2.5 flex items-center gap-3">
             <Avatar name={wrap.player.name} tone="bg-surface text-accent-text" size={36} />
@@ -68,48 +100,34 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
               {best.policies > 1 && ` · ${best.policies} policies`}
               {best.carrier && ` · ${best.carrier}`}
               {best.product && ` · ${best.product}`}
-              {/* The clock means something only when the sale was logged on its own day (not a past day or an import). */}
-              {todayInDetroit(new Date(best.createdAt)) === best.soldOn && ` · ${formatClock(best.createdAt)}`}
+              {/* A day shows the clock, and only when the sale was logged on its own day (not a past day or an import); a week or month shows the day. */}
+              {view === "day" ? todayInDetroit(new Date(best.createdAt)) === best.soldOn && ` · ${formatClock(best.createdAt)}` : ` · ${formatDate(best.soldOn, { year: false })}`}
             </p>
           )}
         </div>
       ) : (
         <div className="rounded-[22px] bg-surface p-4 shadow-card">
-          <Eyebrow>Player of the day</Eyebrow>
-          <p className="mt-1.5 text-[17px] font-bold text-gray-900">{wrap.when === "today" ? "Nobody yet. First sale takes it." : "Nobody sold that day."}</p>
+          <Eyebrow>{words.player}</Eyebrow>
+          <p className="mt-1.5 text-[17px] font-bold text-gray-900">{wrap.current ? words.nobodyNow : words.nobodyThen}</p>
         </div>
       )}
 
-      {/* Two headline stats: where the day stands in the month, and the team's hot streak */}
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <Square
-          label={wrap.when === "today" ? "Today so far" : "That day"}
-          value={wrap.dayRank ? dayRankLabel(wrap.dayRank.rank) : "No sales"}
-          sub={wrap.dayRank ? `of ${wrap.dayRank.of} selling ${wrap.dayRank.of === 1 ? "day" : "days"} in ${monthName(wrap.month.key)}` : `nothing on the board ${wrap.when === "today" ? "yet" : "that day"}`}
-          hot={wrap.dayRank?.rank === 1}
-        />
-        <Square
-          label="Hot streak"
-          value={`${wrap.streak.days} ${wrap.streak.days === 1 ? "day" : "days"}`}
-          sub={
-            wrap.streak.days === 0
-              ? wrap.when === "today"
-                ? "start one today"
-                : "no streak that day"
-              : wrap.streak.alive
-                ? `a sale every business day since ${dayLabel(wrap.streak.since!)}`
-                : wrap.when === "today"
-                  ? "keep it alive today"
-                  : `ended that day, from ${dayLabel(wrap.streak.since!)}`
-          }
-          hot={wrap.streak.days >= 5 && wrap.streak.alive}
-        />
+      {/* The month's top three carriers by policies (owner, 2026-10-29) */}
+      <div className="mt-3 px-1">
+        <Eyebrow>Top carriers · {asOf}</Eyebrow>
+      </div>
+      <div className="mt-1.5 grid grid-cols-3 gap-2.5">
+        {wrap.topCarriers.length === 0 ? (
+          <div className="col-span-3 rounded-[18px] bg-surface px-4 py-3 text-[13px] font-semibold text-gray-600 shadow-card">No policies in {month} yet.</div>
+        ) : (
+          wrap.topCarriers.map((c, i) => <CarrierSquare key={c.name} name={c.name} count={c.count} top={i === 0} />)
+        )}
       </div>
 
       {/* Everybody: sold rows ranked; with a long roster the no-sale names fold into one line */}
       <ListCard className="mt-3 pt-2.5">
         <li className="px-4 pb-1">
-          <Eyebrow>{wrap.when === "today" ? "Everybody today" : "Everybody that day"}</Eyebrow>
+          <Eyebrow>{wrap.current ? words.now : words.then}</Eyebrow>
         </li>
         {wrap.lines.length === 0 && <li className="px-4 py-3 text-[14px] text-gray-600">Nobody is on the board yet.</li>}
         {(fold ? sold : wrap.lines).map((l) => (
@@ -120,8 +138,8 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
         )}
       </ListCard>
 
-      {/* Carriers */}
-      {wrap.carriers.length > 0 && (
+      {/* The period's carriers (the month view's are the squares above) */}
+      {view !== "month" && wrap.carriers.length > 0 && (
         <div className="mt-2.5 flex flex-wrap gap-1.5 px-1">
           {wrap.carriers.map((c) => (
             <Badge key={c.name} tone="blue">
@@ -133,8 +151,14 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
 
       <p data-wrap-foot className="mt-2.5 flex items-center justify-between gap-3 px-1 text-[11px] font-semibold text-gray-500">
         <span>
-          {wrap.month.policies} {wrap.month.policies === 1 ? "policy" : "policies"} in {monthName(wrap.month.key)}
-          {wrap.month.goalCents > 0 && ` · ${wrap.month.goalPct}% of the goal`}
+          {view === "month" ? (
+            wrap.month.goalCents > 0 ? `${wrap.month.goalPct}% of the ${formatDollars(wrap.month.goalCents)} goal` : "No goal set"
+          ) : (
+            <>
+              {wrap.month.policies} {wrap.month.policies === 1 ? "policy" : "policies"} in {month}
+              {wrap.month.goalCents > 0 && ` · ${wrap.month.goalPct}% of the goal`}
+            </>
+          )}
         </span>
         <span className="shrink-0">Scorecard by TKG</span>
       </p>
@@ -142,24 +166,29 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
   );
 }
 
-function verdictBadge(w: DayWrap): { text: string; tone: "green" | "amber" | "gray" | "blue" } {
+function verdictBadge(w: PeriodWrap): { text: string; tone: Tone } {
   const v = w.verdict;
-  if (w.teamCents === 0 && v.kind !== "off_day") return { text: w.when === "today" ? "No sales yet" : "No sales", tone: "gray" };
-  // One fact per pill; the day's total sits in the date line.
-  if (v.kind === "won") return { text: `Day won · needed ${formatDollars(v.neededCents)}`, tone: "green" };
-  if (v.kind === "short") return { text: `${formatDollars(v.neededCents - w.teamCents)} short of ${formatDollars(v.neededCents)}`, tone: "amber" };
-  if (v.kind === "goal_hit") return { text: "Goal already hit", tone: "green" };
-  if (v.kind === "off_day") return { text: weekday(w.day) === 6 ? "Saturday" : "Sunday", tone: "blue" };
+  if (w.teamCents === 0 && v.kind !== "off_day") return { text: w.current ? "No sales yet" : "No sales", tone: "gray" };
+  // One fact per pill; the period's total sits in the date line.
+  if (v.kind === "won") return { text: `${WORDS[w.view].won} · needed ${formatDollars(v.neededCents)}`, tone: "green" };
+  if (v.kind === "short") return { text: `${formatDollars(v.shortCents)} short of ${formatDollars(v.neededCents)}`, tone: "amber" };
+  if (v.kind === "goal_hit") return { text: w.view === "month" ? "Goal hit" : "Goal already hit", tone: "green" };
+  if (v.kind === "off_day") return { text: w.view === "day" ? (weekday(w.day) === 6 ? "Saturday" : "Sunday") : "Weekend", tone: "blue" };
+  if (v.kind === "ahead") return { text: `Ahead by ${formatDollars(v.byCents)}`, tone: "green" };
+  if (v.kind === "behind") return { text: `Behind by ${formatDollars(v.byCents)}`, tone: "amber" };
+  if (v.kind === "on") return { text: "On the goal line", tone: "blue" };
   return { text: "No goal set", tone: "gray" };
 }
 
-/** One of the two headline squares; `hot` tints the value with the accent. */
-function Square({ label, value, sub, hot }: { label: string; value: string; sub: string; hot?: boolean }) {
+/** One of the three carrier squares; the busiest carrier's count wears the accent. */
+function CarrierSquare({ name, count, top }: { name: string; count: number; top: boolean }) {
   return (
-    <div className="rounded-[18px] bg-surface px-4 py-3 shadow-card">
-      <Eyebrow>{label}</Eyebrow>
-      <p className={cn("mt-1 truncate text-[20px] leading-tight font-extrabold tracking-[-0.02em]", hot ? "text-accent-text" : "text-gray-900")}>{value}</p>
-      <p className="mt-0.5 text-[11px] leading-tight font-semibold text-gray-500">{sub}</p>
+    <div className="min-w-0 rounded-[18px] bg-surface px-3 py-2.5 shadow-card">
+      <p className="truncate text-[12px] leading-tight font-bold text-gray-700">{name}</p>
+      <p className="mt-1 truncate leading-none">
+        <span className={cn("font-mono text-[22px] font-bold tracking-[-0.02em]", top ? "text-accent-text" : "text-gray-900")}>{count}</span>
+        <span className="ml-1 text-[11px] font-semibold text-gray-500">{count === 1 ? "policy" : "policies"}</span>
+      </p>
     </div>
   );
 }
@@ -188,46 +217,62 @@ function WrapRow({ line }: { line: WrapLine }) {
   );
 }
 
-function Header({ day, today, badge, total }: { day: string; today: string; badge?: { text: string; tone: "green" | "amber" | "gray" | "blue" }; total?: string }) {
-  const prev = addDays(day, -1);
-  const next = addDays(day, 1);
-  const isToday = day === today;
+/**
+ * The Day / Week / Month switch with the arrows beside it, then the period and its total, then the
+ * verdict. The switch stands where a title would (the tab bar names the screen), so the whole Wrap
+ * still fits one screenshot.
+ */
+function Header({ period, day, today, badge, total }: { period: WrapPeriod; day: string; today: string; badge?: { text: string; tone: Tone }; total?: string }) {
+  const { view } = period;
+  const words = WORDS[view];
+  const nav = periodNav(period, today);
+  // The period reaches today: no way forward, and no need for the "Today" pill.
+  const live = nav.next === null;
+  const when = view === "day" ? dayLabelLong(day) : view === "week" ? rangeLabel(period.from, period.to) : `${monthName(monthKeyOf(day))}${live ? " so far" : ""}`;
+  const arrow = "flex h-11 w-11 items-center justify-center rounded-full bg-surface text-gray-700 shadow-card hover:bg-gray-50";
   return (
-    <div className="mb-3 flex items-center justify-between gap-3">
-      <div className="min-w-0">
-        <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.035em] text-gray-900">Wrap</h1>
-        <p className="mt-0.5 text-[14px] font-medium text-gray-500">
-          {dayLabelLong(day)}
-          {total && <span className="font-mono font-semibold text-gray-900"> · {total}</span>}
-        </p>
-        {badge && (
-          <Badge tone={badge.tone} className="mt-1.5 max-w-full">
-            {badge.text}
-          </Badge>
-        )}
-      </div>
-      <nav aria-label="Day" className="flex shrink-0 items-center gap-1">
-        <Link href={`/wrap?day=${prev}`} aria-label={dayLabelLong(prev)} className="flex h-11 w-11 items-center justify-center rounded-full bg-surface text-gray-700 shadow-card hover:bg-gray-50">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M15 6l-6 6 6 6" />
-          </svg>
-        </Link>
-        {!isToday && (
-          <Link href="/wrap" className="flex h-11 items-center rounded-full bg-surface px-3.5 text-[13px] font-bold text-accent-text shadow-card hover:bg-gray-50">
-            Today
+    <div className="mb-3">
+      <h1 className="sr-only">Wrap</h1>
+      <div className="flex items-center justify-between gap-3">
+        <nav aria-label="View" className="grid w-[210px] shrink-0 grid-cols-3 gap-1 rounded-2xl bg-track p-1">
+          {WRAP_VIEWS.map((v) => (
+            <Link
+              key={v}
+              href={wrapHref(v, day, today)}
+              aria-current={v === view ? "true" : undefined}
+              className={cn("flex h-9 items-center justify-center rounded-xl text-[13px] font-bold transition", v === view ? "bg-segment text-gray-900 shadow-card" : "text-gray-600 hover:text-gray-900")}
+            >
+              {WORDS[v].name}
+            </Link>
+          ))}
+        </nav>
+        <nav aria-label={words.name} className="flex shrink-0 items-center gap-1">
+          <Link href={wrapHref(view, nav.prev, today)} aria-label={`Earlier ${view}`} className={arrow}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
           </Link>
-        )}
-        <Link
-          href={`/wrap?day=${next}`}
-          aria-label={dayLabelLong(next)}
-          aria-disabled={isToday}
-          className={cn("flex h-11 w-11 items-center justify-center rounded-full bg-surface text-gray-700 shadow-card hover:bg-gray-50", isToday && "pointer-events-none opacity-40")}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </Link>
-      </nav>
+          {!live && (
+            <Link href={wrapHref(view, today, today)} className="flex h-11 items-center rounded-full bg-surface px-3.5 text-[13px] font-bold whitespace-nowrap text-accent-text shadow-card hover:bg-gray-50">
+              {words.here}
+            </Link>
+          )}
+          <Link href={nav.next ? wrapHref(view, nav.next, today) : wrapHref(view, day, today)} aria-label={`Later ${view}`} aria-disabled={live} className={cn(arrow, live && "pointer-events-none opacity-40")}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </Link>
+        </nav>
+      </div>
+      <p className="mt-2.5 text-[14px] font-medium text-gray-500">
+        {when}
+        {total && <span className="font-mono font-semibold text-gray-900"> · {total}</span>}
+      </p>
+      {badge && (
+        <Badge tone={badge.tone} className="mt-1.5 max-w-full">
+          {badge.text}
+        </Badge>
+      )}
     </div>
   );
 }
