@@ -73,6 +73,8 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
   const monthDates = datesOfMonth(wrap.month.key);
   // The carriers are the month's, as they stood at the period's end.
   const asOf = wrap.current ? `${month} so far` : wrap.to === monthDates[monthDates.length - 1] ? month : `through ${formatDate(wrap.to, { year: false })}`;
+  // Days imported before the carrier column have no carrier: say how much of the month the squares cover.
+  const carrierNote = wrap.month.withCarrier < wrap.month.policies ? ` · ${wrap.month.withCarrier} of ${wrap.month.policies} with a carrier` : "";
 
   return (
     <>
@@ -114,11 +116,16 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
 
       {/* The month's top three carriers by policies (owner, 2026-10-29) */}
       <div className="mt-3 px-1">
-        <Eyebrow>Top carriers · {asOf}</Eyebrow>
+        <Eyebrow>
+          Top carriers · {asOf}
+          {carrierNote}
+        </Eyebrow>
       </div>
       <div className="mt-1.5 grid grid-cols-3 gap-2.5">
         {wrap.topCarriers.length === 0 ? (
-          <div className="col-span-3 rounded-[18px] bg-surface px-4 py-3 text-[13px] font-semibold text-gray-600 shadow-card">No policies in {month} yet.</div>
+          <div className="col-span-3 rounded-[18px] bg-surface px-4 py-3 text-[13px] font-semibold text-gray-600 shadow-card">
+            {wrap.month.policies > 0 ? `${wrap.month.policies} ${wrap.month.policies === 1 ? "policy" : "policies"} in ${month}, none with a carrier.` : `No policies in ${month}${wrap.current ? " yet" : ""}.`}
+          </div>
         ) : (
           wrap.topCarriers.map((c, i) => <CarrierSquare key={c.name} name={c.name} count={c.count} top={i === 0} />)
         )}
@@ -234,7 +241,8 @@ function Header({ period, day, today, badge, total }: { period: WrapPeriod; day:
     <div className="mb-3">
       <h1 className="sr-only">Wrap</h1>
       <div className="flex items-center justify-between gap-3">
-        <nav aria-label="View" className="grid w-[210px] shrink-0 grid-cols-3 gap-1 rounded-2xl bg-track p-1">
+        {/* The switch gives up a few pixels on a 375pt phone when the "This month" pill is out; the arrows never shrink. */}
+        <nav aria-label="View" className="grid w-[210px] grid-cols-3 gap-1 rounded-2xl bg-track p-1">
           {WRAP_VIEWS.map((v) => (
             <Link
               key={v}

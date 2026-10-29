@@ -156,6 +156,10 @@ test("a week's wrap: everybody across the days, the best deal, and the verdict f
   // One more sale wins the week
   const won = buildWrap(input([...week, sale("a", "Anersi Koka", "2026-10-28", 3000)]), "2026-10-28", "week");
   assert.deepEqual(won.verdict, { kind: "won", neededCents: 13_983 * 100 });
+  // A week that sells exactly what was left has won: the rounded share ($4,661) times five overshoots by $2, so the need is capped at the rest of the goal
+  const exact = buildWrap(input([before, sale("c", "Maira Angulo", "2026-10-28", 23_303)], 200_000, { key: "2026-10", today: "2026-10-31" }), "2026-10-31", "week");
+  assert.deepEqual(exact.verdict, { kind: "won", neededCents: 23_303 * 100 });
+  assert.deepEqual(buildWrap(input([before, sale("c", "Maira Angulo", "2026-10-28", 23_302)], 200_000, { key: "2026-10", today: "2026-10-31" }), "2026-10-31", "week").verdict, { kind: "short", neededCents: 23_303 * 100, shortCents: 100 });
   // A past week is whole (Oct 19 to 25) and settled: $23,303 left before Monday Oct 19 over 10 business
   // days => $2,331 a day, five of them that week. The goal already hit before a week reads so.
   const past = buildWrap(input([sale("a", "Anersi Koka", "2026-10-16", 176_697), sale("b", "Alex Alekseyev", "2026-10-20", 1000)]), "2026-10-21", "week");
@@ -216,6 +220,9 @@ test("the month's top three carriers by policies, as they stood at the period's 
     { name: "Royal", count: 1 },
   ]);
   assert.deepEqual(buildWrap(input(sales), "2026-10-28", "month").topCarriers, w.topCarriers);
+  // The squares cover only the policies that name a carrier
+  assert.equal(w.month.policies, 8);
+  assert.equal(w.month.withCarrier, 7);
   assert.deepEqual(buildWrap(input([]), "2026-10-28").topCarriers, []);
 });
 

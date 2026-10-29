@@ -44,13 +44,20 @@ const feedUntil = async (ctx, fn, tries = 20) => {
   return json;
 };
 
-/** The Detroit date of the last weekday before today. */
-const lastBusinessDay = () => {
-  const d = new Date();
-  do d.setDate(d.getDate() - 1);
-  while (d.getDay() === 0 || d.getDay() === 6);
-  return d.toLocaleDateString("en-CA", { timeZone: "America/Detroit" });
+/** Today in Detroit as [year, month, day] (the sandbox's own clock may sit in another zone). */
+const detroitToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Detroit" }).split("-").map(Number);
+/** Detroit dates walked back from today in UTC arithmetic, so the sandbox's zone never shifts a weekday. */
+const daysBack = (stop) => {
+  const [y, m, d] = detroitToday();
+  const t = new Date(Date.UTC(y, m - 1, d));
+  do t.setUTCDate(t.getUTCDate() - 1);
+  while (!stop(t.getUTCDay()));
+  return t.toISOString().slice(0, 10);
 };
+/** The Detroit date of the last weekday before today. */
+const lastBusinessDay = () => daysBack((w) => w !== 0 && w !== 6);
+/** The Detroit date of the Sunday before this week's Monday: always an earlier week. */
+const lastSunday = () => daysBack((w) => w === 0);
 
 const PEOPLE = ["Anersi Koka", "Alex Alekseyev", "Mark Dusevic", "Moe Karim", "Brandon Lee", "Maira Santos", "James Park"];
 
@@ -219,7 +226,8 @@ try {
   check(true, "owner removed a sale");
 
   // A sale dated last month shows up in that month's own list, fixable there
-  const lastMonthDay = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1) - 86400000 * 3).toISOString().slice(0, 10);
+  const [ty, tm] = detroitToday();
+  const lastMonthDay = new Date(Date.UTC(ty, tm - 1, 1) - 86400000 * 3).toISOString().slice(0, 10);
   const lastMonth = lastMonthDay.slice(0, 7);
   await o.goto(`${APP}/log`);
   await o.click(`[role=radio]:has-text("James Park")`);
@@ -273,7 +281,9 @@ try {
   check(wrapText.includes("Day won") || wrapText.includes("short of") || /(Saturday|Sunday)/.test(wrapText), "the Wrap judges the day against what the goal needed (or names the weekend)");
   const fit = await p.evaluate(() => ({ bottom: document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom, pill: document.querySelector("nav[aria-label=Main] > div").getBoundingClientRect().top, height: window.innerHeight }));
   check(fit.bottom <= fit.pill - 8, `the Wrap fits one iPhone screenshot above the tab bar (ends at ${Math.round(fit.bottom)}px, the tab bar starts at ${Math.round(fit.pill)} of ${fit.height})`);
-  check(wrapText.includes("Top carriers") && /Royal\s*\d+\s*polic/.test(wrapText), "the Wrap shows the month's top carriers with their policy counts");
+  // Royal leads only once the token's three Royal sales landed; AHL is in the top three either way.
+  const square = TOKEN ? "Royal" : "AHL";
+  check(wrapText.includes("Top carriers") && new RegExp(`${square}\\s*\\d+\\s*polic`).test(wrapText), "the Wrap shows the month's top carriers with their policy counts");
   check(wrapText.includes("Day") && wrapText.includes("Week") && wrapText.includes("Month"), "the Wrap offers Day, Week and Month");
   const wrapOverflow = await p.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
   check(!wrapOverflow, "the Wrap has no sideways scroll");
@@ -300,10 +310,11 @@ try {
   const fitMonth = await fitOf();
   check(fitMonth.bottom <= fitMonth.pill - 8, `the month view fits one screenshot (ends at ${Math.round(fitMonth.bottom)}px, the tab bar starts at ${Math.round(fitMonth.pill)})`);
   await p.screenshot({ path: `${OUT}/14c-phone-wrap-month.png`, fullPage: true });
-  // Earlier periods open through the arrows' addresses
-  await p.goto(`${APP}/wrap?view=week&day=${lastBusinessDay()}`);
+  // An earlier week (anchored on last Sunday, always before this week) shows the This week pill and a live later arrow
+  await p.goto(`${APP}/wrap?view=week&day=${lastSunday()}`);
   await p.waitForSelector("text=Player of the week");
-  check((await p.textContent("body")).includes("Player of the week"), "an earlier week opens");
+  const earlierWeek = await p.evaluate(() => ({ text: document.body.textContent, later: document.querySelector("a[aria-label='Later week']")?.getAttribute("aria-disabled") }));
+  check(earlierWeek.text.includes("Everybody that week") && earlierWeek.text.includes("This week") && earlierWeek.later === "false", "an earlier week opens with the This week pill and a live later arrow");
   // The last business day before today has no sales in this run
   await p.goto(`${APP}/wrap?day=${lastBusinessDay()}`);
   await p.waitForSelector("text=Player of the day");

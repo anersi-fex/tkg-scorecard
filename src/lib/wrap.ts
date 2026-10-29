@@ -113,8 +113,12 @@ export interface PeriodWrap extends WrapPeriod {
    * so far"), whatever the view.
    */
   topCarriers: WrapCount[];
-  /** The month up to and including the period's end (imported days and earlier months read as they stood). */
-  month: { key: string; policies: number; goalPct: number; goalCents: number; productionCents: number };
+  /**
+   * The month up to and including the period's end (imported days and earlier months read as they
+   * stood). `withCarrier` counts the policies that name a carrier (days imported before migration
+   * 0002 have none), the only ones the top carriers can cover.
+   */
+  month: { key: string; policies: number; withCarrier: number; goalPct: number; goalCents: number; productionCents: number };
 }
 
 function tally(items: Array<{ name: string | null; count: number }>): WrapCount[] {
@@ -182,6 +186,7 @@ export function buildWrap(input: WrapInput, day: string, view: WrapView = "day")
   const toDate = input.sales.filter((s) => s.soldOn <= to);
   const productionToDate = toDate.reduce((sum, s) => sum + s.premiumCents, 0);
   const goalCents = input.team.goalCents;
+  const monthCarriers = tally(toDate.map((s) => ({ name: s.carrier, count: s.policies })));
 
   let verdict: WrapVerdict;
   const business = datesOfMonth(monthKeyOf(from)).filter((d) => d >= from && d <= to && isBusinessDay(d));
@@ -198,11 +203,14 @@ export function buildWrap(input: WrapInput, day: string, view: WrapView = "day")
   } else if (business.length === 0) verdict = { kind: "off_day" };
   else {
     // A week needs its first business day's share for each of its business days so far (a week
-    // still running counts through today).
+    // still running counts through today). The share is rounded up to a dollar, so the product can
+    // overshoot what was left by up to a dollar a day: never ask for more than the rest of the goal,
+    // and a period that reaches the goal has won.
     const perDay = neededOnDay(input, business[0]);
-    const neededCents = perDay * business.length;
+    const before = input.sales.filter((s) => s.soldOn < business[0]).reduce((sum, s) => sum + s.premiumCents, 0);
+    const neededCents = Math.min(perDay * business.length, Math.ceil((goalCents - before) / 100) * 100);
     if (perDay === 0) verdict = { kind: "goal_hit" };
-    else if (teamCents >= neededCents) verdict = { kind: "won", neededCents };
+    else if (teamCents >= neededCents || before + teamCents >= goalCents) verdict = { kind: "won", neededCents };
     else verdict = { kind: "short", neededCents, shortCents: neededCents - teamCents };
   }
 
@@ -220,10 +228,11 @@ export function buildWrap(input: WrapInput, day: string, view: WrapView = "day")
     bestSale,
     carriers: tally(inPeriod.map((s) => ({ name: s.carrier, count: s.policies }))),
     products: tally(inPeriod.map((s) => ({ name: s.product, count: s.policies }))),
-    topCarriers: tally(toDate.map((s) => ({ name: s.carrier, count: s.policies }))).slice(0, 3),
+    topCarriers: monthCarriers.slice(0, 3),
     month: {
       key: input.clock.key,
       policies: toDate.reduce((sum, s) => sum + s.policies, 0),
+      withCarrier: monthCarriers.reduce((sum, c) => sum + c.count, 0),
       goalPct: goalCents > 0 ? Math.round((productionToDate / goalCents) * 100) : 0,
       goalCents,
       productionCents: productionToDate,
