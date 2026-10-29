@@ -11,7 +11,7 @@ import { datesOfMonth, isBusinessDay, monthKeyOf } from "./month";
 /** What `buildWrap` reads from a MonthSnapshot (structurally; tests build it by hand). */
 export interface WrapInput {
   clock: { key: string; today: string };
-  team: { goalCents: number; productionCents: number; policies: number; goalPct: number };
+  team: { goalCents: number };
   agents: Array<{ id: string; name: string; tone: string; active: boolean }>;
   sales: FeedSale[];
 }
@@ -53,10 +53,11 @@ export interface DayWrap {
   lines: WrapLine[];
   /** The day's top producer, or null when nobody sold. */
   player: WrapLine | null;
-  /** The day's biggest single sale (the earliest on a tie). */
+  /** The day's biggest single policy (the earliest on a tie); a multi-policy row only when there is no single one. */
   bestSale: FeedSale | null;
   carriers: WrapCount[];
   products: WrapCount[];
+  /** The month up to and including this day (imported days and earlier months read as they stood). */
   month: { key: string; policies: number; goalPct: number; goalCents: number; productionCents: number };
 }
 
@@ -80,7 +81,8 @@ export function neededOnDay(input: Pick<WrapInput, "sales" | "team">, day: strin
   const left = input.team.goalCents - before;
   if (left <= 0) return 0;
   const businessFrom = datesOfMonth(monthKeyOf(day)).filter((d) => d >= day && isBusinessDay(d)).length;
-  return Math.ceil(left / Math.max(1, businessFrom));
+  // Whole dollars, rounded up, so the verdict agrees with the dollars the badge shows.
+  return Math.ceil(left / Math.max(1, businessFrom) / 100) * 100;
 }
 
 export function buildWrap(input: WrapInput, day: string): DayWrap {
@@ -113,10 +115,15 @@ export function buildWrap(input: WrapInput, day: string): DayWrap {
   const lines: WrapLine[] = unranked.map((l) => ({ ...l, rank: l.premiumCents > 0 ? ++rank : null }));
   const player = lines[0] && lines[0].premiumCents > 0 ? lines[0] : null;
 
+  // The best deal is one policy; an imported day (one row per person, the day's total) or a
+  // several-policy row counts only when no single policy was logged that day.
+  const singles = daySales.filter((s) => s.policies === 1);
   let bestSale: FeedSale | null = null;
-  for (const s of daySales) {
+  for (const s of singles.length ? singles : daySales) {
     if (!bestSale || s.premiumCents > bestSale.premiumCents || (s.premiumCents === bestSale.premiumCents && s.createdAt < bestSale.createdAt)) bestSale = s;
   }
+  const toDate = input.sales.filter((s) => s.soldOn <= day);
+  const productionToDate = toDate.reduce((sum, s) => sum + s.premiumCents, 0);
 
   let verdict: WrapVerdict;
   if (input.team.goalCents <= 0) verdict = { kind: "no_goal" };
@@ -141,10 +148,10 @@ export function buildWrap(input: WrapInput, day: string): DayWrap {
     products: tally(daySales.map((s) => ({ name: s.product, count: s.policies }))),
     month: {
       key: input.clock.key,
-      policies: input.team.policies,
-      goalPct: input.team.goalPct,
+      policies: toDate.reduce((sum, s) => sum + s.policies, 0),
+      goalPct: input.team.goalCents > 0 ? Math.round((productionToDate / input.team.goalCents) * 100) : 0,
       goalCents: input.team.goalCents,
-      productionCents: input.team.productionCents,
+      productionCents: productionToDate,
     },
   };
 }

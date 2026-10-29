@@ -4,7 +4,7 @@ import { requirePage } from "@/lib/auth";
 import { dbConfigured } from "@/lib/supabase";
 import { loadMonthSnapshot } from "@/lib/board";
 import { buildWrap, carrierSummary, type DayWrap, type WrapLine } from "@/lib/wrap";
-import { addDays, dayLabelLong, isDateKey, monthKeyOf, todayInDetroit, weekday } from "@/lib/month";
+import { addDays, dayLabelLong, isDateKey, monthKeyOf, monthName, todayInDetroit, weekday } from "@/lib/month";
 import { formatDollars } from "@/lib/money";
 import { Avatar, firstName } from "@/components/avatar";
 import { Eyebrow, ListCard, ROW_INSET } from "@/components/tide";
@@ -39,34 +39,37 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
   const best = wrap.bestSale;
   const sold = wrap.lines.filter((l) => l.premiumCents > 0);
   const quiet = wrap.lines.filter((l) => l.premiumCents === 0);
-  // Seven people fit one screenshot as rows; past eight, the no-sale names share one line.
-  const fold = wrap.lines.length > 8;
+  // Seven people fit one screenshot as rows, every one of them selling; past seven, the no-sale names share one line.
+  const fold = wrap.lines.length > 7;
 
   return (
     <>
-      <Header day={day} today={today} badge={verdict} />
+      <Header day={day} today={today} badge={verdict} total={wrap.teamCents > 0 ? `${formatDollars(wrap.teamCents)} · ${wrap.policies} ${wrap.policies === 1 ? "policy" : "policies"}` : undefined} />
 
       {/* Player of the day */}
       {wrap.player ? (
         <div className="relative overflow-hidden rounded-[22px] bg-tide-strong p-4 text-white shadow-card">
-          <Crown className="absolute top-4 right-4 h-7 w-7 opacity-90" />
-          <Eyebrow className="text-white/80">Player of the day</Eyebrow>
+          <Crown className="absolute top-4 right-4 h-7 w-7" />
+          <Eyebrow className="text-white">Player of the day</Eyebrow>
           <p className="mt-1 font-mono text-[32px] leading-none font-bold tracking-[-0.03em]">{formatDollars(wrap.player.premiumCents)}</p>
           <div className="mt-2.5 flex items-center gap-3">
-            <Avatar name={wrap.player.name} tone={wrap.player.tone} size={36} className="bg-surface text-accent-text" />
+            <Avatar name={wrap.player.name} tone="bg-surface text-accent-text" size={36} />
             <div className="min-w-0">
               <p className="truncate text-[17px] leading-tight font-extrabold">{wrap.player.name}</p>
-              <p className="truncate text-[12px] font-semibold text-white/85">
+              <p className="truncate text-[12px] font-semibold">
                 {wrap.player.policies} {wrap.player.policies === 1 ? "policy" : "policies"}
                 {wrap.player.carriers.length > 0 && ` · ${carrierSummary(wrap.player.carriers)}`}
               </p>
             </div>
           </div>
           {best && (
-            <p className="mt-2.5 truncate border-t border-white/20 pt-2 text-[12px] font-semibold text-white/90">
-              Best deal · {firstName(best.agentName)} · <span className="font-mono text-[13px] text-white">{formatDollars(best.premiumCents)}</span>
+            <p className="mt-2.5 truncate border-t border-on-grad-line pt-2 text-[12px] font-semibold">
+              Best deal · {firstName(best.agentName)} · <span className="font-mono text-[13px]">{formatDollars(best.premiumCents)}</span>
+              {best.policies > 1 && ` · ${best.policies} policies`}
               {best.carrier && ` · ${best.carrier}`}
-              {best.product && ` · ${best.product}`} · {formatClock(best.createdAt)}
+              {best.product && ` · ${best.product}`}
+              {/* The clock means something only when the sale was logged on its own day (not a past day or an import). */}
+              {todayInDetroit(new Date(best.createdAt)) === best.soldOn && ` · ${formatClock(best.createdAt)}`}
             </p>
           )}
         </div>
@@ -104,7 +107,7 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
 
       <p data-wrap-foot className="mt-2.5 flex items-center justify-between gap-3 px-1 text-[11px] font-semibold text-gray-500">
         <span>
-          {wrap.month.policies} {wrap.month.policies === 1 ? "policy" : "policies"} this month
+          {wrap.month.policies} {wrap.month.policies === 1 ? "policy" : "policies"} in {monthName(wrap.month.key)}
           {wrap.month.goalCents > 0 && ` · ${wrap.month.goalPct}% of the goal`}
         </span>
         <span className="shrink-0">Scorecard by TKG</span>
@@ -116,18 +119,19 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
 function verdictBadge(w: DayWrap): { text: string; tone: "green" | "amber" | "gray" | "blue" } {
   const v = w.verdict;
   if (w.teamCents === 0 && v.kind !== "off_day") return { text: w.when === "today" ? "No sales yet" : "No sales", tone: "gray" };
-  if (v.kind === "won") return { text: `Day won · ${formatDollars(w.teamCents)}, needed ${formatDollars(v.neededCents)}`, tone: "green" };
-  if (v.kind === "short") return { text: `${formatDollars(v.shortCents)} short · ${formatDollars(w.teamCents)}, needed ${formatDollars(v.neededCents)}`, tone: "amber" };
-  if (v.kind === "goal_hit") return { text: `Goal already hit · ${formatDollars(w.teamCents)} ${w.when === "today" ? "today" : "that day"}`, tone: "green" };
-  if (v.kind === "off_day") return { text: `${weekday(w.day) === 6 ? "Saturday" : "Sunday"} · ${formatDollars(w.teamCents)}`, tone: "blue" };
-  return { text: `${formatDollars(w.teamCents)} ${w.when === "today" ? "today" : "that day"}`, tone: "blue" };
+  // One fact per pill; the day's total sits in the date line.
+  if (v.kind === "won") return { text: `Day won · needed ${formatDollars(v.neededCents)}`, tone: "green" };
+  if (v.kind === "short") return { text: `${formatDollars(v.neededCents - w.teamCents)} short of ${formatDollars(v.neededCents)}`, tone: "amber" };
+  if (v.kind === "goal_hit") return { text: "Goal already hit", tone: "green" };
+  if (v.kind === "off_day") return { text: weekday(w.day) === 6 ? "Saturday" : "Sunday", tone: "blue" };
+  return { text: "No goal set", tone: "gray" };
 }
 
 function WrapRow({ line }: { line: WrapLine }) {
   const sold = line.premiumCents > 0;
   const medal = line.rank === 1 ? "text-gold" : line.rank === 2 ? "text-silver" : line.rank === 3 ? "text-bronze" : "text-gray-500";
   return (
-    <li className={cn("flex items-center gap-3 px-4", ROW_INSET.plain, sold ? "py-1.5" : "py-1 opacity-50")}>
+    <li className={cn("flex items-center gap-3 px-4 py-1", ROW_INSET.plain, !sold && "opacity-50")}>
       <span className={cn("w-4 shrink-0 text-center font-mono text-[14px] font-bold", medal)}>{line.rank ?? "–"}</span>
       <Avatar name={line.name} tone={line.tone} size={sold ? 32 : 28} />
       <div className="min-w-0 flex-1">
@@ -147,7 +151,7 @@ function WrapRow({ line }: { line: WrapLine }) {
   );
 }
 
-function Header({ day, today, badge }: { day: string; today: string; badge?: { text: string; tone: "green" | "amber" | "gray" | "blue" } }) {
+function Header({ day, today, badge, total }: { day: string; today: string; badge?: { text: string; tone: "green" | "amber" | "gray" | "blue" }; total?: string }) {
   const prev = addDays(day, -1);
   const next = addDays(day, 1);
   const isToday = day === today;
@@ -155,9 +159,12 @@ function Header({ day, today, badge }: { day: string; today: string; badge?: { t
     <div className="mb-3 flex items-center justify-between gap-3">
       <div className="min-w-0">
         <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.035em] text-gray-900">Wrap</h1>
-        <p className="mt-0.5 text-[14px] font-medium text-gray-500">{dayLabelLong(day)}</p>
+        <p className="mt-0.5 text-[14px] font-medium text-gray-500">
+          {dayLabelLong(day)}
+          {total && <span className="font-mono font-semibold text-gray-900"> · {total}</span>}
+        </p>
         {badge && (
-          <Badge tone={badge.tone} className="mt-1.5 max-w-full whitespace-normal">
+          <Badge tone={badge.tone} className="mt-1.5 max-w-full">
             {badge.text}
           </Badge>
         )}

@@ -324,13 +324,13 @@ export function TabBarView({ pathname, navRef }: { pathname: string; navRef?: Re
                 aria-current={isActive(pathname, l) ? "page" : undefined}
                 onClick={() => pick(l.href)}
                 className={cn(
-                  "flex h-[46px] items-center gap-2 rounded-full text-[14px] whitespace-nowrap transition-colors",
-                  active ? "bg-tint pr-[17px] pl-[14px] font-bold text-accent-text" : "px-3.5 font-semibold text-gray-600 active:bg-gray-100",
+                  // Four named tabs fit a 390px phone with the label under the icon (iOS style).
+                  "flex h-[50px] w-[76px] flex-col items-center justify-center gap-0.5 rounded-2xl text-[10.5px] leading-none whitespace-nowrap transition-colors max-[359px]:w-[66px]",
+                  active ? "bg-tint font-bold text-accent-text" : "font-semibold text-gray-600 active:bg-gray-100",
                 )}
               >
-                <NavIcon name={l.icon} active={active} size={active ? 20 : 22} />
-                {/* Four tabs do not fit with every label on a 390px phone: the open tab names itself, the rest are icons. */}
-                <span className={active ? undefined : "sr-only"}>{l.label}</span>
+                <NavIcon name={l.icon} active={active} size={22} />
+                <span>{l.label}</span>
               </Link>
             );
           })}

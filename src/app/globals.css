@@ -90,6 +90,8 @@
   --color-bar: var(--t-bar);
   --color-chip: var(--t-chip-bg);
   --color-chip-text: var(--t-chip-text);
+  /* A hairline on the gradient (the Wrap's hero), same in both modes */
+  --color-on-grad-line: var(--t-on-grad-line);
 }
 
 /* Light (default) */
@@ -166,6 +168,7 @@
   --t-bar: #f3a6a0;
   --t-chip-bg: #fde3e1;
   --t-chip-text: #9a1f26;
+  --t-on-grad-line: rgba(255, 255, 255, 0.28);
   --t-shadow: 0 1px 2px rgba(21, 23, 28, 0.04), 0 8px 24px rgba(21, 23, 28, 0.06);
   --t-shadow-float: 0 2px 6px rgba(21, 23, 28, 0.06), 0 18px 40px rgba(21, 23, 28, 0.14);
 

@@ -1,0 +1,148 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+@font-face{font-family:"PJS";src:url("file:///home/user/tkg-scorecard/node_modules/@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-normal.woff2") format("woff2");font-weight:200 800}
+@font-face{font-family:"SG";src:url("file:///home/user/tkg-scorecard/node_modules/@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2") format("woff2");font-weight:300 700}
+:root{--page:#f2f3f7;--card:#fff;--raised:#f6f7fa;--line:#e6e8ee;--g400:#9aa0ad;--g500:#646a78;--g600:#555b69;--g700:#3d424d;--g900:#15171c;
+--accent:#c42b32;--accent-text:#a3242a;--tint:#fdecec;--grad:linear-gradient(135deg,#c42b32,#ff6b57);--gradstrong:linear-gradient(135deg,#b8262d,#d1392c);--bar:#f3a6a0;--chip:#fde3e1;--chiptext:#9a1f26;--gold:#c98a00;--silver:#6f7787;--bronze:#a9622a;--up:#15803d;--down:#b45309;--track:#e4e6ec;--segment:#fff;
+--amber100:#fff1cc;--amber800:#8a5a00;--purple100:#e9dffd;--purple800:#5b2db0;--blue100:#e6ecff;--blue800:#1d3a9f;--green100:#dff5e8;--green800:#12663a;--red100:#fbdcdc;--red800:#a3242a;--green50:#eaf8f0;--green700:#167a45;
+--shadow:0 1px 2px rgba(21,23,28,.04),0 8px 24px rgba(21,23,28,.06)}
+html[data-theme=dark]{--page:#0b0d12;--card:#141823;--raised:#1b2030;--line:#262c3b;--g400:#6e768a;--g500:#8c93a5;--g600:#a3a9b8;--g700:#c3c8d4;--g900:#eef0f5;
+--accent:#ff6b57;--accent-text:#ff8a78;--tint:#3a1a1a;--grad:linear-gradient(135deg,#e5484d,#ff8a5c);--gradstrong:linear-gradient(135deg,#c62f36,#d8503f);--bar:#5a2a2d;--chip:#3d1a16;--chiptext:#fca5a5;--gold:#f5c451;--silver:#b7bfcf;--bronze:#e0a070;--up:#4ade80;--down:#fbbf24;--track:#1b2030;--segment:#2a3142;
+--amber100:#3d2a0a;--amber800:#fcd34d;--purple100:#2e1d47;--purple800:#d8b4fe;--blue100:#1c2543;--blue800:#b4c4ff;--green100:#143221;--green800:#86efac;--red100:#3d1a16;--red800:#fca5a5;--green50:#143221;--green700:#86efac;
+--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--g900);font-family:"PJS",-apple-system,sans-serif;width:390px;min-height:844px;-webkit-font-smoothing:antialiased}
+.mono{font-family:"SG",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.screen{display:none;padding:0 16px 110px;position:relative;min-height:844px}
+.screen.on{display:block}
+.nav{display:flex;align-items:center;justify-content:space-between;height:56px;padding-top:8px}
+.lockup{display:flex;align-items:center;gap:8px}.mark{width:34px;height:34px;border-radius:10px;background:var(--grad);position:relative}
+.mark i{position:absolute;bottom:8px;background:#fff;border-radius:2px}.mark i.a{left:7px;width:5px;height:9px}.mark i.b{left:14px;width:6px;height:15px}.mark i.c{left:22px;width:5px;height:7px}.mark b{position:absolute;left:15px;top:5px;width:4px;height:4px;background:#fff;border-radius:50%}
+.lockup .t{font-weight:800;font-size:16px;letter-spacing:-.02em;line-height:1}.lockup .t small{display:block;font-size:9px;font-weight:600;color:var(--g500);letter-spacing:0}
+.ak{width:36px;height:36px;border-radius:50%;background:var(--purple100);color:var(--purple800);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center}
+h1{font-size:34px;font-weight:800;letter-spacing:-.03em;margin:14px 0 2px;line-height:1.05}
+.sub{color:var(--g500);font-size:15px;font-weight:600;margin:0 0 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.badge{font-size:12px;font-weight:700;border-radius:999px;padding:4px 10px}.badge.up{background:var(--green100);color:var(--green800)}.badge.tint{background:var(--tint);color:var(--accent-text)}.badge.amber{background:var(--amber100);color:var(--amber800)}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--track);border-radius:12px;padding:3px;margin:0 0 12px}
+.seg span{text-align:center;font-size:13px;font-weight:700;padding:8px 0;border-radius:9px;color:var(--g600)}.seg span.on{background:var(--segment);color:var(--g900);box-shadow:var(--shadow)}
+.card{background:var(--card);border-radius:22px;box-shadow:var(--shadow);padding:16px;margin-bottom:12px}
+.eyebrow{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--g500)}
+.big{font-size:38px;font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:6px}
+.row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}.row:last-child{border-bottom:0}
+.rank{width:18px;text-align:center;font-weight:800;color:var(--g500);font-size:13px}
+.rank.g{color:var(--gold)}.rank.s{color:var(--silver)}.rank.b{color:var(--bronze)}
+.av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;flex:none}
+.av.amber{background:var(--amber100);color:var(--amber800)}.av.purple{background:var(--purple100);color:var(--purple800)}.av.blue{background:var(--blue100);color:var(--blue800)}.av.green{background:var(--green100);color:var(--green800)}.av.red{background:var(--red100);color:var(--red800)}
+.name{flex:1;min-width:0}.name b{display:block;font-size:15px;font-weight:700;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.name small{display:block;font-size:12px;color:var(--g500);font-weight:600;margin-top:1px}
+.amt{text-align:right}.amt b{display:block;font-size:17px;font-weight:700;letter-spacing:-.02em}.amt small{display:block;font-size:11px;color:var(--g500);font-weight:600}
+.dim{opacity:.45}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.chip{background:var(--chip);color:var(--chiptext);font-weight:700;font-size:12px;border-radius:999px;padding:5px 10px}
+.hero{background:var(--grad);color:#fff;border-radius:22px;padding:16px;margin-bottom:12px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.hero .eyebrow{color:rgba(255,255,255,.8)}.hero .big{color:#fff}.hero .who{display:flex;align-items:center;gap:10px;margin-top:10px}.hero .who .av{background:#fff;color:#c42b32;width:40px;height:40px;font-size:13px}.hero .who b{font-size:18px;font-weight:800;display:block}.hero .who small{font-size:12px;opacity:.9;font-weight:600}
+.crown{position:absolute;right:16px;top:14px;font-size:22px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.tile{background:var(--card);border-radius:18px;box-shadow:var(--shadow);padding:12px 12px 12px;position:relative}
+.tile .eyebrow{font-size:10px}.tile .v{font-size:22px;font-weight:700;letter-spacing:-.03em;margin-top:6px;line-height:1.05}.tile .w{display:flex;align-items:center;gap:7px;margin-top:8px}.tile .w .av{width:24px;height:24px;font-size:9px}.tile .w b{font-size:13px;font-weight:700}.tile .w small{font-size:11px;color:var(--g500);display:block;font-weight:600}
+.tile.hot{background:var(--grad);color:#fff}.tile.hot .eyebrow,.tile.hot small{color:rgba(255,255,255,.85)}
+.tabbar{position:absolute;left:16px;right:16px;bottom:22px;height:62px;background:var(--card);border-radius:999px;box-shadow:0 2px 6px rgba(21,23,28,.06),0 18px 40px rgba(21,23,28,.14);display:flex;align-items:center;justify-content:space-around;padding:0 6px}
+.tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;font-weight:700;color:var(--g500);width:70px}.tab.on{color:var(--accent-text)}.tab i{width:22px;height:22px;border-radius:7px;background:currentColor;opacity:.9}
+.tab.on i{background:var(--grad);opacity:1}
+.stat{display:flex;gap:10px}.stat>div{flex:1;background:var(--raised);border-radius:14px;padding:10px 12px}.stat .eyebrow{font-size:10px}.stat .v{font-size:18px;font-weight:700;letter-spacing:-.02em;margin-top:4px;white-space:nowrap}.stat .v.up{color:var(--up)}
+.foot{display:flex;justify-content:space-between;color:var(--g500);font-size:11px;font-weight:600;padding:2px 4px}
+.cols{display:grid;grid-template-columns:18px 34px 1fr 52px 44px 64px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}.cols:last-child{border-bottom:0}
+.cols .h{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--g500)}
+.cols .n{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cols .m{text-align:right;font-size:13px;font-weight:700}.cols .m small{display:block;font-size:10px;color:var(--g500);font-weight:600}
+.tt{display:inline-flex;align-items:center;gap:6px;background:var(--raised);border-radius:10px;padding:6px 10px;font-weight:700;font-size:14px}
+.input{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}.input:last-child{border:0}.input .box{margin-left:auto;width:96px;height:40px;border:1px solid var(--line);border-radius:12px;background:var(--raised);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px}
+.btn{display:block;background:var(--gradstrong);color:#fff;font-weight:800;text-align:center;border-radius:14px;padding:13px;font-size:15px;margin-top:12px}
+.btn.ghost{background:var(--raised);color:var(--g900)}
+.note{font-size:12px;color:var(--g500);font-weight:600;margin-top:8px}
+</style></head><body>
+
+<!-- A: Daily Wrap -->
+<section class="screen" id="A">
+  <div class="nav"><div class="lockup"><div class="mark"><b></b><i class="a"></i><i class="b"></i><i class="c"></i></div><div class="t">Scorecard<small>by TKG</small></div></div><div class="ak">AK</div></div>
+  <h1>Wrap</h1>
+  <p class="sub">Wednesday, Oct 28 <span class="badge up">Day won · $11,172 of $6,066 needed</span></p>
+  <div class="seg"><span class="on">Today</span><span>This month</span></div>
+  <div class="hero"><span class="crown">👑</span><div class="eyebrow">Player of the day</div><div class="big mono">$5,424</div>
+    <div class="who"><div class="av">MA</div><div><b>Maira Angulo</b><small>3 policies · 3h 40m on the phone · AHL ×3</small></div></div></div>
+  <div class="card">
+    <div class="eyebrow">Everybody today</div>
+    <div id="A-rows"></div>
+  </div>
+  <div class="card"><div class="eyebrow">Best deal</div>
+    <div class="row" style="border:0;padding-bottom:0"><div class="av blue">MA</div><div class="name"><b>Maira · AHL · Whole life</b><small>3:27 PM</small></div><div class="amt"><b class="mono">$2,700</b></div></div>
+    <div class="chips"><span class="chip">AHL 3</span><span class="chip">Newbridge 2</span><span class="chip">AmAm 1</span><span class="chip" style="background:var(--raised);color:var(--g600)">Whole life 6</span></div>
+  </div>
+  <div class="foot"><span>136 policies · 94% of the month's goal</span><span>Scorecard by TKG</span></div>
+  <div class="tabbar"><div class="tab"><i></i>This month</div><div class="tab"><i></i>Log a sale</div><div class="tab on"><i></i>Wrap</div><div class="tab"><i></i>Team</div></div>
+</section>
+
+<!-- B: Awards -->
+<section class="screen" id="B">
+  <div class="nav"><div class="lockup"><div class="mark"><b></b><i class="a"></i><i class="b"></i><i class="c"></i></div><div class="t">Scorecard<small>by TKG</small></div></div><div class="ak">AK</div></div>
+  <h1>Awards</h1>
+  <p class="sub">Wednesday, Oct 28 <span class="badge up">Day won</span></p>
+  <div class="seg"><span class="on">Today</span><span>This month</span></div>
+  <div class="grid">
+    <div class="tile hot"><div class="eyebrow">👑 Top producer</div><div class="v mono">$5,424</div><div class="w"><div class="av" style="background:#fff;color:#c42b32">MA</div><div><b>Maira</b><small>3 policies</small></div></div></div>
+    <div class="tile"><div class="eyebrow">💎 Best deal</div><div class="v mono">$2,700</div><div class="w"><div class="av blue">MA</div><div><b>Maira</b><small>AHL · Whole life</small></div></div></div>
+    <div class="tile"><div class="eyebrow">📞 Most talk time</div><div class="v mono">4h 05m</div><div class="w"><div class="av amber">AA</div><div><b>Alex</b><small>no sale yet</small></div></div></div>
+    <div class="tile"><div class="eyebrow">🔥 Hot streak</div><div class="v mono">9 days</div><div class="w"><div class="av purple">AK</div><div><b>Anersi</b><small>a sale every day</small></div></div></div>
+    <div class="tile"><div class="eyebrow">⚡ First on the board</div><div class="v mono">10:12 AM</div><div class="w"><div class="av purple">AK</div><div><b>Anersi</b><small>Newbridge · $2,112</small></div></div></div>
+    <div class="tile"><div class="eyebrow">🏁 Closer</div><div class="v mono">5:24 PM</div><div class="w"><div class="av blue">MA</div><div><b>Maira</b><small>AHL · $2,196</small></div></div></div>
+  </div>
+  <div class="card">
+    <div class="eyebrow">The day</div>
+    <div class="stat"><div><div class="eyebrow">Team</div><div class="v mono up">$11,172</div></div><div><div class="eyebrow">Policies</div><div class="v mono">6</div></div><div><div class="eyebrow">Talk time</div><div class="v mono">19h 10m</div></div></div>
+    <div id="B-rows" style="margin-top:6px"></div>
+  </div>
+  <div class="foot"><span>Scorecard by TKG</span><span>94% of the month's goal</span></div>
+  <div class="tabbar"><div class="tab"><i></i>This month</div><div class="tab"><i></i>Log a sale</div><div class="tab on"><i></i>Awards</div><div class="tab"><i></i>Team</div></div>
+</section>
+
+<!-- C: Standings (month) -->
+<section class="screen" id="C">
+  <div class="nav"><div class="lockup"><div class="mark"><b></b><i class="a"></i><i class="b"></i><i class="c"></i></div><div class="t">Scorecard<small>by TKG</small></div></div><div class="ak">AK</div></div>
+  <h1>Standings</h1>
+  <p class="sub">October 2026 <span class="badge amber">2 business days left</span></p>
+  <div class="seg"><span>Today</span><span class="on">This month</span></div>
+  <div class="card">
+    <div class="stat"><div><div class="eyebrow">Team</div><div class="v mono">$187,869</div></div><div><div class="eyebrow">Of goal</div><div class="v mono up">94%</div></div><div><div class="eyebrow">Policies</div><div class="v mono">136</div></div></div>
+  </div>
+  <div class="card" style="padding:12px 14px">
+    <div class="cols"><span></span><span></span><span class="h">Name</span><span class="h" style="text-align:right">Policies</span><span class="h" style="text-align:right">Avg</span><span class="h" style="text-align:right">Premium</span></div>
+    <div id="C-rows"></div>
+  </div>
+  <div class="card"><div class="eyebrow">Month awards</div>
+    <div class="chips"><span class="chip">💎 Best deal · Anersi · $4,210</span><span class="chip">🔥 Longest streak · Anersi · 9 days</span><span class="chip">📞 Talk time · Alex · 61h</span><span class="chip">🏆 Best day · Oct 15 · $14,440</span><span class="chip">🏛 AHL king · Maira · 11</span></div>
+  </div>
+  <div class="foot"><span>Scorecard by TKG</span><span>Wed, Oct 28 · 7:07 PM</span></div>
+  <div class="tabbar"><div class="tab"><i></i>This month</div><div class="tab"><i></i>Log a sale</div><div class="tab on"><i></i>Standings</div><div class="tab"><i></i>Team</div></div>
+</section>
+
+<!-- D: Talk time entry -->
+<section class="screen" id="D">
+  <div class="nav"><div class="lockup"><div class="mark"><b></b><i class="a"></i><i class="b"></i><i class="c"></i></div><div class="t">Scorecard<small>by TKG</small></div></div><div class="ak">AK</div></div>
+  <h1>Talk time</h1>
+  <p class="sub">Wednesday, Oct 28 · from the dialer, once a day</p>
+  <div class="card">
+    <div id="D-rows"></div>
+    <div class="btn">Save</div>
+    <p class="note">Hours and minutes, as the dialer shows them. Shows up on the Wrap within 5 seconds.</p>
+  </div>
+  <div class="tabbar"><div class="tab"><i></i>This month</div><div class="tab"><i></i>Log a sale</div><div class="tab on"><i></i>Wrap</div><div class="tab"><i></i>Team</div></div>
+</section>
+
+<script>
+const P=[["Maira Angulo","MA","blue",5424,3,"3h 40m",16200,15],["Anersi Koka","AK","purple",4800,2,"3h 12m",67515,44],["Moe Karim","MK","red",948,1,"2h 48m",32166,20],["Alex Alekseyev","AA","amber",0,0,"4h 05m",49400,34],["Tina Kehrig","TK","purple",0,0,"1h 55m",9936,9],["Matt Fouchey","MF","green",0,0,"2h 10m",7420,9],["Samantha Marty","SM","amber",0,0,"1h 20m",5232,5]];
+const $=n=>"$"+n.toLocaleString("en-US");
+const rk=["g","s","b"];
+document.getElementById("A-rows").innerHTML=P.map((p,i)=>`<div class="row ${p[3]?"":"dim"}"><span class="rank ${p[3]&&rk[i]||""}">${p[3]?i+1:"–"}</span><div class="av ${p[2]}">${p[1]}</div><div class="name"><b>${p[0]}</b><small>${p[5]} on the phone${p[4]?` · ${p[4]} ${p[4]==1?"policy":"policies"}`:" · no sale"}</small></div><div class="amt"><b class="mono">${p[3]?$(p[3]):"$0"}</b></div></div>`).join("");
+document.getElementById("B-rows").innerHTML=P.slice(0,7).map((p,i)=>`<div class="row ${p[3]?"":"dim"}" style="padding:7px 0"><div class="av ${p[2]}" style="width:28px;height:28px;font-size:10px">${p[1]}</div><div class="name"><b style="font-size:14px">${p[0].split(" ")[0]}</b></div><span class="mono" style="font-size:12px;color:var(--g500);font-weight:600">${p[5]}</span><div class="amt" style="width:70px"><b class="mono" style="font-size:15px">${$(p[3])}</b></div></div>`).join("");
+const M=[...P].sort((a,b)=>b[6]-a[6]);
+document.getElementById("C-rows").innerHTML=M.map((p,i)=>`<div class="cols"><span class="rank ${rk[i]||""}">${i+1}</span><div class="av ${p[2]}" style="width:30px;height:30px;font-size:10px">${p[1]}</div><span class="n">${p[0].split(" ")[0]}</span><span class="m mono">${p[7]}</span><span class="m mono">${$(Math.round(p[6]/p[7]))}</span><span class="m mono">${$(p[6])}</span></div>`).join("");
+document.getElementById("D-rows").innerHTML=P.map(p=>`<div class="input"><div class="av ${p[2]}">${p[1]}</div><b style="font-size:15px">${p[0]}</b><div class="box mono">${p[5].replace("h ",":").replace("m","")}</div></div>`).join("");
+const q=new URLSearchParams(location.search);document.getElementById(q.get("s")||"A").classList.add("on");if(q.get("t")==="dark")document.documentElement.setAttribute("data-theme","dark");
+</script></body></html>

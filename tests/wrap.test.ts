@@ -18,7 +18,8 @@ const agents = [
 
 function input(sales: FeedSale[], goal = 200_000): WrapInput {
   const productionCents = sales.reduce((s, x) => s + x.premiumCents, 0);
-  return { clock: { key: "2026-10", today: "2026-10-28" }, team: { goalCents: goal * 100, productionCents, policies: sales.length, goalPct: 94 }, agents, sales };
+  void productionCents;
+  return { clock: { key: "2026-10", today: "2026-10-28" }, team: { goalCents: goal * 100 }, agents, sales };
 }
 
 test("a day's wrap: ranks, player, best deal, carriers, products", () => {
@@ -56,6 +57,19 @@ test("a day's wrap: ranks, player, best deal, carriers, products", () => {
     { name: "Term", count: 1 },
   ]);
   assert.equal(w.month.policies, 7);
+  assert.equal(w.month.productionCents, sales.reduce((s, x) => s + x.premiumCents, 0));
+  // The month as it stood on an earlier day
+  const earlier = buildWrap(input(sales), "2026-10-27");
+  assert.equal(earlier.month.policies, 1);
+  assert.equal(earlier.month.productionCents, 9000 * 100);
+  assert.equal(earlier.month.goalPct, 5);
+});
+
+test("the best deal is a single policy; a day's imported total counts only when nothing else was logged", () => {
+  const multi = sale("a", "Anersi Koka", "2026-10-28", 6576, { policies: 4 });
+  const single = sale("b", "Alex Alekseyev", "2026-10-28", 2500);
+  assert.equal(buildWrap(input([multi, single]), "2026-10-28").bestSale?.id, single.id);
+  assert.equal(buildWrap(input([multi]), "2026-10-28").bestSale?.id, multi.id);
 });
 
 test("the biggest deal on a tie is the earliest one", () => {
@@ -64,12 +78,12 @@ test("the biggest deal on a tie is the earliest one", () => {
 });
 
 test("the day's verdict against what the goal needed", () => {
-  // Before Wed Oct 28: $176,697 of $200,000; Wed, Thu, Fri left (3 days, today included) => $7,768 a day.
+  // Before Wed Oct 28: $176,697 of $200,000; Wed, Thu, Fri left (3 days, today included) => $7,768 a day, whole dollars.
   const before = sale("a", "Anersi Koka", "2026-10-27", 176_697);
-  assert.equal(neededOnDay(input([before]), "2026-10-28"), Math.ceil((23_303 * 100) / 3));
+  assert.equal(neededOnDay(input([before]), "2026-10-28"), 7768 * 100);
   const short = buildWrap(input([before, sale("c", "Maira Angulo", "2026-10-28", 5000)]), "2026-10-28");
   assert.equal(short.verdict.kind, "short");
-  if (short.verdict.kind === "short") assert.equal(short.verdict.shortCents, Math.ceil((23_303 * 100) / 3) - 5000 * 100);
+  if (short.verdict.kind === "short") assert.equal(short.verdict.shortCents, 2768 * 100);
   const won = buildWrap(input([before, sale("c", "Maira Angulo", "2026-10-28", 8000)]), "2026-10-28");
   assert.equal(won.verdict.kind, "won");
   // The last business day needs all of what is left; a sale after the goal is "goal_hit".
