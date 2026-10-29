@@ -1,5 +1,5 @@
 import type { FeedSale } from "./board";
-import { datesOfMonth, isBusinessDay, monthKeyOf } from "./month";
+import { addDays, datesOfMonth, isBusinessDay, monthKeyOf } from "./month";
 
 /**
  * The Wrap: one day of the team's month, shaped for a single iPhone screenshot sent to the group
@@ -59,6 +59,17 @@ export interface DayWrap {
   products: WrapCount[];
   /** The month up to and including this day (imported days and earlier months read as they stood). */
   month: { key: string; policies: number; goalPct: number; goalCents: number; productionCents: number };
+  /**
+   * Where this day stands among the month's selling days so far (1 = the best day), and how many
+   * such days there are; null when nothing sold that day.
+   */
+  dayRank: { rank: number; of: number } | null;
+  /**
+   * The team's hot streak: business days in a row with at least one sale, ending on this day, or on
+   * the business day before it while this day has none yet. `since` is the streak's first day.
+   * Weekends neither extend nor break it. Counted within the month only.
+   */
+  streak: { days: number; since: string | null; alive: boolean };
 }
 
 function tally(items: Array<{ name: string | null; count: number }>): WrapCount[] {
@@ -125,6 +136,31 @@ export function buildWrap(input: WrapInput, day: string): DayWrap {
   const toDate = input.sales.filter((s) => s.soldOn <= day);
   const productionToDate = toDate.reduce((sum, s) => sum + s.premiumCents, 0);
 
+  // The day's rank among the month's selling days so far (competition ranking: ties share a rank).
+  const byDay = new Map<string, number>();
+  for (const s of toDate) byDay.set(s.soldOn, (byDay.get(s.soldOn) ?? 0) + s.premiumCents);
+  const dayRank = teamCents > 0 ? { rank: 1 + [...byDay.values()].filter((c) => c > teamCents).length, of: byDay.size } : null;
+
+  // The hot streak: walk back over business days from this day (or the one before it while this
+  // day is still empty) while each had a sale; weekends are skipped.
+  const first = `${monthKeyOf(day)}-01`;
+  const soldDays = new Set(byDay.keys());
+  const previousBusiness = (d: string) => {
+    let p = addDays(d, -1);
+    while (!isBusinessDay(p)) p = addDays(p, -1);
+    return p;
+  };
+  let cursor = isBusinessDay(day) ? day : previousBusiness(day);
+  const alive = soldDays.has(cursor);
+  if (!alive) cursor = previousBusiness(cursor);
+  let streakDays = 0;
+  let since: string | null = null;
+  while (cursor >= first && soldDays.has(cursor)) {
+    streakDays++;
+    since = cursor;
+    cursor = previousBusiness(cursor);
+  }
+
   let verdict: WrapVerdict;
   if (input.team.goalCents <= 0) verdict = { kind: "no_goal" };
   else if (!isBusinessDay(day)) verdict = { kind: "off_day" };
@@ -153,7 +189,18 @@ export function buildWrap(input: WrapInput, day: string): DayWrap {
       goalCents: input.team.goalCents,
       productionCents: productionToDate,
     },
+    dayRank,
+    streak: { days: streakDays, since, alive },
   };
+}
+
+/** "Best day", "2nd best day", "3rd best day", "4th best day" … */
+export function dayRankLabel(rank: number): string {
+  if (rank === 1) return "Best day";
+  const mod10 = rank % 10;
+  const mod100 = rank % 100;
+  const suffix = mod10 === 1 && mod100 !== 11 ? "st" : mod10 === 2 && mod100 !== 12 ? "nd" : mod10 === 3 && mod100 !== 13 ? "rd" : "th";
+  return `${rank}${suffix} best day`;
 }
 
 /** "AHL ×2 · Newbridge" for a line's carriers. */

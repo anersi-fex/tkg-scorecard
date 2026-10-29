@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildWrap, carrierSummary, neededOnDay, type WrapInput } from "../src/lib/wrap";
+import { buildWrap, carrierSummary, dayRankLabel, neededOnDay, type WrapInput } from "../src/lib/wrap";
 import type { FeedSale } from "../src/lib/board";
 
 let n = 0;
@@ -92,6 +92,38 @@ test("the day's verdict against what the goal needed", () => {
   // A weekend has no daily need; no goal, no verdict.
   assert.equal(buildWrap(input([before]), "2026-10-31").verdict.kind, "off_day");
   assert.equal(buildWrap(input([before], 0), "2026-10-28").verdict.kind, "no_goal");
+});
+
+test("the day's rank in the month and the hot streak", () => {
+  // Business days Oct 21 (Wed) to Oct 28 (Wed), a weekend in between, and Oct 19 (Mon) with nothing on Oct 20.
+  const sales = [
+    sale("a", "Anersi Koka", "2026-10-19", 1000),
+    sale("a", "Anersi Koka", "2026-10-21", 3000),
+    sale("b", "Alex Alekseyev", "2026-10-22", 4000),
+    sale("c", "Maira Angulo", "2026-10-23", 2000),
+    sale("a", "Anersi Koka", "2026-10-26", 5000),
+    sale("b", "Alex Alekseyev", "2026-10-27", 3000),
+    sale("c", "Maira Angulo", "2026-10-28", 4000),
+  ];
+  const wed = buildWrap(input(sales), "2026-10-28");
+  assert.deepEqual(wed.dayRank, { rank: 2, of: 7 }); // $4,000 ties Oct 22 and trails Oct 26
+  assert.deepEqual(wed.streak, { days: 6, since: "2026-10-21", alive: true }); // the weekend neither counts nor breaks
+  assert.equal(dayRankLabel(wed.dayRank!.rank), "2nd best day");
+  assert.equal(dayRankLabel(1), "Best day");
+  assert.equal(dayRankLabel(3), "3rd best day");
+  assert.equal(dayRankLabel(11), "11th best day");
+  assert.equal(dayRankLabel(22), "22nd best day");
+  // Today with nothing yet: the streak up to yesterday stands, not alive
+  const thu = buildWrap({ ...input(sales), clock: { key: "2026-10", today: "2026-10-29" } }, "2026-10-29");
+  assert.equal(thu.dayRank, null);
+  assert.deepEqual(thu.streak, { days: 6, since: "2026-10-21", alive: false });
+  // A Saturday carries Friday's streak, still alive (weekends neither extend nor break it)
+  const sat = buildWrap(input(sales), "2026-10-24");
+  assert.deepEqual(sat.streak, { days: 3, since: "2026-10-21", alive: true });
+  // The best day of the month, and a day after a gap
+  assert.deepEqual(buildWrap(input(sales), "2026-10-26").dayRank, { rank: 1, of: 5 });
+  assert.deepEqual(buildWrap(input(sales), "2026-10-21").streak, { days: 1, since: "2026-10-21", alive: true });
+  assert.deepEqual(buildWrap(input(sales), "2026-10-20").streak, { days: 1, since: "2026-10-19", alive: false });
 });
 
 test("a day with nobody: no player, no best deal, everyone unranked", () => {

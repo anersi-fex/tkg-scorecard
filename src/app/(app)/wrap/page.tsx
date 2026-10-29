@@ -3,8 +3,8 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth";
 import { dbConfigured } from "@/lib/supabase";
 import { loadMonthSnapshot } from "@/lib/board";
-import { buildWrap, carrierSummary, type DayWrap, type WrapLine } from "@/lib/wrap";
-import { addDays, dayLabelLong, isDateKey, monthKeyOf, monthName, todayInDetroit, weekday } from "@/lib/month";
+import { buildWrap, carrierSummary, dayRankLabel, type DayWrap, type WrapLine } from "@/lib/wrap";
+import { addDays, dayLabel, dayLabelLong, isDateKey, monthKeyOf, monthName, todayInDetroit, weekday } from "@/lib/month";
 import { formatDollars } from "@/lib/money";
 import { Avatar, firstName } from "@/components/avatar";
 import { Eyebrow, ListCard, ROW_INSET } from "@/components/tide";
@@ -80,6 +80,32 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
         </div>
       )}
 
+      {/* Two headline stats: where the day stands in the month, and the team's hot streak */}
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <Square
+          label={wrap.when === "today" ? "Today so far" : "That day"}
+          value={wrap.dayRank ? dayRankLabel(wrap.dayRank.rank) : "No sales"}
+          sub={wrap.dayRank ? `of ${wrap.dayRank.of} selling ${wrap.dayRank.of === 1 ? "day" : "days"} in ${monthName(wrap.month.key)}` : `nothing on the board ${wrap.when === "today" ? "yet" : "that day"}`}
+          hot={wrap.dayRank?.rank === 1}
+        />
+        <Square
+          label="Hot streak"
+          value={`${wrap.streak.days} ${wrap.streak.days === 1 ? "day" : "days"}`}
+          sub={
+            wrap.streak.days === 0
+              ? wrap.when === "today"
+                ? "start one today"
+                : "no streak that day"
+              : wrap.streak.alive
+                ? `a sale every business day since ${dayLabel(wrap.streak.since!)}`
+                : wrap.when === "today"
+                  ? "keep it alive today"
+                  : `ended that day, from ${dayLabel(wrap.streak.since!)}`
+          }
+          hot={wrap.streak.days >= 5 && wrap.streak.alive}
+        />
+      </div>
+
       {/* Everybody: sold rows ranked; with a long roster the no-sale names fold into one line */}
       <ListCard className="mt-3 pt-2.5">
         <li className="px-4 pb-1">
@@ -125,6 +151,17 @@ function verdictBadge(w: DayWrap): { text: string; tone: "green" | "amber" | "gr
   if (v.kind === "goal_hit") return { text: "Goal already hit", tone: "green" };
   if (v.kind === "off_day") return { text: weekday(w.day) === 6 ? "Saturday" : "Sunday", tone: "blue" };
   return { text: "No goal set", tone: "gray" };
+}
+
+/** One of the two headline squares; `hot` tints the value with the accent. */
+function Square({ label, value, sub, hot }: { label: string; value: string; sub: string; hot?: boolean }) {
+  return (
+    <div className="rounded-[18px] bg-surface px-4 py-3 shadow-card">
+      <Eyebrow>{label}</Eyebrow>
+      <p className={cn("mt-1 truncate text-[20px] leading-tight font-extrabold tracking-[-0.02em]", hot ? "text-accent-text" : "text-gray-900")}>{value}</p>
+      <p className="mt-0.5 text-[11px] leading-tight font-semibold text-gray-500">{sub}</p>
+    </div>
+  );
 }
 
 function WrapRow({ line }: { line: WrapLine }) {

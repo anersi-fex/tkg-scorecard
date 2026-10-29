@@ -263,8 +263,9 @@ try {
   check(wrapText.includes("Alex Alekseyev") && wrapText.includes("$21,750"), "the Wrap names today's player of the day with the day's premium");
   check(wrapText.includes("Everybody today") && wrapText.includes("Best deal"), "the Wrap lists everybody and the best deal");
   check(wrapText.includes("Day won") || wrapText.includes("short of") || /(Saturday|Sunday)/.test(wrapText), "the Wrap judges the day against what the goal needed (or names the weekend)");
-  const footBottom = await p.evaluate(() => document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom);
-  check(footBottom <= 760, `the Wrap fits one iPhone screenshot above the tab bar (ends at ${Math.round(footBottom)}px of 844)`);
+  const fit = await p.evaluate(() => ({ bottom: document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom, pill: document.querySelector("nav[aria-label=Main] > div").getBoundingClientRect().top, height: window.innerHeight }));
+  check(fit.bottom <= fit.pill - 8, `the Wrap fits one iPhone screenshot above the tab bar (ends at ${Math.round(fit.bottom)}px, the tab bar starts at ${Math.round(fit.pill)} of ${fit.height})`);
+  check((await p.textContent("body")).includes("Hot streak") && /[Bb]est day|No sales/.test(await p.textContent("body")), "the Wrap shows the day's rank and the hot streak");
   const wrapOverflow = await p.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
   check(!wrapOverflow, "the Wrap has no sideways scroll");
   const tabs = await p.evaluate(() => {
