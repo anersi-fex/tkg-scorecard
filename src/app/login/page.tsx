@@ -3,9 +3,12 @@ import { redirect } from "next/navigation";
 import { ScoreLockup } from "@/components/brand";
 import { currentRole } from "@/lib/auth";
 import { safeNextPath } from "@/lib/safe-next";
+import { PHONE_VIEWPORT } from "@/lib/phone-viewport";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = { title: "Sign in" };
+/** The sign-in screen draws at the app's 85% on a phone too. */
+export const viewport = PHONE_VIEWPORT;
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const params = await searchParams;

@@ -607,3 +607,12 @@ body {
     animation: none;
   }
 }
+
+/* Phones draw the app at 85% (the viewport in src/lib/phone-viewport.ts): the page is then a fraction
+   of a pixel wider than some screens (504px at 0.85 on a 428pt iPhone is 428.4pt), so it must not
+   bounce sideways. Touch screens only, so a trackpad's back swipe on a computer keeps working. */
+@media (pointer: coarse) {
+  html {
+    overscroll-behavior-x: none;
+  }
+}
