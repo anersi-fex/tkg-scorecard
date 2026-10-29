@@ -68,6 +68,8 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title: "Scorecard", description: "by The Koka Group", images: ["/og.jpg"] },
 };
 
+// The TV board's viewport: plain 100%. The app's screens and the sign-in page export the phone's
+// 85% viewport (src/lib/phone-viewport.ts) over this one.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,

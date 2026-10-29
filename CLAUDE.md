@@ -24,6 +24,7 @@ A sibling of Sales Coach (`anersi-fex/tkg-sales-coach`) with the same Tide look:
 - Forms that can fail (fix a sale, goals, rename, board settings) submit through `onSubmit` + `new FormData` + `startTransition`, never a form `action` prop: React 19 resets a form after an action, which would wipe what the owner typed. The Log form sends `sold_on` only when the person picked a day; the server stamps its own Detroit today otherwise, and refuses a future day.
 - Links the app hands out (desk links, the Shortcut address) come from `appBase()` in `src/lib/app-url.ts`: `APP_URL`, else the request's own host.
 - Timezone: America/Detroit everywhere (`src/lib/timezone.ts`).
+- Phones draw the app at 85%, matching Sales Coach (owner, 2026-10-29: "make the UI smaller and things a bit more legible ... match that with Scorecard"): `src/lib/phone-viewport.ts` (`initialScale: 0.85, maximumScale: 0.85`) is the `viewport` export of the `(app)` layout and the sign-in page, so the page lays out at screen width / 0.85 (459 px on a 390 pt iPhone) and every size shrinks together; the maximum stops an iPhone's focus zoom on a tapped text box. The root layout keeps a plain 100% viewport for the TV board, which is untouched. `globals.css` turns off sideways overscroll on touch screens (the page can be a fraction of a pixel wider than the screen).
 
 ## How to run and check
 - `npm install`, `npm run dev`. Before every push: `npm run lint`, `npx tsc --noEmit` (`npx next typegen` first when routes change), `npm test`, `npm run build`.
