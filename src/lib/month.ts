@@ -79,6 +79,13 @@ export function monthName(key: string): string {
   return MONTHS[Number(key.slice(5)) - 1];
 }
 
+/** "Monday, Oct 27" */
+export function dayLabelLong(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" });
+}
+
 /** "Mon, Oct 27" */
 export function dayLabel(date: string): string {
   const [y, m, d] = date.split("-").map(Number);

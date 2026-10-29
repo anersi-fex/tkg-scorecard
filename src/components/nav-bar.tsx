@@ -17,7 +17,7 @@ import { logout } from "@/app/login/actions";
  * TV board, Settings, Sign out) sits behind the initials at the top right.
  */
 
-type IconName = "home" | "log" | "team";
+type IconName = "home" | "log" | "wrap" | "team";
 
 interface MainLink {
   href: string;
@@ -28,6 +28,7 @@ interface MainLink {
 const LINKS: MainLink[] = [
   { href: "/", label: "This month", icon: "home" },
   { href: "/log", label: "Log a sale", icon: "log" },
+  { href: "/wrap", label: "Wrap", icon: "wrap" },
   { href: "/team", label: "Team", icon: "team" },
 ];
 
@@ -62,6 +63,15 @@ function NavIcon({ name, active, size = 22 }: { name: IconName; active: boolean;
       <svg {...common} fill="none" stroke="currentColor" strokeWidth={active ? 2.3 : 1.9} strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="9" />
         <path d="M12 8v8M8 12h8" />
+      </svg>
+    );
+  }
+  if (name === "wrap") {
+    // A pennant: the day's flag.
+    return (
+      <svg {...common} fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={active ? 1.6 : 1.9} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 21V4" />
+        <path d="M6 4h12l-2.5 4 2.5 4H6" />
       </svg>
     );
   }
@@ -314,12 +324,13 @@ export function TabBarView({ pathname, navRef }: { pathname: string; navRef?: Re
                 aria-current={isActive(pathname, l) ? "page" : undefined}
                 onClick={() => pick(l.href)}
                 className={cn(
-                  "flex h-[46px] items-center gap-2 rounded-full pr-[17px] pl-[14px] text-[14px] whitespace-nowrap transition-colors",
-                  active ? "bg-tint font-bold text-accent-text" : "font-semibold text-gray-600 active:bg-gray-100 max-[359px]:px-3.5",
+                  "flex h-[46px] items-center gap-2 rounded-full text-[14px] whitespace-nowrap transition-colors",
+                  active ? "bg-tint pr-[17px] pl-[14px] font-bold text-accent-text" : "px-3.5 font-semibold text-gray-600 active:bg-gray-100",
                 )}
               >
                 <NavIcon name={l.icon} active={active} size={active ? 20 : 22} />
-                <span className={active ? undefined : "max-[359px]:sr-only"}>{l.label}</span>
+                {/* Four tabs do not fit with every label on a 390px phone: the open tab names itself, the rest are icons. */}
+                <span className={active ? undefined : "sr-only"}>{l.label}</span>
               </Link>
             );
           })}

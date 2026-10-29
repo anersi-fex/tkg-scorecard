@@ -249,7 +249,31 @@ try {
   check(!overflow, "phone Home has no sideways scroll");
   await p.goto(`${APP}/log`);
   await p.screenshot({ path: `${OUT}/08-phone-log.png`, fullPage: true });
+  // The Wrap: today's top producer, everybody, the carriers; one iPhone screenshot above the tab bar
+  await p.goto(`${APP}/wrap`);
+  await p.waitForSelector("text=Player of the day");
+  const wrapText = await p.textContent("body");
+  check(wrapText.includes("Alex Alekseyev") && wrapText.includes("$21,750"), "the Wrap names today's player of the day with the day's premium");
+  check(wrapText.includes("Everybody today") && wrapText.includes("Best deal"), "the Wrap lists everybody and the best deal");
+  check(wrapText.includes("Day won") || wrapText.includes("short ·"), "the Wrap judges the day against what the goal needed");
+  const footBottom = await p.evaluate(() => document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom);
+  check(footBottom <= 760, `the Wrap fits one iPhone screenshot above the tab bar (ends at ${Math.round(footBottom)}px of 844)`);
+  const wrapOverflow = await p.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
+  check(!wrapOverflow, "the Wrap has no sideways scroll");
+  const tabs = await p.evaluate(() => {
+    const pill = document.querySelector("nav[aria-label=Main] > div");
+    return { right: pill.getBoundingClientRect().right, links: pill.querySelectorAll("a").length, width: window.innerWidth };
+  });
+  check(tabs.links === 4 && tabs.right <= tabs.width, `the phone tab bar holds four tabs inside the screen (${Math.round(tabs.right)} of ${tabs.width}px)`);
+  await p.screenshot({ path: `${OUT}/14-phone-wrap.png`, fullPage: true });
+  const yesterday = await p.evaluate(() => document.querySelector("nav[aria-label=Day] a").getAttribute("href"));
+  await p.goto(`${APP}${yesterday}`);
+  await p.waitForSelector("text=Player of the day");
+  check((await p.textContent("body")).includes("No sales"), "a day without sales says so");
   await p.emulateMedia({ colorScheme: "dark" });
+  await p.goto(`${APP}/wrap`);
+  await p.waitForSelector("text=Player of the day");
+  await p.screenshot({ path: `${OUT}/15-phone-wrap-dark.png`, fullPage: true });
   await p.goto(`${APP}/`);
   await p.waitForSelector("text=Leaderboard");
   await p.screenshot({ path: `${OUT}/09-phone-home-dark.png`, fullPage: true });
