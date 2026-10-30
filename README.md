@@ -2,7 +2,7 @@
 
 The team's month, live on the office TV: the leaderboard, team production against the goal, pace, today's sales, and confetti when a sale lands. A sibling of Sales Coach (same Tide look), for The Koka Group.
 
-- `/wrap`: one day on one iPhone screenshot for the group chat (player of the day, everybody, best deal, carriers; `?day=` for an earlier day)
+- `/wrap`: the team's day, week or month on one iPhone screenshot for the group chat (Day / Week / Month switch; player of the period, best deal, the month's top three carriers, everybody; `?view=` and `?day=` for an earlier period)
 - `/board`: the TV (full screen, refreshes itself, light or dark as set under Settings > TV look; F full screen)
 - `/`: this month on a phone or computer, with earlier months
 - `/log`: log a sale in four taps (who, how much, which carrier, Log it)

@@ -1,0 +1,225 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!--
+  Leaderboard progress mockups (owner, 2026-10-30: "everyone has a different length bar and it just
+  looks poorly made ... mark-ups of what you think would be better ... how it looks on the app ...
+  as well as on the TV ... less of a radius on corners"). Standalone, no build:
+    ?v=A|B|C|D   A even bars, B rings, C percent pills, D same-scale bars with a goal mark
+    ?s=phone|tv  the phone's This month screen (390 wide) or the TV board (1920x1080)
+    ?t=light|dark
+    ?r=22|10|6   the card radius in px (22 is today's)
+  Rendered by design/render-leaderboard.mjs into design/out/leaderboard/.
+-->
+<style>
+@font-face{font-family:"PJS";src:url("file:///home/user/tkg-scorecard/node_modules/@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-normal.woff2") format("woff2");font-weight:200 800}
+@font-face{font-family:"SG";src:url("file:///home/user/tkg-scorecard/node_modules/@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2") format("woff2");font-weight:300 700}
+:root{--page:#f2f3f7;--card:#fff;--raised:#f6f7fa;--line:#e6e8ee;--g400:#9aa0ad;--g500:#646a78;--g600:#555b69;--g700:#3d424d;--g900:#15171c;
+--accent:#c42b32;--accent-text:#a3242a;--tint:#fdecec;--grad:linear-gradient(90deg,#c42b32,#ff6b57);--gradstrong:linear-gradient(135deg,#b8262d,#d1392c);--bar:#f3a6a0;--chip:#fde3e1;--chiptext:#9a1f26;--gold:#c98a00;--silver:#6f7787;--bronze:#a9622a;--up:#15803d;--track:#e4e6ec;--segment:#fff;
+--amber100:#fff1cc;--amber800:#8a5a00;--purple100:#e9dffd;--purple800:#5b2db0;--blue100:#e6ecff;--blue800:#1d3a9f;--green100:#dff5e8;--green800:#12663a;--red100:#fbdcdc;--red800:#a3242a;--green700:#167a45;--chart2:#e0a300;
+--shadow:0 1px 2px rgba(21,23,28,.04),0 8px 24px rgba(21,23,28,.06);--ring-done:#16a34a;--mark:#9aa0ad}
+html[data-theme=dark]{--page:#0b0d12;--card:#141823;--raised:#1b2030;--line:#262c3b;--g400:#6e768a;--g500:#8c93a5;--g600:#a3a9b8;--g700:#c3c8d4;--g900:#eef0f5;
+--accent:#ff6b57;--accent-text:#ff8a78;--tint:#3a1a1a;--grad:linear-gradient(90deg,#e5484d,#ff8a5c);--gradstrong:linear-gradient(135deg,#c62f36,#d8503f);--bar:#5a2a2d;--chip:#3d1a16;--chiptext:#fca5a5;--gold:#f5c451;--silver:#b7bfcf;--bronze:#e0a070;--up:#4ade80;--track:#1b2030;--segment:#2a3142;
+--amber100:#3d2a0a;--amber800:#fcd34d;--purple100:#2e1d47;--purple800:#d8b4fe;--blue100:#1c2543;--blue800:#b4c4ff;--green100:#143221;--green800:#86efac;--red100:#3d1a16;--red800:#fca5a5;--green700:#86efac;--chart2:#f5c451;
+--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);--ring-done:#4ade80;--mark:#8c93a5}
+/* Radius scale: --r is the card; everything else follows it. 22 = today. */
+:root{--r:22px;--r2:calc(var(--r)*.8);--r3:max(4px,calc(var(--r)*.55));--rp:999px;--rtab:999px}
+html[data-r="10"],html[data-r="6"],html[data-r="8"],html[data-r="12"]{--rp:max(3px,calc(var(--r)*.45));--rtab:calc(var(--r) + 4px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--g900);font-family:"PJS",-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+.mono{font-family:"SG",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.av{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;flex:none}
+.av.amber{background:var(--amber100);color:var(--amber800)}.av.purple{background:var(--purple100);color:var(--purple800)}.av.blue{background:var(--blue100);color:var(--blue800)}.av.green{background:var(--green100);color:var(--green800)}.av.red{background:var(--red100);color:var(--red800)}
+.rank{text-align:center;font-weight:700;color:var(--g500)}.rank.g{color:var(--gold)}
+.pill{display:inline-flex;align-items:center;border-radius:var(--rp);font-weight:700;white-space:nowrap}
+.pill.tint{background:var(--tint);color:var(--accent-text)}.pill.green{background:var(--green100);color:var(--green800)}.pill.gray{background:var(--track);color:var(--g600)}.pill.amber{background:var(--amber100);color:var(--amber800)}
+.up{color:var(--up)}
+/* ---------- phone ---------- */
+body.phone{width:459px;min-height:993px} /* a 390pt iPhone lays the app out at 459px under the 85% viewport */
+.phone .screen{padding:0 16px 110px;position:relative;min-height:993px}
+.nav{display:flex;align-items:center;justify-content:space-between;height:56px;padding-top:8px}
+.lockup{display:flex;align-items:center;gap:8px}.mark{width:34px;height:34px;border-radius:var(--r3);background:var(--grad);position:relative}
+.mark i{position:absolute;bottom:8px;background:#fff;border-radius:2px}.mark i.a{left:7px;width:5px;height:9px}.mark i.b{left:14px;width:6px;height:15px}.mark i.c{left:22px;width:5px;height:7px}.mark b{position:absolute;left:15px;top:5px;width:4px;height:4px;background:#fff;border-radius:50%}
+.lockup .t{font-weight:800;font-size:16px;letter-spacing:-.02em;line-height:1}.lockup .t small{display:block;font-size:9px;font-weight:600;color:var(--g500);letter-spacing:0}
+.ak{width:36px;height:36px;border-radius:50%;background:var(--purple100);color:var(--purple800);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center}
+h1{font-size:28px;font-weight:800;letter-spacing:-.035em;margin:10px 0 2px;line-height:1.1}
+.sub{color:var(--g500);font-size:14px;font-weight:500;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.sub .pill{font-size:12px;padding:3px 10px}
+.card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:16px;margin-bottom:12px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--g500)}
+.goal .big{font-size:36px;font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:8px;display:flex;align-items:flex-end;gap:10px}
+.goal .big small{font-size:14px;font-weight:600;color:var(--g500);padding-bottom:3px;letter-spacing:0;font-family:"PJS"}
+.goal .track{height:12px;border-radius:var(--rp);background:var(--track);margin-top:14px;overflow:hidden}.goal .track i{display:block;height:100%;border-radius:var(--rp);background:var(--grad)}
+.goal .line{margin-top:10px;font-size:14px;font-weight:600;color:var(--green700);line-height:1.35}
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px;text-align:center}.stats div{background:var(--raised);border-radius:var(--r2);padding:8px 6px}.stats .eyebrow{font-size:10px}.stats .v{font-size:17px;font-weight:700;letter-spacing:-.02em;margin-top:3px}
+h2{display:flex;align-items:center;gap:8px;font-size:20px;font-weight:800;letter-spacing:-.03em;margin:22px 0 8px 4px}h2 small{font-family:"SG";font-size:15px;font-weight:600;color:var(--g500);letter-spacing:0}
+.list{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:0}
+.row{display:flex;align-items:center;gap:12px;padding:12px 16px;position:relative}
+.row+.row::before{content:"";position:absolute;left:68px;right:0;top:0;height:1px;background:var(--line)}
+.row .rank{width:20px;font-size:15px}.row .av{width:40px;height:40px;font-size:13px}
+.body{flex:1;min-width:0}
+.l1{display:flex;align-items:baseline;justify-content:space-between;gap:12px}.l1 b{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.l1 .amt{font-size:16px;font-weight:700;white-space:nowrap}
+.small{font-size:12px;font-weight:600;color:var(--g500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* A: even bars */
+.bar{display:flex;align-items:center;gap:10px;margin-top:7px}.bar .track{flex:1;height:6px;border-radius:var(--rp);background:var(--track);overflow:hidden}.bar .track i{display:block;height:100%;border-radius:var(--rp);background:var(--grad)}
+.bar .track i.done{background:var(--ring-done)}.bar .pct{width:40px;text-align:right;font-size:12px;font-weight:700;color:var(--g700)}.bar .pct.done{color:var(--up)}
+.l3{margin-top:5px}
+/* B: rings */
+.ring{position:relative;width:48px;height:48px;flex:none}.ring svg{position:absolute;inset:0;transform:rotate(-90deg)}.ring .av{position:absolute;inset:5px;width:auto;height:auto;font-size:12px}
+.ring circle{fill:none;stroke-width:3.5}.ring .t{stroke:var(--track)}.ring .p{stroke:var(--accent);stroke-linecap:round}.ring .p.done{stroke:var(--ring-done)}
+/* C: pills */
+.amtcol{text-align:right;flex:none}.amtcol .amt{font-size:16px;font-weight:700;display:block}.amtcol .pill{font-size:11px;padding:2px 8px;margin-top:4px}
+/* D: same scale */
+.scale{position:relative;margin-top:7px;display:flex;align-items:center;gap:10px}.scale .track{position:relative;flex:1;height:6px;border-radius:var(--rp);background:var(--track)}.scale .track i{position:absolute;left:0;top:0;height:100%;border-radius:var(--rp);background:var(--grad)}.scale .track i.done{background:var(--ring-done)}
+.scale .track u{position:absolute;top:-4px;width:2px;height:14px;background:var(--mark);border-radius:1px}.scale .pct{width:40px;text-align:right;font-size:12px;font-weight:700;color:var(--g700)}.scale .pct.done{color:var(--up)}
+.tabbar{position:absolute;left:16px;right:16px;bottom:22px;height:62px;background:var(--card);border-radius:var(--rtab);box-shadow:0 2px 6px rgba(21,23,28,.06),0 18px 40px rgba(21,23,28,.14);display:flex;align-items:center;justify-content:space-around;padding:0 6px}
+.tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;font-weight:700;color:var(--g500);width:70px}.tab.on{color:var(--accent-text);background:var(--tint);border-radius:var(--rp);padding:6px 0}.tab i{width:20px;height:20px;border-radius:5px;border:2px solid currentColor}
+/* ---------- tv ---------- */
+body.tv{width:1920px;height:1080px;font-size:19.2px;overflow:hidden}
+.tv .board{height:1080px;padding:1em 1.6em .9em;display:flex;flex-direction:column}
+.tv header{display:flex;align-items:center;justify-content:space-between}
+.tv .lockup .mark{width:2.9em;height:2.9em;border-radius:calc(var(--r3) * 1.4)}.tv .mark i.a{left:.6em;width:.42em;height:.75em;bottom:.65em}.tv .mark i.b{left:1.2em;width:.5em;height:1.25em;bottom:.65em}.tv .mark i.c{left:1.9em;width:.42em;height:.6em;bottom:.65em}.tv .mark b{left:1.3em;top:.45em;width:.35em;height:.35em}
+.tv .lockup .t{font-size:1.6em}.tv .lockup .t small{font-size:.45em;margin-top:.25em}
+.tv .mid{text-align:center}.tv .mid b{display:block;font-size:1.75em;font-weight:800;letter-spacing:-.03em;line-height:1}.tv .mid small{display:block;margin-top:.3em;font-size:.95em;font-weight:600;color:var(--g500)}
+.tv .right{display:flex;align-items:center;gap:.8em}.tv .right .pill{font-size:.9em;padding:.35em .9em}.tv .right .clock{font-size:1.75em;font-weight:700;letter-spacing:-.02em;min-width:4.6em;text-align:right}
+.tv .grid{margin-top:.9em;flex:1;min-height:0;display:grid;grid-template-columns:7fr 5fr;gap:1em}
+.tv .panel{background:var(--card);border-radius:var(--rtv);box-shadow:var(--shadow);padding:1.1em;display:flex;flex-direction:column;min-height:0}
+.tv .ph{display:flex;align-items:baseline;justify-content:space-between}.tv .ph b{font-size:1.25em;font-weight:800;letter-spacing:-.02em}.tv .ph small{font-size:.85em;font-weight:600;color:var(--g500)}
+.tv ol{list-style:none;margin:.6em 0 0;padding:0;flex:1;display:flex;flex-direction:column;gap:.45em;min-height:0}
+.tv li{flex:1;min-height:0;display:flex;align-items:center;gap:.9em;padding:0 .8em;border-radius:calc(var(--rtv) * .72)}
+.tv li.first{background:color-mix(in srgb,var(--tint) 60%,transparent)}
+.tv li .rank{width:1.4em;font-size:1.4em}.tv li .av{width:2.6em;height:2.6em;font-size:.95em}
+.tv .l1 b{font-size:1.35em;font-weight:800;letter-spacing:-.02em;line-height:1.1}.tv .l1 .amt{font-size:1.5em;letter-spacing:-.02em}
+.tv .small{font-size:.85em}
+.tv .bar{margin-top:.45em;gap:.8em}.tv .bar .track{height:.55em}.tv .bar .pct{width:3em;font-size:.95em}
+.tv .l3{margin-top:.3em}
+.tv .ring{width:3.3em;height:3.3em}.tv .ring .av{inset:.35em;font-size:.95em}.tv .ring circle{stroke-width:.24em}
+.tv .amtcol .amt{font-size:1.5em;letter-spacing:-.02em}.tv .amtcol .pill{font-size:.85em;padding:.15em .6em;margin-top:.25em}
+.tv .scale{margin-top:.45em;gap:.8em}.tv .scale .track{height:.55em}.tv .scale .pct{width:3em;font-size:.95em}.tv .scale .track u{top:-.3em;height:1.15em;width:.12em}
+.tv .col{display:flex;flex-direction:column;gap:1em;min-height:0}
+.tv .goalcard{display:flex;align-items:center;gap:1.2em;padding:1.1em}
+.tv .donut{position:relative;width:8em;height:8em;flex:none}.tv .donut svg{position:absolute;inset:0;transform:rotate(-90deg)}.tv .donut circle{fill:none;stroke-width:.6em}.tv .donut .t{stroke:var(--track)}.tv .donut .p{stroke:var(--accent);stroke-linecap:round}
+.tv .donut .c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}.tv .donut .c b{font-size:2em;font-weight:700;letter-spacing:-.03em;line-height:1}.tv .donut .c small{font-size:.7em;font-weight:700;letter-spacing:.09em;color:var(--g500);margin-top:.3em}
+.tv .gt .eyebrow{font-size:.85em}.tv .gt .big{font-size:3.2em;font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:.15em}.tv .gt .of{font-size:1.1em;font-weight:600;color:var(--g500);margin-top:.3em}.tv .gt .pace{font-size:1em;font-weight:700;color:var(--up);margin-top:.5em}
+.tv .tiles{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.7em}.tv .tile{background:var(--card);border-radius:calc(var(--rtv) * .86);box-shadow:var(--shadow);padding:.8em .9em}.tv .tile .eyebrow{font-size:.8em}.tv .tile .v{font-size:1.7em;font-weight:700;letter-spacing:-.03em;margin-top:.35em;line-height:1}.tv .tile .v.up{color:var(--up)}.tv .tile .s{font-size:.85em;font-weight:600;color:var(--g500);margin-top:.5em}
+.tv .chart{flex:1}.tv .chart svg{width:100%;height:calc(100% - 1.8em);margin-top:.4em}
+.tv .legend{font-size:.8em;font-weight:600;color:var(--g500)}.tv .legend i{display:inline-block;width:1.4em;height:.55em;border-radius:var(--rp);vertical-align:middle;margin-right:.5em}.tv .legend i.a{background:var(--accent)}.tv .legend i.b{background:var(--chart2);margin-left:1em}
+.tv .feed{padding:1em}.tv .feed .ph b{font-size:1.05em}.tv .feed ul{list-style:none;margin:.5em 0 0;padding:0;display:flex;flex-direction:column;gap:.35em}.tv .feed li{flex:none;display:flex;align-items:center;gap:.7em;padding:.25em .4em}.tv .feed .av{width:1.6em;height:1.6em;font-size:.6em}.tv .feed .n{flex:1;font-size:1em;font-weight:600;color:var(--g500)}.tv .feed .n b{color:var(--g900);font-weight:700}.tv .feed .t{font-size:.85em;color:var(--g500);font-weight:600}.tv .feed .m{font-size:1.1em;font-weight:700}
+.tv footer{margin-top:.8em;display:flex;justify-content:space-between;font-size:.85em;font-weight:600;color:var(--g500)}.tv footer b{font-size:1.1em;color:var(--g700)}
+</style></head><body>
+<script>
+const q = new URLSearchParams(location.search);
+const V = (q.get("v") || "A").toUpperCase();
+const S = q.get("s") || "phone";
+const T = q.get("t") || "dark";
+const R = Number(q.get("r") || 22);
+document.documentElement.dataset.theme = T;
+document.documentElement.dataset.r = String(R);
+document.documentElement.style.setProperty("--r", R + "px");
+// The TV's radius follows the phone's choice: 22 -> 1.4em (today), 10 -> .55em, 6 -> .35em.
+document.documentElement.style.setProperty("--rtv", R >= 20 ? "1.4em" : R >= 9 ? ".55em" : ".35em");
+document.body.className = S;
+
+// The team's October as the owner's screenshot showed it (2026-10-29), goals implied by the percentages.
+const PEOPLE = [
+  { n: "Anersi Koka", i: "AK", tone: "purple", amt: 67515, pol: 44, goal: 70000, today: 0 },
+  { n: "Alex Alekseyev", i: "AA", tone: "amber", amt: 50660, pol: 35, goal: 50000, today: 1260 },
+  { n: "Moe Karim", i: "MK", tone: "red", amt: 36590, pol: 22, goal: 35000, today: 4424 },
+  { n: "Maira Angulo", i: "MA", tone: "blue", amt: 16920, pol: 16, goal: 20000, today: 720 },
+  { n: "Tina Kehrig", i: "TK", tone: "purple", amt: 9936, pol: 9, goal: 10000, today: 0 },
+  { n: "Matt Fouchey", i: "MF", tone: "green", amt: 8248, pol: 10, goal: 10000, today: 828 },
+  { n: "Samantha Marty", i: "SM", tone: "amber", amt: 5232, pol: 5, goal: 10000, today: 0 },
+];
+const total = PEOPLE.reduce((s, p) => s + p.amt, 0);
+const policies = PEOPLE.reduce((s, p) => s + p.pol, 0);
+const todayTotal = PEOPLE.reduce((s, p) => s + p.today, 0);
+const GOAL = 200000;
+const max = Math.max(...PEOPLE.map((p) => p.amt));
+const $ = (n) => "$" + Math.round(n).toLocaleString("en-US");
+const pct = (p) => Math.round((p.amt / p.goal) * 100);
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const smallLine = (p) => `${p.pol} policies${p.today ? ` · <span class="up">+${$(p.today)} today</span>` : ""}`;
+
+function ringSvg(p, r, cls) {
+  const c = 2 * Math.PI * r;
+  const v = Math.min(100, pct(p));
+  return `<svg viewBox="0 0 100 100"><circle class="t" cx="50" cy="50" r="${r}"/><circle class="p ${pct(p) >= 100 ? "done" : ""}" cx="50" cy="50" r="${r}" stroke-dasharray="${(c * v) / 100} ${c}"/></svg>`;
+}
+
+/** One leaderboard row in the chosen variant; the same markup serves the phone and the TV. */
+function row(p, idx) {
+  const rank = idx + 1;
+  const done = pct(p) >= 100;
+  const rankHtml = `<span class="rank mono ${rank === 1 ? "g" : ""}">${rank}</span>`;
+  const av = `<span class="av ${p.tone}">${p.i}</span>`;
+  const name = `<b>${esc(p.n)}</b>`;
+  const amt = `<span class="amt mono">${$(p.amt)}</span>`;
+  if (V === "A") {
+    // Even bars: one track, the same length for everyone; the percent in a fixed box at its end.
+    return `${rankHtml}${av}<div class="body"><div class="l1">${name}${amt}</div>
+      <div class="bar"><div class="track"><i class="${done ? "done" : ""}" style="width:${Math.min(100, pct(p))}%"></i></div><span class="pct mono ${done ? "done" : ""}">${pct(p)}%</span></div>
+      <div class="small l3">${smallLine(p)}</div></div>`;
+  }
+  if (V === "B") {
+    // Rings: progress wraps the avatar; the row stays two lines.
+    return `${rankHtml}<span class="ring">${ringSvg(p, 44)}${av}</span><div class="body"><div class="l1">${name}${amt}</div>
+      <div class="small" style="margin-top:3px">${pct(p)}% of goal · ${smallLine(p)}</div></div>`;
+  }
+  if (V === "C") {
+    // Percent pill under the amount, colored by how close: green at the goal, the brand tint from 75%, gray below.
+    const tone = done ? "green" : pct(p) >= 75 ? "tint" : "gray";
+    return `${rankHtml}${av}<div class="body"><div class="l1">${name}</div><div class="small" style="margin-top:3px">${smallLine(p)}</div></div>
+      <div class="amtcol">${amt}<span class="pill ${tone}">${done ? "✓ " : ""}${pct(p)}% of goal</span></div>`;
+  }
+  // D: everyone on the leader's scale, a mark where their own goal sits; the bar turns green once past it.
+  const w = (p.amt / max) * 100;
+  const g = Math.min(100, (p.goal / max) * 100);
+  return `${rankHtml}${av}<div class="body"><div class="l1">${name}${amt}</div>
+    <div class="scale"><div class="track"><i class="${done ? "done" : ""}" style="width:${w}%"></i><u style="left:calc(${g}% - 1px)"></u></div><span class="pct mono ${done ? "done" : ""}">${pct(p)}%</span></div>
+    <div class="small l3">${smallLine(p)}</div></div>`;
+}
+
+const rows = PEOPLE.map((p, i) => `<li class="row ${i === 0 ? "first" : ""}">${row(p, i)}</li>`).join("");
+
+if (S === "phone") {
+  document.body.innerHTML = `<div class="screen">
+  <div class="nav"><div class="lockup"><div class="mark"><i class="a"></i><i class="b"></i><i class="c"></i><b></b></div><div class="t">Scorecard<small>by TKG</small></div></div><div class="ak">AK</div></div>
+  <h1>This month</h1>
+  <p class="sub">October 2026 <span class="pill amber">1 business day left</span></p>
+  <div class="card goal"><span class="eyebrow">Team production</span>
+    <div class="big mono">${$(total)}<small>of ${$(GOAL)} · <span class="mono" style="color:var(--g900)">${Math.round((total / GOAL) * 100)}%</span></small></div>
+    <div class="track"><i style="width:${Math.min(100, (total / GOAL) * 100)}%"></i></div>
+    <p class="line">Ahead by ${$(total - GOAL * (21 / 22))}. On pace for ${$((total / 21) * 22)}. ${$(GOAL - total)} today gets there.</p>
+    <div class="stats"><div><span class="eyebrow">Policies</span><div class="v mono">${policies}</div></div><div><span class="eyebrow">Avg premium</span><div class="v mono">${$(total / policies)}</div></div><div><span class="eyebrow">Today</span><div class="v mono">${$(todayTotal)}</div></div></div>
+  </div>
+  <h2>Leaderboard <small>7</small></h2>
+  <ul class="list" style="list-style:none;margin:0;padding:0">${rows}</ul>
+  <div class="tabbar"><div class="tab on"><i></i>This month</div><div class="tab"><i></i>Log a sale</div><div class="tab"><i></i>Wrap</div><div class="tab"><i></i>Team</div></div>
+</div>`;
+} else {
+  // The TV board around the leaderboard: the goal ring, three tiles, the month chart, the feed.
+  const donutR = 42, donutC = 2 * Math.PI * donutR, gp = Math.min(100, (total / GOAL) * 100);
+  const pts = [0, 6, 14, 20, 26, 33, 38, 44, 50, 55, 61, 66, 71, 78, 83, 88, 92, 95, 97.5];
+  const chartLine = pts.map((v, i) => `${(i / 18) * 100},${100 - v}`).join(" ");
+  document.body.innerHTML = `<div class="board">
+  <header><div class="lockup"><div class="mark"><i class="a"></i><i class="b"></i><i class="c"></i><b></b></div><div class="t">Scorecard<small>by TKG</small></div></div>
+    <div class="mid"><b>October 2026</b><small>Fri, Oct 30</small></div>
+    <div class="right"><span class="pill amber">Last business day</span><span class="clock mono">9:41 AM</span></div></header>
+  <div class="grid">
+    <section class="panel"><div class="ph"><b>Leaderboard</b><small>annual premium · policies</small></div><ol>${rows.replace(/class="row /g, 'class="')}</ol></section>
+    <div class="col">
+      <section class="panel goalcard"><div class="donut"><svg viewBox="0 0 100 100"><circle class="t" cx="50" cy="50" r="${donutR}"/><circle class="p" cx="50" cy="50" r="${donutR}" stroke-dasharray="${(donutC * gp) / 100} ${donutC}"/></svg><div class="c"><b class="mono">${Math.round((total / GOAL) * 100)}%</b><small>OF GOAL</small></div></div>
+        <div class="gt"><span class="eyebrow">Team production</span><div class="big mono">${$(total)}</div><div class="of">of ${$(GOAL)}</div><div class="pace">Ahead by ${$(total - GOAL * (21 / 22))} · on pace for ${$((total / 21) * 22)}</div></div></section>
+      <section class="tiles"><div class="tile"><span class="eyebrow">Today</span><div class="v mono up">${$(todayTotal)}</div><div class="s">5 policies</div></div><div class="tile"><span class="eyebrow">Policies</span><div class="v mono">${policies}</div><div class="s">${$(total / policies)} avg</div></div><div class="tile"><span class="eyebrow">Needed today</span><div class="v mono">${$(GOAL - total)}</div><div class="s">to hit ${$(GOAL)}</div></div></section>
+      <section class="panel chart"><div class="ph"><b>The month so far</b><span class="legend"><i class="a"></i>production<i class="b"></i>goal line</span></div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="0" stroke="var(--line)" stroke-width=".3"/><line x1="0" y1="50" x2="100" y2="50" stroke="var(--line)" stroke-width=".3"/><line x1="0" y1="100" x2="100" y2="0" stroke="var(--chart2)" stroke-width=".7" stroke-dasharray="2 1.5" vector-effect="non-scaling-stroke"/><polyline points="${chartLine}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg></section>
+      <section class="panel feed"><div class="ph"><b>Latest sales</b></div><ul>
+        <li><span class="av red">MK</span><span class="n"><b>Moe</b> · AHL · Whole life</span><span class="t">9:12 AM</span><span class="m mono">$4,424</span></li>
+        <li><span class="av amber">AA</span><span class="n"><b>Alex</b> · Americo · Term</span><span class="t">8:58 AM</span><span class="m mono">$1,260</span></li>
+        <li><span class="av green">MF</span><span class="n"><b>Matt</b> · Royal · Term</span><span class="t">8:40 AM</span><span class="m mono">$828</span></li>
+        <li><span class="av blue">MA</span><span class="n"><b>Maira</b> · Newbridge · Final expense</span><span class="t">8:21 AM</span><span class="m mono">$720</span></li></ul></section>
+    </div>
+  </div>
+  <footer><b>Finish strong. Every policy counts.</b><span>Updated 9:41 AM <span style="margin-left:1em">F full screen</span></span></footer>
+</div>`;
+}
+</script>
+</body></html>
