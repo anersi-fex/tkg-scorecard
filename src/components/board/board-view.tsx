@@ -14,6 +14,7 @@ import { KindDot, KindSplit, PcTag } from "@/components/kind";
 import { MonthChart } from "@/components/month-chart";
 import { cn, formatClock } from "@/components/ui";
 import { burst } from "./confetti";
+import { soundFile, type SoundKey } from "@/lib/sounds";
 
 /**
  * The TV board. One screen, no scrolling, sized from the viewport (1em = about 1% of the width,
@@ -26,6 +27,80 @@ import { burst } from "./confetti";
  */
 const POLL_MS = 5000;
 const CELEBRATE_MS = 9000;
+/** A long sound fades out this long before the celebration leaves, so it is never cut mid-note. */
+const SOUND_FADE_MS = 700;
+
+/**
+ * A tenth of a second of silence as a WAV (8 kHz, 8-bit, mono) in a data address: the board's sound
+ * check. A data address needs no fetch and nothing to clean up (a revoked blob address would still be
+ * fetched after a refused play and log an error).
+ */
+function silence(): string {
+  const n = 800;
+  const bytes = new Uint8Array(44 + n);
+  const view = new DataView(bytes.buffer);
+  const word = (at: number, s: string) => [...s].forEach((ch, i) => (bytes[at + i] = ch.charCodeAt(0)));
+  word(0, "RIFF");
+  view.setUint32(4, 36 + n, true);
+  word(8, "WAVE");
+  word(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, 8000, true);
+  view.setUint32(28, 8000, true);
+  view.setUint16(32, 1, true);
+  view.setUint16(34, 8, true);
+  word(36, "data");
+  view.setUint32(40, n, true);
+  bytes.fill(128, 44); // 8-bit silence sits at the midpoint
+  let text = "";
+  for (const b of bytes) text += String.fromCharCode(b);
+  return `data:audio/wav;base64,${btoa(text)}`;
+}
+
+/** True only for the browser's "no sound before a click" answer, not a load error or an interrupted play. */
+function isAutoplayRefusal(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "NotAllowedError";
+}
+
+/**
+ * Browsers play sound only after someone clicked or pressed a key on the page (F for full screen
+ * counts), unless the site may auto-play (Safari > Settings > Websites > Auto-Play). The board asks
+ * the browser at load with a tenth of a second of silence, so the footer says so before a sale
+ * goes quiet (the board reloads itself after a deploy, which can lose the earlier click). A click,
+ * a key or any sound that plays clears it.
+ */
+function useSoundGate(soundOn: boolean): { blocked: boolean; refused: () => void; played: () => void } {
+  const [blocked, setBlocked] = useState(false);
+  useEffect(() => {
+    const allow = () => setBlocked(false);
+    window.addEventListener("pointerdown", allow);
+    window.addEventListener("keydown", allow);
+    return () => {
+      window.removeEventListener("pointerdown", allow);
+      window.removeEventListener("keydown", allow);
+    };
+  }, []);
+  useEffect(() => {
+    if (!soundOn) return;
+    let live = true;
+    const check = new Audio(silence());
+    check.play().then(
+      () => check.pause(),
+      (err: unknown) => {
+        if (live && isAutoplayRefusal(err)) setBlocked(true);
+      },
+    );
+    return () => {
+      live = false;
+      check.pause();
+    };
+  }, [soundOn]);
+  const refused = useCallback(() => setBlocked(true), []);
+  const played = useCallback(() => setBlocked(false), []);
+  return { blocked, refused, played };
+}
 
 function useClock(): string {
   const [now, setNow] = useState("");
@@ -169,6 +244,16 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
   }, [refresh]);
 
   const { team, clock: month, agents } = snap;
+  const sound = useSoundGate(snap.sound !== "off");
+  // Fetch the chosen sound ahead of time, so the first celebration does not wait on a download.
+  useEffect(() => {
+    const file = soundFile(snap.sound);
+    if (!file) return;
+    const a = new Audio();
+    a.preload = "auto";
+    a.src = file;
+    a.load();
+  }, [snap.sound]);
   const leaders = agents.filter((a) => a.active || a.premiumCents > 0);
   const maxPremium = Math.max(1, ...leaders.map((a) => a.premiumCents));
   const toneById = Object.fromEntries(agents.map((a) => [a.id, a.tone]));
@@ -269,11 +354,12 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
         <p className="min-w-0 truncate text-[1.1em] font-bold text-gray-700">{snap.message || " "}</p>
         <p className="shrink-0">
           {offline >= 3 ? <span className="text-amber-800">Reconnecting…</span> : <>Updated {formatClock(snap.generatedAt)}</>}
+          {sound.blocked && snap.sound !== "off" && <span className="ml-[1em] text-amber-800">Click or press a key once for sound</span>}
           <span className="ml-[1em] text-gray-500">F full screen</span>
         </p>
       </footer>
 
-      {showing && <Celebration sale={showing} />}
+      {showing && <Celebration sale={showing} sound={snap.sound} onRefused={sound.refused} onPlayed={sound.played} />}
     </main>
   );
 }
@@ -479,15 +565,40 @@ function Feed({ sales, tones, today }: { sales: FeedSale[]; tones: Record<string
   );
 }
 
-function Celebration({ sale }: { sale: FeedSale }) {
+function Celebration({ sale, sound, onRefused, onPlayed }: { sale: FeedSale; sound: SoundKey; onRefused: () => void; onPlayed: () => void }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
     if (!canvas.current) return;
     const stop = burst(canvas.current, { count: 320, duration: CELEBRATE_MS - 1500 });
     return stop;
   }, [sale.id]);
+  // The owner's sale sound, once per celebration; a long one fades out before the overlay leaves.
+  useEffect(() => {
+    const file = soundFile(sound);
+    if (!file) return;
+    const audio = new Audio(file);
+    let step: number | undefined;
+    // Only the browser's autoplay answer means "click first"; an interrupted play or a load error does not.
+    audio.play().then(onPlayed, (err: unknown) => {
+      if (isAutoplayRefusal(err)) onRefused();
+    });
+    const fade = window.setTimeout(() => {
+      step = window.setInterval(() => {
+        audio.volume = Math.max(0, audio.volume - 0.1);
+        if (audio.volume === 0) {
+          window.clearInterval(step);
+          audio.pause();
+        }
+      }, SOUND_FADE_MS / 10);
+    }, CELEBRATE_MS - SOUND_FADE_MS - 300);
+    return () => {
+      window.clearTimeout(fade);
+      window.clearInterval(step);
+      audio.pause();
+    };
+  }, [sale.id, sound, onRefused, onPlayed]);
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-ink/70" role="status" aria-live="polite">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-ink/70" role="status" aria-live="polite" data-sound={sound}>
       <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
       <div className="board-pop relative flex flex-col items-center rounded-[2em] bg-surface px-[3.2em] py-[2.4em] text-center shadow-float">
         <Avatar name={sale.agentName} tone="bg-tide text-white shadow-glow" size={96} className="!h-[6em] !w-[6em] !text-[2.2em]" />

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { COLORWAYS, COLORWAY_KEYS, type ColorwayKey } from "@/lib/colorways";
 import { cn } from "@/components/ui";
 import { BOARD_THEMES, type AppSettings, type BoardTheme } from "@/lib/types";
+import { SOUNDS, type SoundKey } from "@/lib/sounds";
 import { Button, Input, Label, Notice, Textarea } from "@/components/ui";
-import { ListCard, ListTitle } from "@/components/tide";
-import { saveBoardSettings, saveBoardTheme, saveColorway, saveTeamGoal } from "../actions";
+import { ListCard, ListTitle, ROW_INSET } from "@/components/tide";
+import { saveBoardSettings, saveBoardTheme, saveColorway, saveSaleSound, saveTeamGoal } from "../actions";
 import { toast } from "@/components/toaster";
 
 interface MonthGoal {
@@ -57,6 +58,12 @@ export function SettingsForms({
         <ListTitle>TV look</ListTitle>
         <p className="mt-1 px-1 text-[13px] text-gray-500">Light or dark on the office TV. The TV follows this within a few seconds.</p>
         <BoardThemePicker current={settings.boardTheme} />
+      </section>
+
+      <section>
+        <ListTitle>Sale sound</ListTitle>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">What the TV plays when a sale lands, with the confetti. Tap the play button to hear one here; tap its name to pick it.</p>
+        <SoundPicker current={settings.sound} />
       </section>
 
       <section>
@@ -229,6 +236,106 @@ function BoardThemePicker({ current }: { current: BoardTheme }) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/** The sound rows: a play button hears one here; a tap on the name picks it and saves at once. */
+function SoundPicker({ current }: { current: SoundKey }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [picked, setPicked] = useState<SoundKey>(current);
+  // Follow the saved value when the page refreshes (a change made on another phone shows here).
+  const [seen, setSeen] = useState(current);
+  if (seen !== current) {
+    setSeen(current);
+    setPicked(current);
+  }
+  const [playing, setPlaying] = useState<SoundKey | null>(null);
+  const player = useRef<HTMLAudioElement | null>(null);
+  // A test sound stops when the page goes (the 16 s intro would play on over the next screen).
+  useEffect(() => {
+    const ref = player;
+    return () => ref.current?.pause();
+  }, []);
+  const play = (key: SoundKey, file: string) => {
+    player.current?.pause();
+    // A second tap on the row that is playing stops it.
+    if (playing === key) {
+      player.current = null;
+      setPlaying(null);
+      return;
+    }
+    const a = new Audio(file);
+    player.current = a;
+    setPlaying(key);
+    a.onended = () => setPlaying((p) => (p === key ? null : p));
+    a.play().catch((err: unknown) => {
+      // A tap on another row pauses this one before it starts: that is not a failure.
+      if (player.current !== a || (err instanceof DOMException && err.name === "AbortError")) return;
+      setPlaying(null);
+      toast("Couldn't play that sound. Try again.", false);
+    });
+  };
+  const pick = (key: SoundKey) => {
+    if (key === picked) return;
+    setPicked(key);
+    start(async () => {
+      try {
+        const r = await saveSaleSound(key);
+        toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+        if (r.ok) router.refresh();
+        else setPicked(current);
+      } catch {
+        toast("Couldn't reach the server. Try again.", false);
+        setPicked(current);
+      }
+    });
+  };
+  const rows: Array<{ key: SoundKey; label: string; note: string; file: string | null }> = [...SOUNDS, { key: "off", label: "Off", note: "confetti only", file: null }];
+  return (
+    <div role="radiogroup" aria-label="Sale sound">
+      <ListCard className="mt-2">
+        {rows.map((r) => {
+          const on = picked === r.key;
+          const live = playing === r.key;
+          return (
+            <li key={r.key} className={cn("flex items-center gap-3 px-4 py-2", ROW_INSET.button)}>
+              {r.file ? (
+                <button
+                  type="button"
+                  aria-label={`${live ? "Stop" : "Play"} ${r.label}`}
+                  onClick={() => play(r.key, r.file as string)}
+                  className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition", live ? "bg-tide-strong text-white shadow-glow" : "bg-tint text-accent-text")}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" className={cn("fill-current", !live && "ml-0.5")} aria-hidden>
+                    {live ? <rect x="6.5" y="6.5" width="11" height="11" rx="2" /> : <path d="M7 5.5v13l11-6.5z" />}
+                  </svg>
+                </button>
+              ) : (
+                <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-2 text-gray-400">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M4 9.5v5h3.5L13 19V5L7.5 9.5zM17 9l4 6M21 9l-4 6" />
+                  </svg>
+                </span>
+              )}
+              <button type="button" role="radio" aria-checked={on} disabled={pending} onClick={() => pick(r.key)} className="flex min-h-11 min-w-0 flex-1 items-center justify-between gap-3 text-left">
+                <span className="min-w-0">
+                  <span className={cn("block truncate text-[15px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{r.label}</span>
+                  <span className="block truncate text-[12px] font-medium text-gray-500">{r.note}</span>
+                </span>
+                <span aria-hidden className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", on ? "bg-tide-strong text-white" : "border border-line")}>
+                  {on && (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M5 12.5l4.5 4.5L19 7.5" />
+                    </svg>
+                  )}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ListCard>
     </div>
   );
 }

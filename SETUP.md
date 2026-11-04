@@ -55,6 +55,7 @@ Vercel builds the `main` branch, and right now `main` holds only a one-line READ
 3. Full screen: press **Control+Command+F** (the Mac's own full screen, which stays on when the page reloads itself after an update; the page's **F** key also works, but drops after a reload). Light or dark, and the colorway, are set on your phone under Settings (TV look, Colorway); the TV follows within 5 seconds.
 4. System Settings > **Lock Screen**: set "Turn display off" to **Never** while the board is up. The page also asks the Mac to keep the screen awake.
 5. Plug the HDMI transmitter into the Mac mini, the receiver into the TV. The board refreshes itself every 5 seconds; a new sale gets confetti.
+6. Sound: the board plays the sale sound you pick on your phone under Settings > Sale sound. Browsers hold sound back until someone clicks the page, so once: in **Safari**, Safari > Settings > Websites > **Auto-Play**, find the board's address and pick **Allow All Auto-Play** (it then plays after every reload too); in **Chrome**, click the board once after it opens. While a browser holds the sound back, the board's footer says "Click or press a key once for sound".
 
 ### Step 9. Everyone's phone
 1. Each person opens the address in Safari, signs in with the **team** password.

@@ -5,6 +5,7 @@ import { datesOfMonth, monthClock, pace, todayInDetroit, type MonthClock, type P
 import { percentOf } from "./money";
 import { DEFAULT_BOARD_THEME, type Agent, type BoardTheme, type SaleKind } from "./types";
 import { DEFAULT_COLORWAY, type ColorwayKey } from "./colorways";
+import { DEFAULT_SOUND, type SoundKey } from "./sounds";
 
 /**
  * Everything one screen needs for a month, computed in one place so the TV board, the Home page
@@ -100,6 +101,8 @@ export interface MonthSnapshot {
   colorway: ColorwayKey;
   /** The TV look the owner picked, dark or light (the TV applies it on each poll). */
   boardTheme: BoardTheme;
+  /** The sound the TV plays with a celebration (Settings > Sale sound); "off" for none. */
+  sound: SoundKey;
 }
 
 function toFeed(s: SaleWithAgent): FeedSale {
@@ -133,7 +136,7 @@ export async function loadMonthSnapshot(month: string, opts: { today?: string; r
     recentSales(opts.recentLimit ?? 12),
     getSettings(),
   ]);
-  return buildSnapshot({ month, today, agents, sales, goals, recent, message: settings.message, colorway: settings.colorway, boardTheme: settings.boardTheme });
+  return buildSnapshot({ month, today, agents, sales, goals, recent, message: settings.message, colorway: settings.colorway, boardTheme: settings.boardTheme, sound: settings.sound });
 }
 
 /** Pure: the snapshot from loaded rows (tests build it without a database). */
@@ -147,6 +150,7 @@ export function buildSnapshot(input: {
   message: string;
   colorway?: ColorwayKey;
   boardTheme?: BoardTheme;
+  sound?: SoundKey;
   generatedAt?: string;
 }): MonthSnapshot {
   const { month, today, agents, sales, goals, recent, message } = input;
@@ -252,5 +256,6 @@ export function buildSnapshot(input: {
     message,
     colorway: input.colorway ?? DEFAULT_COLORWAY,
     boardTheme: input.boardTheme ?? DEFAULT_BOARD_THEME,
+    sound: input.sound ?? DEFAULT_SOUND,
   };
 }

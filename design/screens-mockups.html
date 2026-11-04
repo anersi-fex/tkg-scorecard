@@ -1,0 +1,463 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!--
+  Three TV screens (owner, 2026-11-04, second ask: "The goal amount ... should be life insurance sales ...
+  a whole separate leaderboard being P&C ... three screens that cycle ... life insurance sales to have the
+  most time on screen ... the ability to choose which screen to keep it on"). Standalone, no build:
+    ?s=tv|phone|settings   the TV (1920x1080), the phone's This month (459 wide), Settings > TV screens
+    ?screen=life|pc|total  which screen
+    ?mode=rotate|static    the TV's screen pills: all three with a timer line, or the one it is kept on
+    ?p=0..100              how far the current screen's time has run (rotate)
+    ?t=light|dark
+  The base styles are the leaderboard mockups' (design/leaderboard-mockups.html). Invented November numbers.
+  Rendered by design/render-screens.mjs into design/out/screens/.
+-->
+<style>
+@font-face{font-family:"PJS";src:url("file:///home/user/tkg-scorecard/node_modules/@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-normal.woff2") format("woff2");font-weight:200 800}
+@font-face{font-family:"SG";src:url("file:///home/user/tkg-scorecard/node_modules/@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2") format("woff2");font-weight:300 700}
+:root{--page:#f2f3f7;--card:#fff;--raised:#f6f7fa;--line:#e6e8ee;--g400:#9aa0ad;--g500:#646a78;--g600:#555b69;--g700:#3d424d;--g900:#15171c;
+--accent:#c42b32;--accent-text:#a3242a;--tint:#fdecec;--grad:linear-gradient(90deg,#c42b32,#ff6b57);--gradstrong:linear-gradient(135deg,#b8262d,#d1392c);--bar:#f3a6a0;--chip:#fde3e1;--chiptext:#9a1f26;--gold:#c98a00;--silver:#6f7787;--bronze:#a9622a;--up:#15803d;--track:#e4e6ec;--segment:#fff;
+--amber100:#fff1cc;--amber800:#8a5a00;--purple100:#e9dffd;--purple800:#5b2db0;--blue100:#e6ecff;--blue800:#1d3a9f;--green100:#dff5e8;--green800:#12663a;--red100:#fbdcdc;--red800:#a3242a;--green700:#167a45;--chart2:#e0a300;
+--shadow:0 1px 2px rgba(21,23,28,.04),0 8px 24px rgba(21,23,28,.06);--ring-done:#16a34a;--mark:#9aa0ad}
+html[data-theme=dark]{--page:#0b0d12;--card:#141823;--raised:#1b2030;--line:#262c3b;--g400:#6e768a;--g500:#8c93a5;--g600:#a3a9b8;--g700:#c3c8d4;--g900:#eef0f5;
+--accent:#ff6b57;--accent-text:#ff8a78;--tint:#3a1a1a;--grad:linear-gradient(90deg,#e5484d,#ff8a5c);--gradstrong:linear-gradient(135deg,#c62f36,#d8503f);--bar:#5a2a2d;--chip:#3d1a16;--chiptext:#fca5a5;--gold:#f5c451;--silver:#b7bfcf;--bronze:#e0a070;--up:#4ade80;--track:#1b2030;--segment:#2a3142;
+--amber100:#3d2a0a;--amber800:#fcd34d;--purple100:#2e1d47;--purple800:#d8b4fe;--blue100:#1c2543;--blue800:#b4c4ff;--green100:#143221;--green800:#86efac;--red100:#3d1a16;--red800:#fca5a5;--green700:#86efac;--chart2:#f5c451;
+--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);--ring-done:#4ade80;--mark:#8c93a5}
+/* Radius scale: --r is the card; everything else follows it. 22 = today. */
+:root{--r:22px;--r2:calc(var(--r)*.8);--r3:max(4px,calc(var(--r)*.55));--rp:999px;--rtab:999px}
+html[data-r="10"],html[data-r="6"],html[data-r="8"],html[data-r="12"]{--rp:max(3px,calc(var(--r)*.45));--rtab:calc(var(--r) + 4px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--g900);font-family:"PJS",-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+.mono{font-family:"SG",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.av{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;flex:none}
+.av.amber{background:var(--amber100);color:var(--amber800)}.av.purple{background:var(--purple100);color:var(--purple800)}.av.blue{background:var(--blue100);color:var(--blue800)}.av.green{background:var(--green100);color:var(--green800)}.av.red{background:var(--red100);color:var(--red800)}
+.rank{text-align:center;font-weight:700;color:var(--g500)}.rank.g{color:var(--gold)}
+.pill{display:inline-flex;align-items:center;border-radius:var(--rp);font-weight:700;white-space:nowrap}
+.pill.tint{background:var(--tint);color:var(--accent-text)}.pill.green{background:var(--green100);color:var(--green800)}.pill.gray{background:var(--track);color:var(--g600)}.pill.amber{background:var(--amber100);color:var(--amber800)}
+.up{color:var(--up)}
+/* ---------- phone ---------- */
+body.phone{width:459px;min-height:993px} /* a 390pt iPhone lays the app out at 459px under the 85% viewport */
+.phone .screen{padding:0 16px 110px;position:relative;min-height:993px}
+.nav{display:flex;align-items:center;justify-content:space-between;height:56px;padding-top:8px}
+.lockup{display:flex;align-items:center;gap:8px}.mark{width:34px;height:34px;border-radius:var(--r3);background:var(--grad);position:relative}
+.mark i{position:absolute;bottom:8px;background:#fff;border-radius:2px}.mark i.a{left:7px;width:5px;height:9px}.mark i.b{left:14px;width:6px;height:15px}.mark i.c{left:22px;width:5px;height:7px}.mark b{position:absolute;left:15px;top:5px;width:4px;height:4px;background:#fff;border-radius:50%}
+.lockup .t{font-weight:800;font-size:16px;letter-spacing:-.02em;line-height:1}.lockup .t small{display:block;font-size:9px;font-weight:600;color:var(--g500);letter-spacing:0}
+.ak{width:36px;height:36px;border-radius:50%;background:var(--purple100);color:var(--purple800);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center}
+h1{font-size:28px;font-weight:800;letter-spacing:-.035em;margin:10px 0 2px;line-height:1.1}
+.sub{color:var(--g500);font-size:14px;font-weight:500;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.sub .pill{font-size:12px;padding:3px 10px}
+.card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:16px;margin-bottom:12px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--g500)}
+.goal .big{font-size:36px;font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:8px;display:flex;align-items:flex-end;gap:10px}
+.goal .big small{font-size:14px;font-weight:600;color:var(--g500);padding-bottom:3px;letter-spacing:0;font-family:"PJS"}
+.goal .track{height:12px;border-radius:var(--rp);background:var(--track);margin-top:14px;overflow:hidden}.goal .track i{display:block;height:100%;border-radius:var(--rp);background:var(--grad)}
+.goal .line{margin-top:10px;font-size:14px;font-weight:600;color:var(--green700);line-height:1.35}
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px;text-align:center}.stats div{background:var(--raised);border-radius:var(--r2);padding:8px 6px}.stats .eyebrow{font-size:10px}.stats .v{font-size:17px;font-weight:700;letter-spacing:-.02em;margin-top:3px}
+h2{display:flex;align-items:center;gap:8px;font-size:20px;font-weight:800;letter-spacing:-.03em;margin:22px 0 8px 4px}h2 small{font-family:"SG";font-size:15px;font-weight:600;color:var(--g500);letter-spacing:0}
+.list{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:0}
+.row{display:flex;align-items:center;gap:12px;padding:12px 16px;position:relative}
+.row+.row::before{content:"";position:absolute;left:68px;right:0;top:0;height:1px;background:var(--line)}
+.row .rank{width:20px;font-size:15px}.row .av{width:40px;height:40px;font-size:13px}
+.body{flex:1;min-width:0}
+.l1{display:flex;align-items:baseline;justify-content:space-between;gap:12px}.l1 b{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.l1 .amt{font-size:16px;font-weight:700;white-space:nowrap}
+.small{font-size:12px;font-weight:600;color:var(--g500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* A: even bars */
+.bar{display:flex;align-items:center;gap:10px;margin-top:7px}.bar .track{flex:1;height:6px;border-radius:var(--rp);background:var(--track);overflow:hidden}.bar .track i{display:block;height:100%;border-radius:var(--rp);background:var(--grad)}
+.bar .track i.done{background:var(--ring-done)}.bar .pct{width:40px;text-align:right;font-size:12px;font-weight:700;color:var(--g700)}.bar .pct.done{color:var(--up)}
+.l3{margin-top:5px}
+/* B: rings */
+.ring{position:relative;width:48px;height:48px;flex:none}.ring svg{position:absolute;inset:0;transform:rotate(-90deg)}.ring .av{position:absolute;inset:5px;width:auto;height:auto;font-size:12px}
+.ring circle{fill:none;stroke-width:3.5}.ring .t{stroke:var(--track)}.ring .p{stroke:var(--accent);stroke-linecap:round}.ring .p.done{stroke:var(--ring-done)}
+/* C: pills */
+.amtcol{text-align:right;flex:none}.amtcol .amt{font-size:16px;font-weight:700;display:block}.amtcol .pill{font-size:11px;padding:2px 8px;margin-top:4px}
+/* D: same scale */
+.scale{position:relative;margin-top:7px;display:flex;align-items:center;gap:10px}.scale .track{position:relative;flex:1;height:6px;border-radius:var(--rp);background:var(--track)}.scale .track i{position:absolute;left:0;top:0;height:100%;border-radius:var(--rp);background:var(--grad)}.scale .track i.done{background:var(--ring-done)}
+.track i.life{background:var(--grad)}.track i.pcseg{background:var(--purple800);border-radius:0 999px 999px 0}
+.split{display:flex;align-items:center;gap:10px;white-space:nowrap}.split span{display:inline-flex;align-items:center;gap:5px}.split i{width:6px;height:6px;border-radius:50%;display:inline-block}.split i.l{background:var(--accent)}.split i.p{background:var(--purple800)}
+.amtcol2{text-align:right;flex:none;align-self:flex-start}.amtcol2 .amt{font-size:16px;font-weight:700;display:block;line-height:1.1}.amtcol2 .td{display:block;font-size:11px;font-weight:700;color:var(--up);margin-top:2px}
+.goal .track{display:flex}.goal .track i{display:block;height:100%}.goal .track i.life{border-radius:var(--rp) 0 0 var(--rp)}.goal .track i.pcseg{background:var(--purple800);border-radius:0 var(--rp) var(--rp) 0}
+.goal .splitline{display:flex;gap:14px;margin-top:10px;font-size:13px;font-weight:600;color:var(--g600)}.goal .splitline span{display:inline-flex;align-items:center;gap:6px}.goal .splitline i{width:8px;height:8px;border-radius:50%;display:inline-block}.goal .splitline i.l{background:var(--accent)}.goal .splitline i.p{background:var(--purple800)}.goal .splitline b{color:var(--g900);font-family:"SG"}
+.legend .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin:0 3px 0 6px}.legend .dot.l{background:var(--accent)}.legend .dot.p{background:var(--purple800)}
+.tv .amtcol2 .amt{font-size:1.5em;letter-spacing:-.02em}.tv .amtcol2 .td{font-size:.8em;margin-top:.15em}
+.tv .split{gap:.8em;font-size:.85em}.tv .split i{width:.4em;height:.4em}
+.tv .legend .dot{width:.5em;height:.5em;margin:0 .25em 0 .5em}
+.tv .donut .p2{stroke:var(--purple800);stroke-linecap:butt}
+.tv .gt .splitline{display:flex;gap:1.2em;margin-top:.5em;font-size:1em;font-weight:600;color:var(--g600)}.tv .gt .splitline span{display:inline-flex;align-items:center;gap:.4em}.tv .gt .splitline i{width:.55em;height:.55em;border-radius:50%;display:inline-block}.tv .gt .splitline i.l{background:var(--accent)}.tv .gt .splitline i.p{background:var(--purple800)}.tv .gt .splitline b{color:var(--g900);font-family:"SG"}
+.hint{font-size:12px;font-weight:600;color:var(--g500);margin:-2px 4px 8px}
+.track{position:relative}.track u{position:absolute;top:-4px;width:2px;height:14px;background:var(--mark);border-radius:1px}
+.pill.pc{background:var(--purple100);color:var(--purple800);font-size:11px;padding:2px 7px;margin-left:6px;vertical-align:middle;gap:4px}
+.pill.pc i{width:5px;height:5px;border-radius:50%;background:var(--purple800);display:inline-block}
+.legend{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--g500);margin-left:auto}.legend i{display:inline-block;width:2px;height:12px;background:var(--mark);border-radius:1px}
+.stats.four{grid-template-columns:repeat(4,1fr);gap:6px}.stats.four div{padding:8px 4px}.stats.four .v{font-size:16px}.stats .s{font-size:10px;font-weight:600;color:var(--g500);margin-top:2px}
+.stats div.pcstat{background:var(--purple100)}.stats div.pcstat .eyebrow,.stats div.pcstat .s{color:var(--purple800);opacity:.85}.stats div.pcstat .v{color:var(--purple800)}
+.tv .pill.pc{font-size:.8em;padding:.12em .55em;margin-left:.5em}.tv .pill.pc i{width:.35em;height:.35em}
+.tv .tiles.four{grid-template-columns:repeat(4,1fr);gap:.6em}.tv .tiles.four .tile{padding:.8em .7em}.tv .tiles.four .tile .v{font-size:1.5em}
+.tv .tile.pc{background:var(--purple100)}.tv .tile.pc .eyebrow,.tv .tile.pc .s{color:var(--purple800);opacity:.85}.tv .tile.pc .v{color:var(--purple800)}
+.tv .legend{font-size:.8em;margin:0 .6em 0 0}.tv .legend i{height:.9em;width:.12em}
+/* Log a sale */
+.log h2.sec{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g500);margin:18px 0 8px 4px;display:flex;align-items:center;gap:8px}
+.who{display:grid;grid-template-columns:1fr 1fr;gap:8px}.who span{display:flex;align-items:center;gap:8px;min-height:44px;padding:6px 10px;border-radius:var(--r3);background:var(--card);box-shadow:var(--shadow);font-size:14px;font-weight:700}
+.who span.on{background:var(--tint);color:var(--accent-text);box-shadow:inset 0 0 0 1.5px var(--accent)}.who .av{width:28px;height:28px;font-size:10px}
+.kind{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--track);border-radius:var(--r3);padding:3px}.kind span{display:flex;align-items:center;justify-content:center;gap:7px;height:38px;border-radius:calc(var(--r3) - 2px);font-size:14px;font-weight:700;color:var(--g600)}.kind span.on{background:var(--segment);color:var(--g900);box-shadow:var(--shadow)}.kind span i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.kind span i.life{background:var(--accent)}.kind span i.pc{background:var(--purple800)}
+.money{display:flex;align-items:center;gap:12px}.money .box{flex:1;height:64px;border:1px solid var(--line);border-radius:var(--r3);background:var(--raised);display:flex;align-items:center;padding:0 16px;font-size:32px;font-weight:700;gap:8px}.money .box small{font-size:22px;color:var(--g500)}
+.money .step{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--g700)}.money .step b{width:36px;height:36px;border-radius:50%;background:var(--segment);box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--g900)}.money .step em{font-style:normal;font-family:"SG";font-weight:700;font-size:18px;width:20px;text-align:center}
+.chips2{display:flex;flex-wrap:wrap;gap:8px}.chips2 span{padding:9px 14px;border-radius:var(--rp);background:var(--card);box-shadow:var(--shadow);font-size:14px;font-weight:700;color:var(--g900)}.chips2 span.on{background:var(--tint);color:var(--accent-text);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.chips2.pcmode span.on{background:var(--purple100);color:var(--purple800);box-shadow:inset 0 0 0 1.5px var(--purple800)}
+.linklike{color:var(--accent-text);font-size:14px;font-weight:700;margin:18px 4px 0}
+.btn{display:block;background:var(--gradstrong);color:#fff;font-weight:800;text-align:center;border-radius:var(--r3);padding:15px;font-size:16px;margin-top:16px}.scale .pct{width:40px;text-align:right;font-size:12px;font-weight:700;color:var(--g700)}.scale .pct.done{color:var(--up)}
+.tabbar{position:absolute;left:16px;right:16px;bottom:22px;height:62px;background:var(--card);border-radius:var(--rtab);box-shadow:0 2px 6px rgba(21,23,28,.06),0 18px 40px rgba(21,23,28,.14);display:flex;align-items:center;justify-content:space-around;padding:0 6px}
+.tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;font-weight:700;color:var(--g500);width:70px}.tab.on{color:var(--accent-text);background:var(--tint);border-radius:var(--rp);padding:6px 0}.tab i{width:20px;height:20px;border-radius:5px;border:2px solid currentColor}
+/* ---------- tv ---------- */
+body.tv{width:1920px;height:1080px;font-size:19.2px;overflow:hidden}
+.tv .board{height:1080px;padding:1em 1.6em .9em;display:flex;flex-direction:column}
+.tv header{display:flex;align-items:center;justify-content:space-between}
+.tv .lockup .mark{width:2.9em;height:2.9em;border-radius:calc(var(--r3) * 1.4)}.tv .mark i.a{left:.6em;width:.42em;height:.75em;bottom:.65em}.tv .mark i.b{left:1.2em;width:.5em;height:1.25em;bottom:.65em}.tv .mark i.c{left:1.9em;width:.42em;height:.6em;bottom:.65em}.tv .mark b{left:1.3em;top:.45em;width:.35em;height:.35em}
+.tv .lockup .t{font-size:1.6em}.tv .lockup .t small{font-size:.45em;margin-top:.25em}
+.tv .mid{text-align:center}.tv .mid b{display:block;font-size:1.75em;font-weight:800;letter-spacing:-.03em;line-height:1}.tv .mid small{display:block;margin-top:.3em;font-size:.95em;font-weight:600;color:var(--g500)}
+.tv .right{display:flex;align-items:center;gap:.8em}.tv .right .pill{font-size:.9em;padding:.35em .9em}.tv .right .clock{font-size:1.75em;font-weight:700;letter-spacing:-.02em;min-width:4.6em;text-align:right}
+.tv .grid{margin-top:.9em;flex:1;min-height:0;display:grid;grid-template-columns:7fr 5fr;gap:1em}
+.tv .panel{background:var(--card);border-radius:var(--rtv);box-shadow:var(--shadow);padding:1.1em;display:flex;flex-direction:column;min-height:0}
+.tv .ph{display:flex;align-items:baseline;justify-content:space-between}.tv .ph b{font-size:1.25em;font-weight:800;letter-spacing:-.02em}.tv .ph small{font-size:.85em;font-weight:600;color:var(--g500)}
+.tv ol{list-style:none;margin:.6em 0 0;padding:0;flex:1;display:flex;flex-direction:column;gap:.45em;min-height:0}
+.tv li{flex:1;min-height:0;display:flex;align-items:center;gap:.9em;padding:0 .8em;border-radius:calc(var(--rtv) * .72)}
+.tv li.first{background:color-mix(in srgb,var(--tint) 60%,transparent)}
+.tv li .rank{width:1.4em;font-size:1.4em}.tv li .av{width:2.6em;height:2.6em;font-size:.95em}
+.tv .l1 b{font-size:1.35em;font-weight:800;letter-spacing:-.02em;line-height:1.1}.tv .l1 .amt{font-size:1.5em;letter-spacing:-.02em}
+.tv .small{font-size:.85em}
+.tv .bar{margin-top:.45em;gap:.8em}.tv .bar .track{height:.55em}.tv .bar .pct{width:3em;font-size:.95em}
+.tv .l3{margin-top:.3em}
+.tv .ring{width:3.3em;height:3.3em}.tv .ring .av{inset:.35em;font-size:.95em}.tv .ring circle{stroke-width:.24em}
+.tv .amtcol .amt{font-size:1.5em;letter-spacing:-.02em}.tv .amtcol .pill{font-size:.85em;padding:.15em .6em;margin-top:.25em}
+.tv .scale{margin-top:.45em;gap:.8em}.tv .scale .track{height:.55em}.tv .scale .pct{width:3em;font-size:.95em}.tv .scale .track u{top:-.3em;height:1.15em;width:.12em}
+.tv .col{display:flex;flex-direction:column;gap:1em;min-height:0}
+.tv .goalcard{display:flex;align-items:center;gap:1.2em;padding:1.1em}
+.tv .donut{position:relative;width:8em;height:8em;flex:none}.tv .donut svg{position:absolute;inset:0;transform:rotate(-90deg)}.tv .donut circle{fill:none;stroke-width:.6em}.tv .donut .t{stroke:var(--track)}.tv .donut .p{stroke:var(--accent);stroke-linecap:round}
+.tv .donut .c{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}.tv .donut .c b{font-size:2em;font-weight:700;letter-spacing:-.03em;line-height:1}.tv .donut .c small{font-size:.7em;font-weight:700;letter-spacing:.09em;color:var(--g500);margin-top:.3em}
+.tv .gt .eyebrow{font-size:.85em}.tv .gt .big{font-size:3.2em;font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:.15em}.tv .gt .of{font-size:1.1em;font-weight:600;color:var(--g500);margin-top:.3em}.tv .gt .pace{font-size:1em;font-weight:700;color:var(--up);margin-top:.5em}
+.tv .tiles{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.7em}.tv .tile{background:var(--card);border-radius:calc(var(--rtv) * .86);box-shadow:var(--shadow);padding:.8em .9em}.tv .tile .eyebrow{font-size:.8em}.tv .tile .v{font-size:1.7em;font-weight:700;letter-spacing:-.03em;margin-top:.35em;line-height:1}.tv .tile .v.up{color:var(--up)}.tv .tile .s{font-size:.85em;font-weight:600;color:var(--g500);margin-top:.5em}
+.tv .chart{flex:1}.tv .chart svg{width:100%;height:calc(100% - 1.8em);margin-top:.4em}
+.tv .legend{font-size:.8em;font-weight:600;color:var(--g500)}.tv .legend i{display:inline-block;width:1.4em;height:.55em;border-radius:var(--rp);vertical-align:middle;margin-right:.5em}.tv .legend i.a{background:var(--accent)}.tv .legend i.b{background:var(--chart2);margin-left:1em}
+.tv .feed{padding:1em}.tv .feed .ph b{font-size:1.05em}.tv .feed ul{list-style:none;margin:.5em 0 0;padding:0;display:flex;flex-direction:column;gap:.35em}.tv .feed li{flex:none;display:flex;align-items:center;gap:.7em;padding:.25em .4em}.tv .feed .av{width:1.6em;height:1.6em;font-size:.6em}.tv .feed .n{flex:1;font-size:1em;font-weight:600;color:var(--g500)}.tv .feed .n b{color:var(--g900);font-weight:700}.tv .feed .t{font-size:.85em;color:var(--g500);font-weight:600}.tv .feed .m{font-size:1.1em;font-weight:700}
+.tv footer{margin-top:.8em;display:flex;justify-content:space-between;font-size:.85em;font-weight:600;color:var(--g500)}.tv footer b{font-size:1.1em;color:var(--g700)}
+
+/* ---------- screens round (owner, 2026-11-04 second ask) ---------- */
+:root{--pc:#6d3fd3;--pc-tint:#e9dffd;--pc-text:#5b2db0}
+html[data-theme=dark]{--pc:#b794f6;--pc-tint:#2e1d47;--pc-text:#d8b4fe}
+.crown{display:inline-block;width:1em;height:1em;fill:currentColor;vertical-align:-.12em}
+.track i.pcfill{background:var(--pc)}.track i.pcseg{background:var(--pc)}
+.split i.p,.goal .splitline i.p,.tv .gt .splitline i.p,.legend .dot.p{background:var(--pc)}
+.pill.pc{background:var(--pc-tint);color:var(--pc-text)}
+/* TV header: the month, the three screens, the clock with the date */
+.tv .mid{display:flex;flex-direction:column;align-items:center}
+.tv .screens{display:inline-flex;gap:.3em;margin-top:.45em;padding:.22em;border-radius:var(--rp);background:var(--track)}
+.tv .screens span{position:relative;overflow:hidden;padding:.28em 1.05em .34em;border-radius:var(--rp);font-size:.95em;font-weight:700;color:var(--g500);white-space:nowrap}
+.tv .screens span.on{background:var(--segment);color:var(--g900);box-shadow:var(--shadow)}
+.tv .screens span.on.life{color:var(--accent-text)}.tv .screens span.on.pc{color:var(--pc-text)}
+.tv .screens span em{position:absolute;left:0;bottom:0;height:.17em;border-radius:var(--rp);background:currentColor;opacity:.85}
+.tv .screens span i{display:inline-block;width:.5em;height:.5em;border-radius:50%;margin-right:.45em;vertical-align:.08em}
+.tv .screens span i.l{background:var(--accent)}.tv .screens span i.p{background:var(--pc)}.tv .screens span i.t{background:linear-gradient(90deg,var(--accent) 50%,var(--pc) 50%)}
+.tv .clockcol{display:flex;flex-direction:column;align-items:flex-end;min-width:5em}
+.tv .clockcol .clock{min-width:0}.tv .clockcol small{font-size:.9em;font-weight:600;color:var(--g500);margin-top:.2em}
+.tv .ph b .k{display:inline-block;width:.55em;height:.55em;border-radius:50%;margin-right:.45em;vertical-align:.1em}
+.tv .ph b .k.l{background:var(--accent)}.tv .ph b .k.p{background:var(--pc)}.tv .ph b .k.t{background:linear-gradient(90deg,var(--accent) 50%,var(--pc) 50%)}
+.tv li.first .rank{color:var(--gold)}
+.tv li.first.pcf{background:color-mix(in srgb,var(--pc-tint) 75%,transparent)}
+.tv ol.fixed{flex:none}.tv ol.fixed li{flex:none;height:5.6em}
+.tv .lcol{display:flex;flex-direction:column;gap:1em;min-height:0}
+.tv .goalcard .pcmark{width:6.6em;height:6.6em;border-radius:1.6em;background:var(--pc);display:flex;align-items:center;justify-content:center;flex:none;color:var(--card);font-weight:800;font-size:1.25em}
+.tv .gt .pace.pcp{color:var(--up)}
+.tv .tile.pc .v{color:var(--pc-text)}
+.tv .rows{display:flex;flex-direction:column;gap:.55em;margin-top:.7em;flex:1;justify-content:space-around}
+.tv .crow .top{display:flex;align-items:baseline;justify-content:space-between;gap:1em}
+.tv .crow .top b{font-size:1.3em;font-weight:800;letter-spacing:-.02em}
+.tv .crow .top span{font-size:1.15em;font-weight:700}.tv .crow .top span small{font-family:"PJS";font-size:.75em;font-weight:600;color:var(--g500);margin-right:.6em}
+.tv .crow .track{height:.55em;border-radius:var(--rp);background:var(--track);margin-top:.35em;overflow:hidden}.tv .crow .track i{display:block;height:100%;border-radius:var(--rp);background:var(--pc)}
+.tv .crow .small{margin-top:.3em}
+.tv .linegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:.6em;margin-top:.7em}
+.tv .lt{background:var(--raised);border-radius:calc(var(--rtv) * .7);padding:.65em .8em}
+.tv .lt .eyebrow{font-size:.78em}.tv .lt .v{font-size:1.65em;font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:.25em;color:var(--pc-text)}.tv .lt .s{font-size:.85em;font-weight:600;color:var(--g500);margin-top:.3em}
+.tv .feed .m{min-width:4.2em;text-align:right}
+/* fixes after the first render */
+.tv .panel.goalcard{flex-direction:row;align-items:center}
+.tv .panel.chart{min-height:13em}
+.tv .feed .av{width:2.1em;height:2.1em;font-size:.72em}
+.tv .legend i.tick{display:inline-block;width:.14em;height:.95em;border-radius:1px;background:var(--mark);margin:0 .45em 0 .7em;vertical-align:-.12em}
+.tv .goalcard .pcmark{width:5.4em;height:5.4em;border-radius:1.35em;font-size:1.15em}
+.tv .lcol .panel.carriers{flex:1;min-height:0;overflow:hidden}
+.tv .rows{gap:.15em;margin-top:.35em}
+.tv .crow .top b{font-size:1.15em}.tv .crow .top span{font-size:1.05em}
+.tv .crow .track{height:.5em;margin-top:.25em}.tv .crow .small{margin-top:.2em}
+.tv .linegrid{gap:.5em;margin-top:.5em}.tv .lt{padding:.45em .75em .5em}.tv .lt .v{font-size:1.4em;margin-top:.15em}.tv .lt .s{margin-top:.15em}
+.legend i.tick{display:inline-block;width:2px;height:12px;border-radius:1px;background:var(--mark);margin:0 4px 0 8px;vertical-align:-2px}
+/* phone */
+.phone .titlerow{display:flex;align-items:center;justify-content:space-between}
+.phone .arrows{display:flex;gap:8px}.phone .arrows span{width:42px;height:42px;border-radius:50%;background:var(--card);box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;color:var(--g700);font-weight:700}.phone .arrows span.off{opacity:.45;box-shadow:none;background:var(--raised)}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:var(--track);border-radius:16px;padding:4px;margin:4px 0 14px}
+.seg span{display:flex;align-items:center;justify-content:center;gap:7px;height:40px;border-radius:12px;font-size:15px;font-weight:700;color:var(--g600)}
+.seg span.on{background:var(--segment);color:var(--g900);box-shadow:var(--shadow)}
+.seg span i{width:8px;height:8px;border-radius:50%;display:inline-block}.seg span i.l{background:var(--accent)}.seg span i.p{background:var(--pc)}.seg span i.t{background:linear-gradient(90deg,var(--accent) 50%,var(--pc) 50%)}
+.goal .big small b{color:var(--g900);font-family:"SG"}
+.goal .track i.pcfill{background:var(--pc)}
+.pcgoal .big{color:var(--pc-text)}
+.linechips{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:12px}.linechips div{background:var(--raised);border-radius:12px;padding:8px 10px}.linechips .eyebrow{font-size:10px}.linechips .v{font-family:"SG";font-weight:700;font-size:18px;color:var(--pc-text);margin-top:2px}.linechips .s{font-size:11px;font-weight:600;color:var(--g500)}
+.row.pcf{background:color-mix(in srgb,var(--pc-tint) 55%,transparent)}
+.row .rank .crown{color:var(--gold)}
+.list .row:first-child{border-radius:var(--r) var(--r) 0 0}
+.crow2{padding:12px 16px;position:relative}.crow2+.crow2::before{content:"";position:absolute;left:16px;right:0;top:0;height:1px;background:var(--line)}
+.crow2 .top{display:flex;justify-content:space-between;align-items:baseline}.crow2 .top b{font-size:15px}.crow2 .top span{font-family:"SG";font-weight:700;font-size:15px}.crow2 .top span small{font-family:"PJS";font-size:12px;color:var(--g500);font-weight:600;margin-right:8px}
+.crow2 .track{height:6px;border-radius:999px;background:var(--track);margin-top:7px;overflow:hidden}.crow2 .track i{display:block;height:100%;background:var(--pc);border-radius:999px}
+.crow2 .small{margin-top:5px}
+.strip{position:absolute;left:0;right:0;bottom:0;height:78px;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:center;padding:0 8px 10px}
+.strip .tab{width:84px}.strip .tab.on{padding:7px 0}
+/* settings */
+.settings h2.lt{font-size:22px;font-weight:800;letter-spacing:-.03em;margin:8px 0 4px 4px}
+.settings p.d{font-size:13px;font-weight:500;color:var(--g500);margin:0 4px 10px;line-height:1.4}
+.opt{display:flex;align-items:center;gap:12px;padding:10px 16px;position:relative}.opt+.opt::before{content:"";position:absolute;left:72px;right:0;top:0;height:1px;background:var(--line)}
+.opt .ic{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:none;background:var(--raised);color:var(--g700)}
+.opt .ic.l{background:var(--tint);color:var(--accent-text)}.opt .ic.p{background:var(--pc-tint);color:var(--pc-text)}
+.opt .tx{flex:1;min-width:0}.opt .tx b{display:block;font-size:15px;font-weight:700}.opt .tx span{display:block;font-size:12px;font-weight:600;color:var(--g500);margin-top:1px}
+.opt.on .tx b{color:var(--accent-text)}
+.opt .ck{width:24px;height:24px;border-radius:50%;border:1.5px solid var(--line);flex:none;display:flex;align-items:center;justify-content:center}
+.opt.on .ck{border:none;background:var(--gradstrong);color:#fff}
+</style></head><body>
+<script>
+const q = new URLSearchParams(location.search);
+const S = q.get("s") || "tv";          // tv | phone | settings
+const SCREEN = q.get("screen") || "life"; // life | pc | total
+const T = q.get("t") || "dark";
+const P = Number(q.get("p") || 35);     // how far the current screen's time has run, in percent
+const MODE = q.get("mode") || "rotate"; // rotate | static
+document.documentElement.dataset.theme = T;
+document.documentElement.dataset.r = "22";
+document.documentElement.style.setProperty("--r", "22px");
+document.documentElement.style.setProperty("--rtv", "1.4em");
+document.body.className = S === "tv" ? "tv" : "phone" + (S === "settings" ? " settings" : "");
+
+// Wed, Nov 18 2026: 13 of November's 21 business days are done (today counts), 8 are left.
+const LINE = Math.round((13 / 21) * 100);
+const GOAL = 200000;
+const PEOPLE = [
+  { n: "Alex Alekseyev", f: "Alex", i: "AA", tone: "amber", life: 38420, lp: 26, goal: 50000, today: 1260 },
+  { n: "Anersi Koka", f: "Anersi", i: "AK", tone: "purple", life: 36900, lp: 24, goal: 70000, today: 0, pc: 9840, pp: 14, pcToday: 0, lines: "Auto 6 · Home 4 · Dwelling 2 · Umbrella 1 · ATV 1" },
+  { n: "Moe Karim", f: "Moe", i: "MK", tone: "red", life: 24310, lp: 15, goal: 35000, today: 2140, pc: 3960, pp: 5, pcToday: 0, lines: "Auto 3 · Dwelling 1 · Renters 1" },
+  { n: "Maira Angulo", f: "Maira", i: "MA", tone: "blue", life: 11880, lp: 11, goal: 20000, today: 0, pc: 2150, pp: 3, pcToday: 640, lines: "Auto 2 · Renters 1" },
+  { n: "Matt Fouchey", f: "Matt", i: "MF", tone: "green", life: 6140, lp: 7, goal: 10000, today: 828 },
+  { n: "Tina Kehrig", f: "Tina", i: "TK", tone: "purple", life: 5920, lp: 6, goal: 10000, today: 0 },
+  { n: "Samantha Marty", f: "Samantha", i: "SM", tone: "amber", life: 3350, lp: 4, goal: 10000, today: 0 },
+];
+const CARRIERS = [
+  { n: "Progressive", pol: 10, amt: 5470, lines: "Auto 7 · Renters 2 · ATV 1" },
+  { n: "Geico", pol: 5, amt: 2950, lines: "Auto 4 · Umbrella 1" },
+  { n: "HOAIC", pol: 3, amt: 3920, lines: "Home 3" },
+  { n: "Obie", pol: 2, amt: 2000, lines: "Home 1 · Dwelling 1" },
+  { n: "Steadily", pol: 2, amt: 1610, lines: "Dwelling 2" },
+];
+const LINES = [["Auto", 11, 6890], ["Home", 4, 5120], ["Dwelling", 3, 2410], ["Renters", 2, 380], ["Umbrella", 1, 450], ["ATV", 1, 700]];
+const $ = (n) => "$" + Math.round(n).toLocaleString("en-US");
+const sum = (f) => PEOPLE.reduce((s, p) => s + (f(p) || 0), 0);
+const LIFE = sum((p) => p.life), LIFE_POL = sum((p) => p.lp), LIFE_TODAY = sum((p) => p.today);
+const PC = sum((p) => p.pc), PC_POL = sum((p) => p.pp), PC_TODAY = sum((p) => p.pcToday);
+const ALL = LIFE + PC, ALL_POL = LIFE_POL + PC_POL, ALL_TODAY = LIFE_TODAY + PC_TODAY;
+const EXPECTED = GOAL * (13 / 21);
+const CROWN = `<svg class="crown" viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>`;
+const av = (p, cls = "") => `<span class="av ${p.tone} ${cls}">${p.i}</span>`;
+const rankCell = (r) => `<span class="rank mono ${r === 1 ? "g" : ""}">${r === 1 ? CROWN : r}</span>`;
+const pctOf = (v, g) => Math.round((v / g) * 100);
+
+// ---------- rows ----------
+function lifeRow(p, r) {
+  const pct = pctOf(p.life, p.goal), done = pct >= 100;
+  return `${rankCell(r)}${av(p)}<div class="body"><div class="l1"><b>${p.n}</b><span class="amtcol2"><span class="amt mono">${$(p.life)}</span>${p.today ? `<span class="td">+${$(p.today)} today</span>` : ""}</span></div>
+    <div class="bar"><div class="track"><i class="${done ? "done" : ""}" style="width:${Math.min(100, pct)}%"></i><u style="left:calc(${LINE}% - 1px)"></u></div><span class="pct mono ${done ? "done" : ""}">${pct}%</span></div>
+    <div class="small l3">${p.lp} policies</div></div>`;
+}
+function pcRow(p, r, lead) {
+  return `${rankCell(r)}${av(p)}<div class="body"><div class="l1"><b>${p.n}</b><span class="amtcol2"><span class="amt mono">${$(p.pc)}</span>${p.pcToday ? `<span class="td">+${$(p.pcToday)} today</span>` : ""}</span></div>
+    <div class="bar"><div class="track"><i class="pcfill" style="width:${(p.pc / lead) * 100}%"></i></div></div>
+    <div class="small l3">${p.pp} policies · ${p.lines}</div></div>`;
+}
+function totalRow(p, r) {
+  const all = p.life + (p.pc || 0), pct = pctOf(all, p.goal), done = pct >= 100;
+  const w = Math.min(100, (all / p.goal) * 100), l = (w * p.life) / all, c = w - l;
+  const today = p.today + (p.pcToday || 0);
+  const small = p.pc ? `<span class="split"><span><i class="l"></i>Life ${$(p.life)} · ${p.lp}</span><span><i class="p"></i>P&amp;C ${$(p.pc)} · ${p.pp}</span></span>` : `${p.lp} policies`;
+  return `${rankCell(r)}${av(p)}<div class="body"><div class="l1"><b>${p.n}</b><span class="amtcol2"><span class="amt mono">${$(all)}</span>${today ? `<span class="td">+${$(today)} today</span>` : ""}</span></div>
+    <div class="bar"><div class="track"><i class="life" style="width:${l}%"></i>${c > 0 ? `<i class="pcseg" style="position:absolute;left:${l}%;top:0;height:100%;width:${c}%"></i>` : ""}<u style="left:calc(${LINE}% - 1px)"></u></div><span class="pct mono ${done ? "done" : ""}">${pct}%</span></div>
+    <div class="small l3">${small}</div></div>`;
+}
+const byLife = [...PEOPLE].sort((a, b) => b.life - a.life);
+const byPc = PEOPLE.filter((p) => p.pc).sort((a, b) => b.pc - a.pc);
+const byAll = [...PEOPLE].sort((a, b) => b.life + (b.pc || 0) - (a.life + (a.pc || 0)));
+const PC_LEAD = byPc[0].pc;
+
+// ---------- the month chart (life, or life + P&C) ----------
+const LIFE_K = [0, 0, 9.8, 18.5, 29, 37, 44.5, 44.5, 44.5, 52, 61, 69.5, 77, 84, 84, 84, 96.5, 113.5, 126.92];
+const PC_K = [0, 0, 0, 2.1, 2.1, 4.4, 4.9, 4.9, 4.9, 4.9, 7.3, 7.3, 10.1, 10.9, 10.9, 10.9, 10.9, 15.31, 15.95];
+function chart(withPc) {
+  // x: day 1..30 of November; the goal line climbs by business days (Mon-Fri) to $200k.
+  const biz = (d) => { let n = 0; for (let k = 1; k <= d; k++) { const w = new Date(Date.UTC(2026, 10, k)).getUTCDay(); if (w && w !== 6) n++; } return n; };
+  const X = (d) => ((d - 1) / 29) * 100, Y = (v) => 100 - (v / 210) * 100;
+  const goal = Array.from({ length: 30 }, (_, i) => `${X(i + 1)},${Y((200 * biz(i + 1)) / 21)}`).join(" ");
+  const line = (arr) => arr.slice(1).map((v, i) => `${X(i + 1)},${Y(v)}`).join(" ");
+  const series = withPc ? LIFE_K.map((v, i) => v + PC_K[i]) : LIFE_K;
+  const ticks = [1, 5, 10, 15, 20, 25, 30].map((d) => `<span style="position:absolute;left:${X(d)}%;transform:translateX(-50%)">${d}</span>`).join("");
+  return `<div style="position:relative;flex:1;min-height:0;margin:.5em 0 0 2.6em">
+    <span style="position:absolute;left:-2.6em;top:calc(${Y(200)}% - .55em);font-size:.75em;color:var(--g500);font-weight:600">$200k</span>
+    <span style="position:absolute;left:-2.6em;top:calc(${Y(100)}% - .55em);font-size:.75em;color:var(--g500);font-weight:600">$100k</span>
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:calc(100% - 1.3em)">
+      <line x1="0" y1="${Y(200)}" x2="100" y2="${Y(200)}" stroke="var(--line)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+      <line x1="0" y1="${Y(100)}" x2="100" y2="${Y(100)}" stroke="var(--line)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+      <polyline points="${goal}" fill="none" stroke="var(--chart2)" stroke-width="2" stroke-dasharray="6 5" vector-effect="non-scaling-stroke"/>
+      ${withPc ? `<polyline points="${line(LIFE_K)}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-opacity=".35" vector-effect="non-scaling-stroke"/>` : ""}
+      <polyline points="${line(series)}" fill="none" stroke="${withPc ? "var(--pc)" : "var(--accent)"}" stroke-width="3" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    </svg>
+    <div style="position:absolute;left:0;right:0;bottom:0;height:1.1em;font-size:.75em;color:var(--g500);font-weight:600">${ticks}</div></div>`;
+}
+
+// ---------- the TV ----------
+const TABS = [["life", "Life", "l"], ["pc", "P&amp;C", "p"], ["total", "Agency total", "t"]];
+function header(screen) {
+  const tabs = MODE === "static"
+    ? TABS.filter(([k]) => k === screen).map(([k, label, dot]) => `<span class="on ${k}"><i class="${dot}"></i>${label}</span>`).join("")
+    : TABS.map(([k, label, dot]) => `<span class="${k === screen ? "on " + k : ""}"><i class="${dot}"></i>${label}${k === screen ? `<em style="width:${P}%"></em>` : ""}</span>`).join("");
+  return `<header><div class="lockup"><div class="mark"><i class="a"></i><i class="b"></i><i class="c"></i><b></b></div><div class="t">Scorecard<small>by TKG</small></div></div>
+    <div class="mid"><b>November 2026</b><div class="screens">${tabs}</div></div>
+    <div class="right"><span class="pill amber">8 business days left</span><div class="clockcol"><span class="clock mono">11:48 AM</span><small>Wed, Nov 18</small></div></div></header>`;
+}
+const footer = `<footer><b>Finish strong. Every policy counts.</b><span>Updated 11:48 AM <span style="margin-left:1em">F full screen</span></span></footer>`;
+function ring(parts, label, big) {
+  const r = 42, c = 2 * Math.PI * r;
+  let acc = 0;
+  const arcs = parts.map(([pct, color]) => { acc += pct; return { to: acc, color }; }).reverse()
+    .map((a) => `<circle cx="50" cy="50" r="${r}" style="stroke:${a.color}" stroke-linecap="${a.color.includes("pc") ? "butt" : "round"}" stroke-dasharray="${(c * a.to) / 100} ${c}"/>`).join("");
+  return `<div class="donut"><svg viewBox="0 0 100 100"><circle class="t" cx="50" cy="50" r="${r}"/>${arcs}</svg><div class="c"><b class="mono">${big}</b><small>${label}</small></div></div>`;
+}
+function feed(title, items) {
+  return `<section class="panel feed"><div class="ph"><b>${title}</b></div><ul>${items.map((x) => {
+    const p = PEOPLE.find((q) => q.f === x[0]);
+    return `<li>${av(p)}<span class="n"><b>${p.f}</b> · ${x[1]}${x[4] ? ` <span class="pill pc">P&amp;C</span>` : ""}</span><span class="t">${x[2]}</span><span class="m mono">${$(x[3])}</span></li>`;
+  }).join("")}</ul></section>`;
+}
+const LIFE_FEED = [["Moe", "AHL · Whole life", "11:42 AM", 2140], ["Alex", "Americo · Term", "10:58 AM", 1260], ["Matt", "Royal · Term", "10:15 AM", 828], ["Tina", "Foresters · Final expense", "Tue", 1120]];
+const PC_FEED = [["Maira", "Progressive · Auto", "11:05 AM", 640], ["Anersi", "HOAIC · Home", "Tue", 1480], ["Anersi", "Geico · Umbrella", "Tue", 450], ["Moe", "Obie · Dwelling", "Tue", 800]];
+const ALL_FEED = [["Moe", "AHL · Whole life", "11:42 AM", 2140], ["Maira", "Progressive · Auto", "11:05 AM", 640, true], ["Alex", "Americo · Term", "10:58 AM", 1260], ["Matt", "Royal · Term", "10:15 AM", 828]];
+
+function tvLife() {
+  const rows = byLife.map((p, i) => `<li class="${i === 0 ? "first" : ""}">${lifeRow(p, i + 1)}</li>`).join("");
+  const pct = (LIFE / GOAL) * 100;
+  return `${header("life")}<div class="grid">
+    <section class="panel"><div class="ph"><b><span class="k l"></span>Life leaderboard</b><small><span class="legend"><i class="tick"></i>goal line today ·</span>annual premium · policies</small></div><ol>${rows}</ol></section>
+    <div class="col">
+      <section class="panel goalcard">${ring([[pct, "var(--accent)"]], "OF GOAL", Math.round(pct) + "%")}
+        <div class="gt"><span class="eyebrow">Life production</span><div class="big mono">${$(LIFE)}</div><div class="of">of ${$(GOAL)}</div><div class="pace">Ahead by ${$(LIFE - EXPECTED)} · on pace for ${$((LIFE / 13) * 21)}</div></div></section>
+      <section class="tiles"><div class="tile"><span class="eyebrow">Today</span><div class="v mono up">${$(LIFE_TODAY)}</div><div class="s">3 policies</div></div><div class="tile"><span class="eyebrow">Policies</span><div class="v mono">${LIFE_POL}</div><div class="s">${$(LIFE / LIFE_POL)} avg</div></div><div class="tile"><span class="eyebrow">Needed a day</span><div class="v mono">${$((GOAL - LIFE) / 8)}</div><div class="s">to hit ${$(GOAL)}</div></div></section>
+      <section class="panel chart" style="display:flex;flex-direction:column"><div class="ph"><b>The month so far</b><span class="legend"><i class="a"></i>life production<i class="b"></i>goal line</span></div>${chart(false)}</section>
+      ${feed("Latest life sales", LIFE_FEED)}
+    </div></div>${footer}`;
+}
+function tvPc() {
+  const rows = byPc.map((p, i) => `<li class="${i === 0 ? "first pcf" : ""}">${pcRow(p, i + 1, PC_LEAD)}</li>`).join("");
+  const maxPol = Math.max(...CARRIERS.map((c) => c.pol));
+  const carriers = CARRIERS.map((c) => `<div class="crow"><div class="top"><b>${c.n}</b><span class="mono"><small>${c.pol} policies</small>${$(c.amt)}</span></div><div class="track"><i style="width:${(c.pol / maxPol) * 100}%"></i></div><div class="small">${c.lines}</div></div>`).join("");
+  const lines = LINES.map(([n, pol, amt]) => `<div class="lt"><span class="eyebrow">${n}</span><div class="v mono">${pol}</div><div class="s">${$(amt)}</div></div>`).join("");
+  return `${header("pc")}<div class="grid">
+    <div class="lcol">
+      <section class="panel"><div class="ph"><b><span class="k p"></span>P&amp;C leaderboard</b><small>annual premium · policies · lines</small></div><ol class="fixed">${rows}</ol></section>
+      <section class="panel carriers"><div class="ph"><b>By carrier</b><small>November so far</small></div><div class="rows">${carriers}</div></section>
+    </div>
+    <div class="col">
+      <section class="panel goalcard"><div class="pcmark">P&amp;C</div>
+        <div class="gt"><span class="eyebrow">P&amp;C production</span><div class="big mono" style="color:var(--pc-text)">${$(PC)}</div><div class="of">${PC_POL} policies · Anersi, Moe and Maira</div><div class="pace pcp">+${$(PC_TODAY)} today · Maira, Progressive auto</div></div></section>
+      <section class="tiles"><div class="tile"><span class="eyebrow">Today</span><div class="v mono up">${$(PC_TODAY)}</div><div class="s">1 policy</div></div><div class="tile pc"><span class="eyebrow">Policies</span><div class="v mono">${PC_POL}</div><div class="s">${$(PC / PC_POL)} avg</div></div><div class="tile pc"><span class="eyebrow">Share of agency</span><div class="v mono">${Math.round((PC / ALL) * 100)}%</div><div class="s">of ${$(ALL)} total</div></div></section>
+      <section class="panel"><div class="ph"><b>By line</b><small>policies · annual premium</small></div><div class="linegrid">${lines}</div></section>
+      ${feed("Latest P&amp;C sales", PC_FEED.slice(0, 3))}
+    </div></div>${footer}`;
+}
+function tvTotal() {
+  const rows = byAll.map((p, i) => `<li class="${i === 0 ? "first" : ""}">${totalRow(p, i + 1)}</li>`).join("");
+  const lifePct = (LIFE / GOAL) * 100, pcPct = (PC / GOAL) * 100;
+  return `${header("total")}<div class="grid">
+    <section class="panel"><div class="ph"><b><span class="k t"></span>Agency leaderboard</b><small><span class="legend"><span class="dot l"></span>life<span class="dot p"></span>P&amp;C<i class="tick"></i>goal line today</span></small></div><ol>${rows}</ol></section>
+    <div class="col">
+      <section class="panel goalcard">${ring([[lifePct, "var(--accent)"], [pcPct, "var(--pc)"]], "WITH P&amp;C", Math.round(lifePct + pcPct) + "%")}
+        <div class="gt"><span class="eyebrow">Agency total · life + P&amp;C</span><div class="big mono">${$(ALL)}</div><div class="of">of the ${$(GOAL)} goal, P&amp;C added</div><div class="splitline"><span><i class="l"></i>Life <b>${$(LIFE)}</b></span><span><i class="p"></i>P&amp;C <b>${$(PC)}</b></span></div><div class="pace">With P&amp;C: ahead by ${$(ALL - EXPECTED)}</div></div></section>
+      <section class="tiles"><div class="tile"><span class="eyebrow">Today</span><div class="v mono up">${$(ALL_TODAY)}</div><div class="s">4 policies · 1 P&amp;C</div></div><div class="tile"><span class="eyebrow">Policies</span><div class="v mono">${ALL_POL}</div><div class="s">${LIFE_POL} life · ${PC_POL} P&amp;C</div></div><div class="tile"><span class="eyebrow">Avg premium</span><div class="v mono">${$(ALL / ALL_POL)}</div><div class="s">per policy</div></div></section>
+      <section class="panel chart" style="display:flex;flex-direction:column"><div class="ph"><b>The month so far</b><span class="legend"><i class="a" style="opacity:.45"></i>life<i class="b" style="background:var(--pc);margin-left:1em"></i>life + P&amp;C<i class="b"></i>goal line</span></div>${chart(true)}</section>
+      ${feed("Latest sales", ALL_FEED)}
+    </div></div>${footer}`;
+}
+
+// ---------- the phone ----------
+const NAV = `<div class="nav"><div class="lockup"><div class="mark"><i class="a"></i><i class="b"></i><i class="c"></i><b></b></div><div class="t">Scorecard<small>by TKG</small></div></div><div class="ak">AK</div></div>`;
+const STRIP = `<div class="strip"><div class="tab on"><i></i>This month</div><div class="tab"><i></i>Log a sale</div><div class="tab"><i></i>Wrap</div><div class="tab"><i></i>Team</div></div>`;
+function seg(on) {
+  return `<div class="seg">${TABS.map(([k, label, dot]) => `<span class="${k === on ? "on" : ""}"><i class="${dot}"></i>${k === "total" ? "Total" : label}</span>`).join("")}</div>`;
+}
+function phoneTop(on) {
+  return `${NAV}<div class="titlerow"><h1>This month</h1><div class="arrows"><span>‹</span><span class="off">›</span></div></div>
+  <p class="sub">November 2026 <span class="pill amber">8 business days left</span></p>${seg(on)}`;
+}
+function phoneLife() {
+  const pct = (LIFE / GOAL) * 100;
+  const rows = byLife.map((p, i) => `<li class="row">${lifeRow(p, i + 1)}</li>`).join("");
+  return `<div class="screen">${phoneTop("life")}
+  <div class="card goal"><span class="eyebrow">Life production</span>
+    <div class="big mono">${$(LIFE)}<small>of ${$(GOAL)} · <b>${Math.round(pct)}%</b></small></div>
+    <div class="track"><i style="width:${pct}%"></i></div>
+    <p class="line">Ahead by ${$(LIFE - EXPECTED)}. On pace for ${$((LIFE / 13) * 21)}. ${$((GOAL - LIFE) / 8)} a day for 8 days gets there.</p>
+    <div class="stats"><div><span class="eyebrow">Policies</span><div class="v mono">${LIFE_POL}</div></div><div><span class="eyebrow">Avg premium</span><div class="v mono">${$(LIFE / LIFE_POL)}</div></div><div><span class="eyebrow">Today</span><div class="v mono">${$(LIFE_TODAY)}</div></div></div>
+  </div>
+  <h2>Life leaderboard <small>7</small><span class="legend"><i class="tick"></i>goal line today</span></h2>
+  <ul class="list" style="list-style:none;margin:0;padding:0">${rows}</ul>${STRIP}</div>`;
+}
+function phonePc() {
+  const rows = byPc.map((p, i) => `<li class="row ${i === 0 ? "pcf" : ""}">${pcRow(p, i + 1, PC_LEAD)}</li>`).join("");
+  const maxPol = Math.max(...CARRIERS.map((c) => c.pol));
+  const carriers = CARRIERS.map((c) => `<div class="crow2"><div class="top"><b>${c.n}</b><span><small>${c.pol} policies</small>${$(c.amt)}</span></div><div class="track"><i style="width:${(c.pol / maxPol) * 100}%"></i></div><div class="small">${c.lines}</div></div>`).join("");
+  return `<div class="screen">${phoneTop("pc")}
+  <div class="card goal pcgoal"><span class="eyebrow">P&amp;C production</span>
+    <div class="big mono">${$(PC)}<small>${PC_POL} policies · <b>${$(PC / PC_POL)}</b> avg</small></div>
+    <div class="linechips">${LINES.map(([n, pol, amt]) => `<div><span class="eyebrow">${n}</span><div class="v">${pol}</div><div class="s">${$(amt)}</div></div>`).join("")}</div>
+    <div class="stats"><div><span class="eyebrow">Today</span><div class="v mono">${$(PC_TODAY)}</div></div><div><span class="eyebrow">Policies</span><div class="v mono">${PC_POL}</div></div><div><span class="eyebrow">Of agency</span><div class="v mono">${Math.round((PC / ALL) * 100)}%</div></div></div>
+  </div>
+  <h2>P&amp;C leaderboard <small>3</small></h2>
+  <ul class="list" style="list-style:none;margin:0;padding:0">${rows}</ul>
+  <h2>By carrier <small>5</small></h2>
+  <div class="list">${carriers}</div>${STRIP}</div>`;
+}
+function phoneTotal() {
+  const gp = Math.min(100, (ALL / GOAL) * 100);
+  const rows = byAll.map((p, i) => `<li class="row">${totalRow(p, i + 1)}</li>`).join("");
+  return `<div class="screen">${phoneTop("total")}
+  <div class="card goal"><span class="eyebrow">Agency total · life + P&amp;C</span>
+    <div class="big mono">${$(ALL)}<small>of ${$(GOAL)} · <b>${Math.round(gp)}%</b> with P&amp;C</small></div>
+    <div class="track"><i class="life" style="width:${(gp * LIFE) / ALL}%"></i><i class="pcseg" style="width:${(gp * PC) / ALL}%"></i></div>
+    <div class="splitline"><span><i class="l"></i>Life <b>${$(LIFE)}</b></span><span><i class="p"></i>P&amp;C <b>${$(PC)}</b></span></div>
+    <p class="line">With P&amp;C added: ahead by ${$(ALL - EXPECTED)}.</p>
+    <div class="stats four" style="grid-template-columns:repeat(3,1fr)"><div><span class="eyebrow">Policies</span><div class="v mono">${ALL_POL}</div><div class="s">${LIFE_POL} life · ${PC_POL} P&amp;C</div></div><div><span class="eyebrow">Avg premium</span><div class="v mono">${$(ALL / ALL_POL)}</div><div class="s">per policy</div></div><div><span class="eyebrow">Today</span><div class="v mono">${$(ALL_TODAY)}</div><div class="s">4 policies · 1 P&amp;C</div></div></div>
+  </div>
+  <h2>Agency leaderboard <small>7</small><span class="legend"><span class="dot l"></span>life<span class="dot p"></span>P&amp;C<i class="tick"></i>goal line</span></h2>
+  <ul class="list" style="list-style:none;margin:0;padding:0">${rows}</ul>${STRIP}</div>`;
+}
+function settings() {
+  const ROT = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/></svg>`;
+  const DOT = (cls) => `<span style="width:12px;height:12px;border-radius:50%;display:inline-block;background:${cls}"></span>`;
+  const CK = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`;
+  const opts = [
+    ["Rotate", "Life 60 s, then P&amp;C 15 s, then Agency total 15 s", ROT, "", true],
+    ["Life only", "the goal screen, all day", DOT("var(--accent)"), "l"],
+    ["P&amp;C only", "P&amp;C sales and the P&amp;C team", DOT("var(--pc)"), "p"],
+    ["Agency total only", "life and P&amp;C added up", DOT("linear-gradient(90deg,var(--accent) 50%,var(--pc) 50%)"), ""],
+  ];
+  return `<div class="screen" style="padding-top:18px;min-height:0;padding-bottom:24px">
+    <h2 class="lt">TV screens</h2>
+    <p class="d">What the office TV shows. It follows within a few seconds.</p>
+    <div class="list">${opts.map(([t, s, ic, cls, on]) => `<div class="opt ${on ? "on" : ""}"><span class="ic ${cls}">${ic}</span><div class="tx"><b>${t}</b><span>${s}</span></div><span class="ck">${on ? CK : ""}</span></div>`).join("")}</div>
+  </div>`;
+}
+
+if (S === "tv") document.body.innerHTML = `<div class="board">${SCREEN === "pc" ? tvPc() : SCREEN === "total" ? tvTotal() : tvLife()}</div>`;
+else if (S === "settings") { document.body.innerHTML = settings(); document.body.style.minHeight = "0"; }
+else document.body.innerHTML = SCREEN === "pc" ? phonePc() : SCREEN === "total" ? phoneTotal() : phoneLife();
+</script>
+</body></html>
