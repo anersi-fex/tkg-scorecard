@@ -69,9 +69,9 @@
   --color-purple-100: var(--t-purple-100);
   --color-purple-800: var(--t-purple-800);
   --color-purple-900: var(--t-purple-900);
-  /* P&C (owner, 2026-11-04): its own color, apart from life, on bars, rings, dots and the P&C tag; teal
-     beside Crimson and Champion, coral beside Sky and Emerald (owner, 2026-11-04: "i don't like that much
-     purple on the screen"). Kept to bars, dots and pills: numbers stay in the text color. */
+  /* P&C (owner, 2026-11-04): silver, his pick ("I like silver the best ... make sure there's enough
+     gradient"), the same beside every colorway: dark steel to bright silver on bars and the ring, a
+     steel dot and tag. Kept to bars, dots, rings, the tag and the pills: numbers stay in the text color. */
   --color-pc: var(--t-pc);
   --color-pc-text: var(--t-pc-text);
   --color-pc-tint: var(--t-pc-tint);
@@ -159,11 +159,11 @@
   --t-purple-100: #e9dffd;
   --t-purple-800: #5b2db0;
   --t-purple-900: #4a2391;
-  --t-pc: #0d9488;
-  --t-pc-text: #0f766e;
-  --t-pc-tint: #ccfbf1;
-  --t-pc-from: #0f766e;
-  --t-pc-to: #14b8a6;
+  --t-pc: #64748b;
+  --t-pc-text: #475569;
+  --t-pc-tint: #e2e8f0;
+  --t-pc-from: #334155;
+  --t-pc-to: #a3b1c6;
 
   /* Crimson, the default colorway (owner pick, 2026-10-27): The Koka Group's red, coral on dark. */
   --t-accent: #c42b32;
@@ -254,11 +254,11 @@
     --t-purple-100: #2e1d47;
     --t-purple-800: #d8b4fe;
     --t-purple-900: #e9d5ff;
-    --t-pc: #2dd4bf;
-    --t-pc-text: #5eead4;
-    --t-pc-tint: #0f3330;
-    --t-pc-from: #14b8a6;
-    --t-pc-to: #5eead4;
+    --t-pc: #b6c2d2;
+    --t-pc-text: #d4dce6;
+    --t-pc-tint: #232a36;
+    --t-pc-from: #5d6b82;
+    --t-pc-to: #eef2f7;
 
     --t-accent: #ff6b57;
     --t-accent-text: #ff8a78;
@@ -344,11 +344,11 @@
   --t-purple-100: #2e1d47;
   --t-purple-800: #d8b4fe;
   --t-purple-900: #e9d5ff;
-  --t-pc: #2dd4bf;
-  --t-pc-text: #5eead4;
-  --t-pc-tint: #0f3330;
-  --t-pc-from: #14b8a6;
-  --t-pc-to: #5eead4;
+  --t-pc: #b6c2d2;
+  --t-pc-text: #d4dce6;
+  --t-pc-tint: #232a36;
+  --t-pc-from: #5d6b82;
+  --t-pc-to: #eef2f7;
 
   --t-accent: #ff6b57;
   --t-accent-text: #ff8a78;
@@ -391,11 +391,6 @@ html[data-colorway="sky"] {
   --t-chip-text: #075985;
   --t-chart-1: #0284c7;
   --t-chart-2: #d98a00;
-  --t-pc: #e5534b;
-  --t-pc-text: #b42318;
-  --t-pc-tint: #fde7e4;
-  --t-pc-from: #d6453d;
-  --t-pc-to: #f2785f;
 }
 html[data-colorway="sky"][data-theme="dark"] {
   --t-accent: #38bdf8;
@@ -411,11 +406,6 @@ html[data-colorway="sky"][data-theme="dark"] {
   --t-chip-text: #bae6fd;
   --t-chart-1: #38bdf8;
   --t-chart-2: #f5c451;
-  --t-pc: #ff8a78;
-  --t-pc-text: #ffb4a8;
-  --t-pc-tint: #3a1a1a;
-  --t-pc-from: #e5534b;
-  --t-pc-to: #ff9a85;
 }
 @media (prefers-color-scheme: dark) {
   html[data-colorway="sky"]:not([data-theme="light"]) {
@@ -432,11 +422,6 @@ html[data-colorway="sky"][data-theme="dark"] {
     --t-chip-text: #bae6fd;
     --t-chart-1: #38bdf8;
     --t-chart-2: #f5c451;
-    --t-pc: #ff8a78;
-    --t-pc-text: #ffb4a8;
-    --t-pc-tint: #3a1a1a;
-    --t-pc-from: #e5534b;
-    --t-pc-to: #ff9a85;
   }
 }
 /* Champion: Gold to bronze on warm neutrals: trophy case, podium, awards night. The warmest of the set. */
@@ -520,11 +505,6 @@ html[data-colorway="emerald"] {
   --t-chip-text: #0b5a3a;
   --t-chart-1: #0f8f5a;
   --t-chart-2: #c98a00;
-  --t-pc: #e5534b;
-  --t-pc-text: #b42318;
-  --t-pc-tint: #fde7e4;
-  --t-pc-from: #d6453d;
-  --t-pc-to: #f2785f;
 }
 html[data-colorway="emerald"][data-theme="dark"] {
   --t-accent: #34d399;
@@ -540,11 +520,6 @@ html[data-colorway="emerald"][data-theme="dark"] {
   --t-chip-text: #86efac;
   --t-chart-1: #34d399;
   --t-chart-2: #f5c451;
-  --t-pc: #ff8a78;
-  --t-pc-text: #ffb4a8;
-  --t-pc-tint: #3a1a1a;
-  --t-pc-from: #e5534b;
-  --t-pc-to: #ff9a85;
 }
 @media (prefers-color-scheme: dark) {
   html[data-colorway="emerald"]:not([data-theme="light"]) {
@@ -561,11 +536,6 @@ html[data-colorway="emerald"][data-theme="dark"] {
     --t-chip-text: #86efac;
     --t-chart-1: #34d399;
     --t-chart-2: #f5c451;
-    --t-pc: #ff8a78;
-    --t-pc-text: #ffb4a8;
-    --t-pc-tint: #3a1a1a;
-    --t-pc-from: #e5534b;
-    --t-pc-to: #ff9a85;
   }
 }
 /* colorways:end */

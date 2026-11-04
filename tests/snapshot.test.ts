@@ -34,7 +34,7 @@ function sale(agent: Agent, soldOn: string, premium: number, extra: Partial<Sale
 const [ak, aa, mk, tk] = agents;
 
 /** November 2026 seen from Wednesday the 18th: 13 of 21 business days have run (today counts). */
-function snap(sales: SaleWithAgent[], goals = { teamCents: 200_000 * 100, byAgent: { ak: 70_000 * 100, aa: 50_000 * 100, mk: 35_000 * 100 } as Record<string, number> }) {
+function snap(sales: SaleWithAgent[], goals: { teamCents: number; byAgent: Record<string, number>; pcTeamCents?: number; pcByAgent?: Record<string, number> } = { teamCents: 200_000 * 100, byAgent: { ak: 70_000 * 100, aa: 50_000 * 100, mk: 35_000 * 100 } }) {
   return buildSnapshot({ month: "2026-11", today: "2026-11-18", agents, sales, goals, recent: [...sales].reverse(), message: "" });
 }
 
@@ -121,4 +121,44 @@ test("the P&C board: licensed people, plus anyone with a P&C sale; a past best d
   assert.deepEqual(s.team.bestDay, { date: "2026-11-03", cents: 700 * 100 });
   assert.deepEqual(s.team.bestLifeDay, { date: "2026-11-04", cents: 300 * 100 });
   assert.equal(s.team.pcAverageCents, 500 * 100);
+});
+
+test("P&C has a goal of its own; the agency total measures life and P&C against both goals added up", () => {
+  const sales = [
+    sale(aa, "2026-11-10", 20_000),
+    sale(ak, "2026-11-12", 10_000),
+    sale(ak, "2026-11-17", 6_000, { kind: "pc", carrier: "Progressive", product: "Auto" }),
+    sale(mk, "2026-11-18", 3_000, { kind: "pc", carrier: "Geico", product: "Auto" }),
+  ];
+  const s = snap(sales, { teamCents: 200_000 * 100, byAgent: { ak: 70_000 * 100 }, pcTeamCents: 30_000 * 100, pcByAgent: { ak: 20_000 * 100, mk: 10_000 * 100 } });
+  // The life goal ignores P&C; P&C against its own goal; the total against both
+  assert.equal(s.team.goalPct, Math.round((30_000 / 200_000) * 100));
+  assert.equal(s.team.pcGoalCents, 30_000 * 100);
+  assert.equal(s.team.pcGoalPct, Math.round((9_000 / 30_000) * 100));
+  assert.equal(s.team.totalGoalCents, 230_000 * 100);
+  assert.equal(s.team.totalGoalPct, Math.round((39_000 / 230_000) * 100));
+  const expected = (goal: number) => Math.round(goal * 100 * (13 / 21));
+  assert.equal(s.team.pcPace.aheadCents, 9_000 * 100 - expected(30_000));
+  assert.equal(s.team.totalPace.aheadCents, 39_000 * 100 - expected(230_000));
+  const anersi = s.agents.find((a) => a.id === "ak")!;
+  assert.deepEqual([anersi.goalPct, anersi.pcGoalPct, anersi.totalGoalCents, anersi.totalGoalPct], [14, 30, 90_000 * 100, Math.round((16_000 / 90_000) * 100)]);
+  const moe = s.agents.find((a) => a.id === "mk")!;
+  assert.deepEqual([moe.goalCents, moe.pcGoalCents, moe.pcGoalPct], [0, 10_000 * 100, 30]);
+});
+
+test("the life board's ranks never skip: someone off the board with only P&C ranks after everyone it shows", () => {
+  const gone: Agent = { id: "bo", name: "Bo Aaron", active: false, sort: 9, pc_licensed: true };
+  const s = buildSnapshot({
+    month: "2026-11",
+    today: "2026-11-18",
+    agents: [...agents, gone],
+    sales: [sale(aa, "2026-11-10", 5_000), sale(gone, "2026-11-05", 1_200, { kind: "pc", carrier: "Progressive", product: "Auto" })],
+    goals: { teamCents: 0, byAgent: {} },
+    recent: [],
+    message: "",
+  });
+  const shown = s.agents.filter((a) => a.active || a.lifeCents > 0);
+  assert.deepEqual(shown.map((a) => a.rank), [1, 2, 3, 4]);
+  assert.equal(s.agents.find((a) => a.id === "bo")!.rank, 5);
+  assert.deepEqual(s.lifeRecent.map((r) => r.premiumCents / 100), [5_000]);
 });

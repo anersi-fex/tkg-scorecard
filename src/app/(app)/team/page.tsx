@@ -17,11 +17,12 @@ export default async function TeamPage() {
   const month = monthKeyOf(today);
   const [agents, sales, goals] = await Promise.all([listAgents({ includeInactive: true }), salesForMonth(month), goalsForMonth(month)]);
   const tones = teamTones(agents);
-  const totals = new Map<string, { cents: number; policies: number }>();
+  const totals = new Map<string, { cents: number; policies: number; pcCents: number }>();
   for (const s of sales) {
-    const t = totals.get(s.agent_id) ?? { cents: 0, policies: 0 };
+    const t = totals.get(s.agent_id) ?? { cents: 0, policies: 0, pcCents: 0 };
     t.cents += s.premium_cents;
     t.policies += s.policies;
+    if (s.kind === "pc") t.pcCents += s.premium_cents;
     totals.set(s.agent_id, t);
   }
   const people = agents.map((a) => ({
@@ -32,7 +33,9 @@ export default async function TeamPage() {
     tone: tones[a.id],
     cents: totals.get(a.id)?.cents ?? 0,
     policies: totals.get(a.id)?.policies ?? 0,
+    pcCents: totals.get(a.id)?.pcCents ?? 0,
     goalCents: goals.byAgent[a.id] ?? 0,
+    pcGoalCents: goals.pcByAgent[a.id] ?? 0,
   }));
   const base = await appBase();
   return (

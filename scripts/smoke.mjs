@@ -138,6 +138,11 @@ try {
   await goalInput.fill("150000");
   await o.locator("form:has(input[name=goal])").first().locator("button[type=submit]").click();
   await o.waitForSelector("text=Goal saved. The board shows it now.");
+  // P&C has a goal of its own (owner, 2026-11-04): this month's, next to the life goal
+  await o.locator("input[name=pc_goal]").first().fill("30000");
+  await o.locator("form:has(input[name=pc_goal])").first().locator("button[type=submit]").click();
+  await o.waitForSelector("text=P&C goal saved. The board shows it now.");
+  check((await (await owner.request.get(`${APP}/api/board`)).json()).team.pcGoalCents === 3_000_000, "the P&C goal saves and the feed carries it");
   await o.fill("#message", "Finish strong. Every policy counts.");
   await o.locator("form:has(#message) button[type=submit]").click();
   await o.waitForSelector("text=Saved. The board updates");
@@ -240,12 +245,17 @@ try {
   await o.waitForSelector("text=Removed.");
   check(true, "owner removed a sale");
 
-  // P&C alongside life (2026-11-04): the owner marks Moe P&C licensed, a P&C sale splits the numbers in purple
+  // P&C alongside life (2026-11-04): the owner marks Moe P&C licensed and gives him a P&C goal; a P&C sale counts on P&C and in the total, never on Life
   await o.goto(`${APP}/team`);
   await o.click("li:has-text('Moe Karim') button:has-text('Edit')");
   await o.click("li:has-text('Moe Karim') [role=switch]");
   await o.waitForSelector("text=P&C licensed. Log a sale offers");
   check(true, "the owner marks Moe P&C licensed on the Team page");
+  await o.waitForSelector("li:has-text('Moe Karim') input[name=pc_goal]");
+  await o.fill("li:has-text('Moe Karim') input[name=pc_goal]", "5000");
+  await o.click("li:has-text('Moe Karim') form:has(input[name=pc_goal]) button");
+  await o.waitForSelector("text=P&C goal saved.");
+  check(true, "a P&C licensed person gets their own P&C goal on the Team page");
   await o.goto(`${APP}/log`);
   await o.click(`[role=radio]:has-text("Alex Alekseyev")`);
   check((await o.locator("[role=radiogroup][aria-label='What kind']").count()) === 0, "no Life / P&C switch for someone who is not P&C licensed");
@@ -275,7 +285,7 @@ try {
   await o.waitForSelector("text=P&C leaderboard");
   const pcView = await o.textContent("body");
   const pcMoe = await o.locator("li:has-text('Moe Karim')").first().textContent();
-  check(pcView.includes("P&C production") && pcMoe.includes("$1,860") && pcMoe.includes("Auto 1") && pcView.includes("By carrier") && pcView.includes("Progressive"), "the P&C view: Moe on the P&C board with his line, and the carrier");
+  check(pcView.includes("P&C production") && pcView.includes("of $30,000") && pcMoe.includes("$1,860") && pcMoe.includes("37%") && pcMoe.includes("Auto 1") && pcView.includes("By carrier") && pcView.includes("Progressive"), "the P&C view: its goal, Moe on the P&C board against his own P&C goal, his line, the carrier");
   check(!(await o.textContent("[data-board=pc]")).includes("Alex Alekseyev"), "the P&C board leaves out people who are not P&C licensed");
   await o.goto(`${APP}/`);
   await o.waitForSelector("text=Leaderboard");
@@ -475,7 +485,7 @@ try {
     await o.click("[role=radiogroup][aria-label='TV screens'] [role=radio]:has-text('Agency total only')");
     check(await settles(t, () => document.querySelector("main")?.dataset.screen === "total", 12000), "Agency total only in Settings puts the TV on the agency total within a poll");
     const totalText = await t.textContent("body");
-    check(totalText.includes("Agency leaderboard") && totalText.includes("Life $") && totalText.includes("P&C $") && totalText.includes("with P&C"), "the agency total screen adds life and P&C up and splits them");
+    check(totalText.includes("Agency leaderboard") && totalText.includes("Life $") && totalText.includes("P&C $") && totalText.includes("of $180,000 · life + P&C goals"), "the agency total screen adds life and P&C up against both goals and splits them");
     check((await t.locator("[data-pill]").count()) === 1, "a kept screen shows only its own pill");
     await t.screenshot({ path: `${OUT}/10c-board-total.png` });
     await o.click("[role=radiogroup][aria-label='TV screens'] [role=radio]:has-text('P&C only')");
@@ -483,6 +493,8 @@ try {
     // innerText: what the screen shows (the page's own data script carries every name)
     const pcText = await t.innerText("main");
     check(pcText.includes("P&C leaderboard") && pcText.includes("Moe Karim") && pcText.includes("By carrier") && pcText.includes("Geico") && pcText.includes("By line") && pcText.includes("Umbrella") && !pcText.includes("Alex Alekseyev"), "the P&C screen: the P&C team, by carrier, by line, no one without P&C");
+    const pcLower = pcText.toLowerCase(); // innerText follows the eyebrows' capitals
+    check(pcLower.includes("p&c production") && pcLower.includes("of $30,000") && pcLower.includes("needed a day") && pcLower.includes("the month so far") && pcLower.includes("latest p&c sales"), "the P&C screen's right side is like the others: its goal, the tiles, the chart, the latest sales");
     await t.screenshot({ path: `${OUT}/10b-board-pc.png` });
     await o.click("[role=radiogroup][aria-label='TV screens'] [role=radio]:has-text('Rotate')");
     check(await settles(t, () => document.querySelector("main")?.dataset.screen === "life" && document.querySelectorAll("[data-pill]").length === 3, 12000), "Rotate brings the TV back to life with all three pills");
@@ -516,11 +528,16 @@ try {
   // before any sale (headless Chromium allows sound, so this one is launched with the desktop rule).
   const gated = await chromium.launch({ args: ["--autoplay-policy=document-user-activation-required"] });
   try {
-    const g = await (await gated.newContext({ viewport: { width: 1920, height: 1080 } })).newPage();
-    await signIn(g, TEAM);
+    // The session cookie, no sign-in click: like the TV after it reloads itself, nobody has touched the page
+    const gc = await gated.newContext({ viewport: { width: 1920, height: 1080 } });
+    await gc.addCookies(await owner.cookies());
+    const g = await gc.newPage();
     await g.goto(`${APP}/board`);
-    const hint = () => document.querySelector("footer")?.textContent?.includes("Click or press a key once for sound");
-    check(await settles(g, hint, 8000), "a browser that holds sound back gets the sound hint on the TV before any sale");
+    // Wait without touching the page: Playwright's own waits run with a user gesture, which would
+    // count as the click the browser is waiting for. The board asks the browser at load.
+    await g.waitForTimeout(2500);
+    const hinted = (await g.innerText("footer")).includes("Click or press a key once for sound");
+    check(hinted, "a browser that holds sound back gets the sound hint on the TV before any sale");
     await g.keyboard.press("Shift");
     check(await settles(g, () => !document.querySelector("footer")?.textContent?.includes("Click or press a key once for sound"), 3000), "a key on the TV clears the sound hint");
   } finally {

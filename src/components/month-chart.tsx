@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { cn } from "@/components/ui";
 import type { DayPoint } from "@/lib/board";
 import { formatCompact } from "@/lib/money";
 
@@ -18,6 +19,7 @@ export function MonthChart({
   today,
   height = 160,
   labels = true,
+  tone = "brand",
   className,
 }: {
   daily: DayPoint[];
@@ -26,6 +28,8 @@ export function MonthChart({
   /** The height before the box is measured (server render). */
   height?: number;
   labels?: boolean;
+  /** The line's color: the brand's (life, the total) or P&C's own. */
+  tone?: "brand" | "pc";
   className?: string;
 }) {
   const ref = useRef<SVGSVGElement | null>(null);
@@ -94,9 +98,9 @@ export function MonthChart({
       {goalCents > 0 && (
         <polyline points={goalPts.join(" ")} fill="none" className="stroke-chart-2 [stroke-width:0.12em]" strokeDasharray="6 6" strokeLinecap="round" strokeLinejoin="round" />
       )}
-      {areaPath && <path d={areaPath} className="fill-chart-1" opacity="0.12" />}
-      {actualPath && <path d={actualPath} fill="none" className="stroke-chart-1 [stroke-width:0.19em]" strokeLinejoin="round" strokeLinecap="round" />}
-      {last && <circle cx={x(reached.length - 1)} cy={y(last.cumulativeCents)} className="fill-chart-1 stroke-surface [r:0.32em] [stroke-width:0.15em]" />}
+      {areaPath && <path d={areaPath} className={tone === "pc" ? "fill-pc" : "fill-chart-1"} opacity="0.12" />}
+      {actualPath && <path d={actualPath} fill="none" className={cn(tone === "pc" ? "stroke-pc" : "stroke-chart-1", "[stroke-width:0.19em]")} strokeLinejoin="round" strokeLinecap="round" />}
+      {last && <circle cx={x(reached.length - 1)} cy={y(last.cumulativeCents)} className={cn(tone === "pc" ? "fill-pc" : "fill-chart-1", "stroke-surface [r:0.32em] [stroke-width:0.15em]")} />}
       {labels &&
         daily
           .filter((d, i) => i === 0 || i === n - 1 || ((i + 1) % 5 === 0 && i < n - 3))

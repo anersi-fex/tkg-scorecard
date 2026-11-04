@@ -94,3 +94,8 @@ export function linesSummary(lines: { name: string; policies: number }[]): strin
 export function lifeDaily<T extends { cents: number; cumulativeCents: number; lifeCents: number; lifeCumulativeCents: number }>(daily: T[]): T[] {
   return daily.map((d) => ({ ...d, cents: d.lifeCents, cumulativeCents: d.lifeCumulativeCents }));
 }
+
+/** The month chart for P&C alone: each day's P&C premium and its running total. */
+export function pcDaily<T extends { cents: number; cumulativeCents: number; lifeCents: number; lifeCumulativeCents: number }>(daily: T[]): T[] {
+  return daily.map((d) => ({ ...d, cents: d.cents - d.lifeCents, cumulativeCents: d.cumulativeCents - d.lifeCumulativeCents }));
+}

@@ -21,6 +21,7 @@ Vercel builds the `main` branch, and right now `main` holds only a one-line READ
 3. You should see **Success. No rows returned**.
 4. Do the same with `0002_carrier.sql` (the carrier a sale was written with; added 2026-10-27). Done already on the live project if Log a sale shows the carrier chips.
 5. Do the same with `0003_pc.sql` (P&C next to life, added 2026-11-04: a sale's kind and who is P&C licensed). Then, on the Team page, tap Edit on yourself, Moe and Maira and switch on **P&C licensed**: Log a sale then offers Life or P&C for the three of you.
+6. Do the same with `0004_pc_goals.sql` (P&C goals, added 2026-11-04). Then Settings > **P&C goal** takes the team's P&C goal for the month, and Team > Edit takes each P&C licensed person's own.
 
 ### Step 4. Copy two values
 1. **Project Settings** (gear) > **Data API**: copy the **Project URL** (it looks like `https://abcd.supabase.co`, nothing after `.co`).
@@ -52,7 +53,7 @@ Vercel builds the `main` branch, and right now `main` holds only a one-line READ
 ### Step 8. The TV (Mac mini)
 1. On the Mac mini, open Safari or Chrome and go to the address + `/board` (for example `https://tkg-scorecard-xxxx.vercel.app/board`).
 2. Sign in with the **team** password. The board opens dark. It stays signed in for 180 days.
-3. Full screen: press **Control+Command+F** (the Mac's own full screen, which stays on when the page reloads itself after an update; the page's **F** key also works, but drops after a reload). Light or dark, the colorway, and which screens it shows (Rotate: Life for a minute, then P&C and Agency total for 15 seconds each; or one screen kept on) are set on your phone under Settings (TV look, Colorway, TV screens); the TV follows within 5 seconds.
+3. Full screen: press **Control+Command+F** (the Mac's own full screen, which stays on when the page reloads itself after an update; the page's **F** key also works, but drops after a reload). Light or dark, the colorway, and which screens it shows (Rotate: Life for a minute, then P&C and Agency total for 15 seconds each, once the month has a P&C sale; or one screen kept on) are set on your phone under Settings (TV look, Colorway, TV screens); the TV follows within 5 seconds.
 4. System Settings > **Lock Screen**: set "Turn display off" to **Never** while the board is up. The page also asks the Mac to keep the screen awake.
 5. Plug the HDMI transmitter into the Mac mini, the receiver into the TV. The board refreshes itself every 5 seconds; a new sale gets confetti.
 6. Sound: the board plays the sale sound you pick on your phone under Settings > Sale sound. Browsers hold sound back until someone clicks the page, so once: in **Safari**, Safari > Settings > Websites > **Auto-Play**, find the board's address and pick **Allow All Auto-Play** (it then plays after every reload too); in **Chrome**, click the board once after it opens. While a browser holds the sound back, the board's footer says "Click or press a key once for sound".

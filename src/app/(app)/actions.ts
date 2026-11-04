@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
-import { addAgent, deleteSale, getSale, insertSale, listAgents, saveSettings, setAgentGoal, setTeamGoal, updateAgent, updateSale, getSettings } from "@/lib/data";
+import { addAgent, deleteSale, getSale, insertSale, listAgents, saveSettings, setAgentGoal, setAgentPcGoal, setTeamGoal, setTeamPcGoal, updateAgent, updateSale, getSettings } from "@/lib/data";
 import { isDateKey, isMonthKey, todayInDetroit, addDays } from "@/lib/month";
 import { parseDollars } from "@/lib/money";
 import { DEFAULT_CARRIERS, DEFAULT_PC_CARRIERS, DEFAULT_PRODUCTS, isBoardTheme, isTvScreens, type PcCarrier } from "@/lib/types";
@@ -237,6 +237,38 @@ export async function savePersonGoal(month: string, agentId: string, form: FormD
     await setAgentGoal(month, agentId, cents);
     refresh();
     return { ok: true, message: cents ? "Goal saved." : "Goal cleared." };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}
+
+/** Settings > P&C goal: the team's P&C goal for a month (the P&C screen measures it). */
+export async function saveTeamPcGoal(month: string, form: FormData): Promise<ActionResult> {
+  try {
+    await requireRole("owner");
+    if (!Month.safeParse(month).success) return { ok: false, error: "That month isn't right." };
+    const raw = String(form.get("pc_goal") ?? "").trim();
+    const cents = raw === "" ? 0 : parseDollars(raw);
+    if (cents == null) return { ok: false, error: "The goal needs to be an amount, like 30000." };
+    await setTeamPcGoal(month, cents);
+    refresh();
+    return { ok: true, message: cents ? "P&C goal saved. The board shows it now." : "P&C goal cleared." };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}
+
+/** Team > Edit: a P&C licensed person's own P&C goal for the month. */
+export async function savePersonPcGoal(month: string, agentId: string, form: FormData): Promise<ActionResult> {
+  try {
+    await requireRole("owner");
+    if (!Month.safeParse(month).success || !z.string().uuid().safeParse(agentId).success) return { ok: false, error: "That person or month isn't right." };
+    const raw = String(form.get("pc_goal") ?? "").trim();
+    const cents = raw === "" ? 0 : parseDollars(raw);
+    if (cents == null) return { ok: false, error: "The goal needs to be an amount, like 8000." };
+    await setAgentPcGoal(month, agentId, cents);
+    refresh();
+    return { ok: true, message: cents ? "P&C goal saved." : "P&C goal cleared." };
   } catch (err) {
     return { ok: false, error: message(err) };
   }

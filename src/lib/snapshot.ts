@@ -43,10 +43,14 @@ export interface AgentLine {
   todayPolicies: number;
   todayLifeCents: number;
   todayPcCents: number;
+  /** Their life goal (the board's measure) and their life against it, in percent (0 without one). */
   goalCents: number;
-  /** Life against their own goal, in percent (0 when they have none): the goal is life. */
   goalPct: number;
-  /** Life and P&C added up against their own goal (the agency total screen). */
+  /** Their P&C goal (0004_pc_goals.sql) and their P&C against it. */
+  pcGoalCents: number;
+  pcGoalPct: number;
+  /** Both goals added up, and life and P&C added up against them (the agency total screen). */
+  totalGoalCents: number;
   totalGoalPct: number;
   /** This month's P&C lines, most policies first ("Auto 6 · Home 4"). */
   pcLines: { name: string; policies: number }[];
@@ -90,10 +94,14 @@ export interface MonthSnapshot {
   team: {
     /** Life and P&C added up. */
     productionCents: number;
+    /** The life goal, the one the board measures, and life against it in percent. */
     goalCents: number;
-    /** Life against the goal, in percent. */
     goalPct: number;
-    /** Life and P&C added up against the goal ("what the numbers would look like if we added them up"). */
+    /** The P&C goal (owner, 2026-11-04: "I want this to be able to have a goal as well") and P&C against it. */
+    pcGoalCents: number;
+    pcGoalPct: number;
+    /** Both goals added up, and life and P&C added up against them ("what the numbers would look like if we added them up"). */
+    totalGoalCents: number;
     totalGoalPct: number;
     policies: number;
     /** The split of production and policies. */
@@ -107,9 +115,9 @@ export interface MonthSnapshot {
     todayLifePolicies: number;
     todayPcCents: number;
     todayPcPolicies: number;
-    /** Life against the straight line to the goal. */
+    /** Life against the straight line to its goal; P&C against its own; the total against both. */
     pace: Pace;
-    /** Life and P&C added up against the same line. */
+    pcPace: Pace;
     totalPace: Pace;
     /** The day with the most production so far, all of it; and the best day for life. */
     bestDay: { date: string; cents: number } | null;
@@ -129,7 +137,8 @@ export interface MonthSnapshot {
   agents: AgentLine[];
   /** The newest sales across every month, newest first (the board's feed and celebrations). */
   recent: FeedSale[];
-  /** This month's P&C sales, newest first, the latest few (the P&C screen's feed). */
+  /** This month's life sales and P&C sales, newest first, the latest few (the life and P&C screens' feeds). */
+  lifeRecent: FeedSale[];
   pcRecent: FeedSale[];
   /** Every sale of this month, newest first (the Home list, where a sale is fixed or removed). */
   sales: FeedSale[];
@@ -161,7 +170,7 @@ function toFeed(s: SaleWithAgent): FeedSale {
   };
 }
 
-/** How many P&C sales the P&C screen's feed carries. */
+/** How many sales the life and P&C screens' feeds carry. */
 const PC_RECENT = 6;
 
 const sum = (rows: SaleWithAgent[], f: (s: SaleWithAgent) => number) => rows.reduce((n, s) => n + f(s), 0);
@@ -181,7 +190,7 @@ export function buildSnapshot(input: {
   today: string;
   agents: Agent[];
   sales: SaleWithAgent[];
-  goals: { teamCents: number; byAgent: Record<string, number> };
+  goals: { teamCents: number; byAgent: Record<string, number>; pcTeamCents?: number; pcByAgent?: Record<string, number> };
   recent: SaleWithAgent[];
   message: string;
   colorway?: ColorwayKey;
@@ -260,6 +269,7 @@ export function buildSnapshot(input: {
     .map((a) => {
       const p = perAgent.get(a.id) ?? empty();
       const goalCents = goals.byAgent[a.id] ?? 0;
+      const pcGoalCents = goals.pcByAgent?.[a.id] ?? 0;
       return {
         id: a.id,
         name: a.name,
@@ -277,14 +287,20 @@ export function buildSnapshot(input: {
         todayPcCents: p.todayPcCents,
         goalCents,
         goalPct: percentOf(p.premium - p.pcCents, goalCents),
-        totalGoalPct: percentOf(p.premium, goalCents),
+        pcGoalCents,
+        pcGoalPct: percentOf(p.pcCents, pcGoalCents),
+        totalGoalCents: goalCents + pcGoalCents,
+        totalGoalPct: percentOf(p.premium, goalCents + pcGoalCents),
         pcLines: [...p.pcLines.entries()].map(([name, n]) => ({ name, policies: n })).sort((x, y) => y.policies - x.policies || x.name.localeCompare(y.name)),
         lastSaleAt: p.last,
         active: a.active,
       };
     });
   // Three orders: life (the main board), all of it added up, and P&C for the people who write it.
-  const lifeOrder = rankOrder(lines, (l) => l.lifeCents, (l) => l.lifePolicies);
+  // The life board shows the people on the board and anyone with life this month; someone off the
+  // board with only P&C ranks after them, so the numbers it shows never skip one.
+  const onLife = (l: (typeof lines)[number]) => l.active || l.lifeCents > 0;
+  const lifeOrder = [...rankOrder(lines.filter(onLife), (l) => l.lifeCents, (l) => l.lifePolicies), ...rankOrder(lines.filter((l) => !onLife(l)), (l) => l.lifeCents, (l) => l.lifePolicies)];
   const totalRank = new Map(rankOrder(lines, (l) => l.premiumCents, (l) => l.policies).map((l, i) => [l.id, i + 1]));
   const pcRank = new Map(
     rankOrder(
@@ -295,6 +311,7 @@ export function buildSnapshot(input: {
   );
   const agentLines: AgentLine[] = lifeOrder.map((l, i) => ({ ...l, rank: i + 1, totalRank: totalRank.get(l.id) ?? i + 1, pcRank: pcRank.get(l.id) ?? null }));
 
+  const pcGoalCents = goals.pcTeamCents ?? 0;
   const pc = pcBreakdown(pcSales.map((s) => ({ kind: s.kind, carrier: s.carrier, product: s.product, policies: s.policies, premiumCents: s.premium_cents })));
   const newestFirst = (a: SaleWithAgent, b: SaleWithAgent) => b.created_at.localeCompare(a.created_at);
 
@@ -306,7 +323,10 @@ export function buildSnapshot(input: {
       productionCents,
       goalCents: goals.teamCents,
       goalPct: percentOf(lifeCents, goals.teamCents),
-      totalGoalPct: percentOf(productionCents, goals.teamCents),
+      pcGoalCents,
+      pcGoalPct: percentOf(pcCents, pcGoalCents),
+      totalGoalCents: goals.teamCents + pcGoalCents,
+      totalGoalPct: percentOf(productionCents, goals.teamCents + pcGoalCents),
       policies,
       lifeCents,
       lifePolicies,
@@ -319,7 +339,8 @@ export function buildSnapshot(input: {
       todayPcCents: sum(todayPc, (s) => s.premium_cents),
       todayPcPolicies: sum(todayPc, (s) => s.policies),
       pace: pace(lifeCents, goals.teamCents, clock),
-      totalPace: pace(productionCents, goals.teamCents, clock),
+      pcPace: pace(pcCents, pcGoalCents, clock),
+      totalPace: pace(productionCents, goals.teamCents + pcGoalCents, clock),
       bestDay: bestDayOf(sales),
       bestLifeDay: bestDayOf(lifeSales),
       averageCents: policies > 0 ? Math.round(productionCents / policies) : 0,
@@ -332,6 +353,7 @@ export function buildSnapshot(input: {
     },
     agents: agentLines,
     recent: recent.map(toFeed),
+    lifeRecent: [...lifeSales].sort(newestFirst).slice(0, PC_RECENT).map(toFeed),
     pcRecent: [...pcSales].sort(newestFirst).slice(0, PC_RECENT).map(toFeed),
     sales: [...sales].sort(newestFirst).map(toFeed),
     daily,

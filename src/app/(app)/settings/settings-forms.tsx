@@ -8,14 +8,16 @@ import { BOARD_THEMES, TV_SCREENS, type AppSettings, type BoardTheme, type TvScr
 import { SOUNDS, type SoundKey } from "@/lib/sounds";
 import { Button, Input, Label, Notice, Textarea } from "@/components/ui";
 import { ListCard, ListTitle, ROW_INSET } from "@/components/tide";
-import { saveBoardSettings, saveBoardTheme, saveColorway, saveSaleSound, saveTeamGoal, saveTvScreens } from "../actions";
+import { saveBoardSettings, saveBoardTheme, saveColorway, saveSaleSound, saveTeamGoal, saveTeamPcGoal, saveTvScreens } from "../actions";
 import { toast } from "@/components/toaster";
 import { KindDot } from "@/components/kind";
 
 interface MonthGoal {
   key: string;
   label: string;
+  /** The life goal (the one the board measures) and the P&C goal. */
   cents: number;
+  pcCents: number;
   current: boolean;
 }
 
@@ -38,12 +40,24 @@ export function SettingsForms({
   return (
     <div className="space-y-6">
       <section>
-        <ListTitle>Team goal</ListTitle>
-        <p className="mt-1 px-1 text-[13px] text-gray-500">Annual premium for the whole team. The board shows how close you are and what each day needs.</p>
+        <ListTitle>Life goal</ListTitle>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">Life annual premium for the whole team: the goal the board measures, with what each day needs.</p>
         <ListCard className="mt-2 divide-y divide-line">
           {months.map((m) => (
             <li key={m.key} className="px-4 py-3">
               <GoalForm month={m} />
+            </li>
+          ))}
+        </ListCard>
+      </section>
+
+      <section>
+        <ListTitle>P&amp;C goal</ListTitle>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">P&amp;C annual premium for the P&amp;C team. The P&amp;C screen measures it; the agency total adds both goals up.</p>
+        <ListCard className="mt-2 divide-y divide-line">
+          {months.map((m) => (
+            <li key={m.key} className="px-4 py-3">
+              <GoalForm month={m} pc />
             </li>
           ))}
         </ListCard>
@@ -434,28 +448,31 @@ function SoundPicker({ current }: { current: SoundKey }) {
   );
 }
 
-function GoalForm({ month }: { month: MonthGoal }) {
+/** One month's goal: the life goal, or (`pc`) the P&C goal. */
+function GoalForm({ month, pc = false }: { month: MonthGoal; pc?: boolean }) {
   const [pending, start] = useTransition();
+  const id = `${pc ? "pc-goal" : "goal"}-${month.key}`;
+  const cents = pc ? month.pcCents : month.cents;
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
         const form = new FormData(e.currentTarget);
         start(async () => {
-          const r = await saveTeamGoal(month.key, form);
+          const r = pc ? await saveTeamPcGoal(month.key, form) : await saveTeamGoal(month.key, form);
           toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
         });
       }}
       className="flex items-end gap-2"
     >
       <div className="min-w-0 flex-1">
-        <Label htmlFor={`goal-${month.key}`}>
+        <Label htmlFor={id}>
           {month.label}
           {month.current ? " (this month)" : ""}
         </Label>
         <div className="relative">
           <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 font-mono text-[16px] font-bold text-gray-400">$</span>
-          <Input id={`goal-${month.key}`} name="goal" inputMode="decimal" defaultValue={month.cents ? String(month.cents / 100) : ""} placeholder="150000" className="pl-7 font-mono" />
+          <Input id={id} name={pc ? "pc_goal" : "goal"} inputMode="decimal" defaultValue={cents ? String(cents / 100) : ""} placeholder={pc ? "30000" : "150000"} className="pl-7 font-mono" />
         </div>
       </div>
       <Button type="submit" className="h-11 rounded-xl" disabled={pending}>

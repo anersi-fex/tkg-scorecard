@@ -8,7 +8,7 @@ import { Switch } from "@/components/switch";
 import { ListCard, ListTitle, ROW_INSET } from "@/components/tide";
 import { Button, Input, Label, cn } from "@/components/ui";
 import { formatDollars } from "@/lib/money";
-import { addPerson, renamePerson, savePersonGoal, setPersonActive, setPersonPc } from "../actions";
+import { addPerson, renamePerson, savePersonGoal, savePersonPcGoal, setPersonActive, setPersonPc } from "../actions";
 import { toast } from "@/components/toaster";
 
 interface Person {
@@ -18,9 +18,13 @@ interface Person {
   /** P&C licensed: Log a sale offers Life or P&C for them. */
   pcLicensed: boolean;
   tone: string;
+  /** This month: everything, and the P&C part of it. */
   cents: number;
   policies: number;
+  pcCents: number;
+  /** Their life goal (the board's measure) and their P&C goal. */
   goalCents: number;
+  pcGoalCents: number;
 }
 
 /** The team list; the owner adds people, renames them, sets a goal, and takes someone off the board. */
@@ -46,8 +50,9 @@ export function TeamEditor({ people, role, month, base }: { people: Person[]; ro
                     {p.pcLicensed && <PcTag className="ml-1.5 align-middle" />}
                   </p>
                   <p className="text-[13px] font-medium text-gray-500">
-                    {formatDollars(p.cents)} · {p.policies} {p.policies === 1 ? "policy" : "policies"}
+                    {p.pcCents > 0 ? `${formatDollars(p.cents - p.pcCents)} life · ${formatDollars(p.pcCents)} P&C` : formatDollars(p.cents)} · {p.policies} {p.policies === 1 ? "policy" : "policies"}
                     {p.goalCents > 0 && ` · goal ${formatDollars(p.goalCents)}`}
+                    {p.pcGoalCents > 0 && ` · P&C goal ${formatDollars(p.pcGoalCents)}`}
                   </p>
                 </div>
                 {role === "owner" && (
@@ -142,7 +147,7 @@ function PersonEditor({ person, month, base, onClose }: { person: Person; month:
         className="flex items-end gap-2"
       >
         <div className="min-w-0 flex-1">
-          <Label htmlFor={`goal-${person.id}`}>Their goal this month ($ annual premium; blank for none)</Label>
+          <Label htmlFor={`goal-${person.id}`}>Their life goal this month ($ annual premium; blank for none)</Label>
           <Input id={`goal-${person.id}`} name="goal" inputMode="decimal" defaultValue={person.goalCents ? String(person.goalCents / 100) : ""} placeholder="25000" className="font-mono" />
         </div>
         <Button type="submit" variant="secondary" className="h-11 rounded-xl" disabled={pending}>
@@ -150,6 +155,27 @@ function PersonEditor({ person, month, base, onClose }: { person: Person; month:
         </Button>
       </form>
       <PcRow person={person} />
+      {person.pcLicensed && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const form = new FormData(e.currentTarget);
+            start(async () => {
+              const r = await savePersonPcGoal(month, person.id, form);
+              toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+            });
+          }}
+          className="flex items-end gap-2"
+        >
+          <div className="min-w-0 flex-1">
+            <Label htmlFor={`pc-goal-${person.id}`}>Their P&amp;C goal this month ($ annual premium; blank for none)</Label>
+            <Input id={`pc-goal-${person.id}`} name="pc_goal" inputMode="decimal" defaultValue={person.pcGoalCents ? String(person.pcGoalCents / 100) : ""} placeholder="8000" className="font-mono" />
+          </div>
+          <Button type="submit" variant="secondary" className="h-11 rounded-xl" disabled={pending}>
+            Save
+          </Button>
+        </form>
+      )}
       <div>
         <p className="text-[13px] font-medium text-gray-700">Their desk link (for an NFC tag or a Shortcut): opens Log a sale with {person.name.split(" ")[0]} picked.</p>
         <div className="mt-1 flex items-center gap-2">
