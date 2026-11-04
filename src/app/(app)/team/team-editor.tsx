@@ -3,16 +3,20 @@
 import { useState, useTransition } from "react";
 import type { Role } from "@/lib/session";
 import { Avatar } from "@/components/avatar";
+import { PcTag } from "@/components/kind";
+import { Switch } from "@/components/switch";
 import { ListCard, ListTitle, ROW_INSET } from "@/components/tide";
 import { Button, Input, Label, cn } from "@/components/ui";
 import { formatDollars } from "@/lib/money";
-import { addPerson, renamePerson, savePersonGoal, setPersonActive } from "../actions";
+import { addPerson, renamePerson, savePersonGoal, setPersonActive, setPersonPc } from "../actions";
 import { toast } from "@/components/toaster";
 
 interface Person {
   id: string;
   name: string;
   active: boolean;
+  /** P&C licensed: Log a sale offers Life or P&C for them. */
+  pcLicensed: boolean;
   tone: string;
   cents: number;
   policies: number;
@@ -37,7 +41,10 @@ export function TeamEditor({ people, role, month, base }: { people: Person[]; ro
               <div className="flex items-center gap-3">
                 <Avatar name={p.name} tone={p.tone} size={40} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-bold text-gray-900">{p.name}</p>
+                  <p className="truncate text-[15px] font-bold text-gray-900">
+                    {p.name}
+                    {p.pcLicensed && <PcTag className="ml-1.5 align-middle" />}
+                  </p>
                   <p className="text-[13px] font-medium text-gray-500">
                     {formatDollars(p.cents)} · {p.policies} {p.policies === 1 ? "policy" : "policies"}
                     {p.goalCents > 0 && ` · goal ${formatDollars(p.goalCents)}`}
@@ -142,12 +149,22 @@ function PersonEditor({ person, month, base, onClose }: { person: Person; month:
           Save
         </Button>
       </form>
+      <PcRow person={person} />
       <div>
         <p className="text-[13px] font-medium text-gray-700">Their desk link (for an NFC tag or a Shortcut): opens Log a sale with {person.name.split(" ")[0]} picked.</p>
         <div className="mt-1 flex items-center gap-2">
           <code className="min-w-0 flex-1 truncate rounded-xl bg-surface px-3 py-2 font-mono text-[12px] text-gray-700">{link}</code>
           <CopyButton text={link} />
         </div>
+        {person.pcLicensed && (
+          <>
+            <p className="mt-2 text-[13px] font-medium text-gray-700">Their P&amp;C desk link: the same, already switched to P&amp;C (a second tag for P&amp;C days).</p>
+            <div className="mt-1 flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded-xl bg-surface px-3 py-2 font-mono text-[12px] text-gray-700">{`${link}&kind=pc`}</code>
+              <CopyButton text={`${link}&kind=pc`} />
+            </div>
+          </>
+        )}
       </div>
       <div className="flex items-center justify-between gap-2 pt-1">
         <button
@@ -169,6 +186,33 @@ function PersonEditor({ person, month, base, onClose }: { person: Person; month:
           Close
         </button>
       </div>
+    </div>
+  );
+}
+
+/** P&C licensed, saved on the tap: Log a sale then offers Life or P&C for this person. */
+function PcRow({ person }: { person: Person }) {
+  const [pending, start] = useTransition();
+  const [on, setOn] = useState(person.pcLicensed);
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-[14px] font-bold text-gray-900">P&amp;C licensed</p>
+        <p className="text-[12px] font-medium text-gray-500">Log a sale offers Life or P&amp;C for them; a P&amp;C sale counts in purple.</p>
+      </div>
+      <Switch
+        checked={on}
+        disabled={pending}
+        label={`${person.name} is P&C licensed`}
+        onChange={(next) => {
+          setOn(next);
+          start(async () => {
+            const r = await setPersonPc(person.id, next);
+            toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+            if (!r.ok) setOn(!next);
+          });
+        }}
+      />
     </div>
   );
 }

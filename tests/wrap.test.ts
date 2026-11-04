@@ -6,7 +6,7 @@ import type { FeedSale } from "../src/lib/board";
 let n = 0;
 function sale(agentId: string, agentName: string, soldOn: string, premium: number, extra: Partial<FeedSale> = {}): FeedSale {
   n++;
-  return { id: `s${n}`, agentId, agentName, premiumCents: premium * 100, policies: 1, product: "Whole life", carrier: "AHL", note: null, soldOn, createdAt: `${soldOn}T${String(10 + n).padStart(2, "0")}:00:00.000Z`, ...extra };
+  return { id: `s${n}`, agentId, agentName, premiumCents: premium * 100, policies: 1, product: "Whole life", carrier: "AHL", kind: "life", note: null, soldOn, createdAt: `${soldOn}T${String(10 + n).padStart(2, "0")}:00:00.000Z`, ...extra };
 }
 
 const agents = [
@@ -50,12 +50,12 @@ test("a day's wrap: ranks, player, best deal, carriers, products", () => {
   assert.equal(carrierSummary(w.player!.carriers), "AHL ×2 · Newbridge");
   assert.equal(w.bestSale?.premiumCents, 2700 * 100);
   assert.deepEqual(w.carriers, [
-    { name: "Newbridge", count: 3 },
-    { name: "AHL", count: 2 },
+    { name: "Newbridge", count: 3, pc: false },
+    { name: "AHL", count: 2, pc: false },
   ]);
   assert.deepEqual(w.products, [
-    { name: "Whole life", count: 4 }, // the off-board sale has no product
-    { name: "Term", count: 1 },
+    { name: "Whole life", count: 4, pc: false }, // the off-board sale has no product
+    { name: "Term", count: 1, pc: false },
   ]);
   assert.equal(w.month.policies, 7);
   assert.equal(w.month.productionCents, sales.reduce((s, x) => s + x.premiumCents, 0));
@@ -149,9 +149,9 @@ test("a week's wrap: everybody across the days, the best deal, and the verdict f
   assert.equal(w.bestSale?.premiumCents, 5000 * 100);
   assert.deepEqual(w.verdict, { kind: "short", neededCents: 13_983 * 100, shortCents: 2983 * 100 });
   assert.deepEqual(w.carriers, [
-    { name: "AHL", count: 1 },
-    { name: "Newbridge", count: 1 },
-    { name: "Royal", count: 1 },
+    { name: "AHL", count: 1, pc: false },
+    { name: "Newbridge", count: 1, pc: false },
+    { name: "Royal", count: 1, pc: false },
   ]);
   // One more sale wins the week
   const won = buildWrap(input([...week, sale("a", "Anersi Koka", "2026-10-28", 3000)]), "2026-10-28", "week");
@@ -210,20 +210,55 @@ test("the month's top three carriers by policies, as they stood at the period's 
   ];
   const w = buildWrap(input(sales), "2026-10-28");
   assert.deepEqual(w.topCarriers, [
-    { name: "AHL", count: 3 },
-    { name: "Newbridge", count: 2 },
-    { name: "Americo", count: 1 }, // ties go by name; a sale without a carrier counts for none
+    { name: "AHL", count: 3, pc: false },
+    { name: "Newbridge", count: 2, pc: false },
+    { name: "Americo", count: 1, pc: false }, // ties go by name; a sale without a carrier counts for none
   ]);
   assert.deepEqual(buildWrap(input(sales), "2026-10-22", "week").topCarriers, [
-    { name: "Newbridge", count: 2 },
-    { name: "Americo", count: 1 },
-    { name: "Royal", count: 1 },
+    { name: "Newbridge", count: 2, pc: false },
+    { name: "Americo", count: 1, pc: false },
+    { name: "Royal", count: 1, pc: false },
   ]);
   assert.deepEqual(buildWrap(input(sales), "2026-10-28", "month").topCarriers, w.topCarriers);
   // The squares cover only the policies that name a carrier
   assert.equal(w.month.policies, 8);
   assert.equal(w.month.withCarrier, 7);
   assert.deepEqual(buildWrap(input([]), "2026-10-28").topCarriers, []);
+});
+
+test("P&C counts with life, and reads apart: the split on a line, a P&C carrier, the period's P&C", () => {
+  const sales = [
+    sale("a", "Anersi Koka", "2026-10-28", 1500, { carrier: "AHL" }),
+    sale("a", "Anersi Koka", "2026-10-28", 1860, { kind: "pc", carrier: "Progressive", product: "Auto" }),
+    sale("a", "Anersi Koka", "2026-10-28", 640, { kind: "pc", carrier: "Progressive", product: "Renters" }),
+    sale("b", "Alex Alekseyev", "2026-10-28", 2000),
+  ];
+  const w = buildWrap(input(sales), "2026-10-28");
+  // Combined: Anersi $4,000 leads Alex's $2,000; the P&C part reads apart
+  assert.deepEqual(
+    w.lines.map((l) => [l.name, l.rank, l.premiumCents / 100, l.pcCents / 100, l.pcPolicies]),
+    [
+      ["Anersi Koka", 1, 4000, 2500, 2],
+      ["Alex Alekseyev", 2, 2000, 0, 0],
+      ["Maira Angulo", null, 0, 0, 0],
+    ],
+  );
+  assert.equal(w.teamCents, 6000 * 100);
+  assert.equal(w.pcCents, 2500 * 100);
+  assert.equal(w.pcPolicies, 2);
+  assert.equal(w.month.pcCents, 2500 * 100);
+  // The best deal counts whatever kind it is, and says so through its kind
+  assert.equal(w.bestSale?.premiumCents, 2000 * 100);
+  assert.deepEqual(w.carriers, [
+    { name: "AHL", count: 2, pc: false }, // ties go by name
+    { name: "Progressive", count: 2, pc: true },
+  ]);
+  assert.deepEqual(w.products, [
+    { name: "Whole life", count: 2, pc: false },
+    { name: "Auto", count: 1, pc: true },
+    { name: "Renters", count: 1, pc: true },
+  ]);
+  assert.equal(carrierSummary(w.player!.carriers), "Progressive ×2 · AHL");
 });
 
 test("a day with nobody: no player, no best deal, everyone unranked", () => {

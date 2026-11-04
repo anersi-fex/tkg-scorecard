@@ -7,6 +7,7 @@ import { buildWrap, carrierSummary, isWrapView, periodFor, periodNav, WRAP_VIEWS
 import { datesOfMonth, dayLabelLong, isDateKey, monthKeyOf, monthName, todayInDetroit, weekday } from "@/lib/month";
 import { formatDollars } from "@/lib/money";
 import { Avatar, firstName } from "@/components/avatar";
+import { KindDot } from "@/components/kind";
 import { Eyebrow, ListCard, ROW_INSET } from "@/components/tide";
 import { Badge, Notice, cn, formatClock, formatDate } from "@/components/ui";
 
@@ -100,6 +101,7 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
             <p className="mt-2.5 truncate border-t border-on-grad-line pt-2 text-[12px] font-semibold">
               Best deal · {firstName(best.agentName)} · <span className="font-mono text-[13px]">{formatDollars(best.premiumCents)}</span>
               {best.policies > 1 && ` · ${best.policies} policies`}
+              {best.kind === "pc" && " · P&C"}
               {best.carrier && ` · ${best.carrier}`}
               {best.product && ` · ${best.product}`}
               {/* A day shows the clock, and only when the sale was logged on its own day (not a past day or an import); a week or month shows the day. */}
@@ -127,7 +129,7 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
             {wrap.month.policies > 0 ? `${wrap.month.policies} ${wrap.month.policies === 1 ? "policy" : "policies"} in ${month}, none with a carrier.` : `No policies in ${month}${wrap.current ? " yet" : ""}.`}
           </div>
         ) : (
-          wrap.topCarriers.map((c, i) => <CarrierSquare key={c.name} name={c.name} count={c.count} top={i === 0} />)
+          wrap.topCarriers.map((c, i) => <CarrierSquare key={c.name} name={c.name} count={c.count} top={i === 0} pc={c.pc} />)
         )}
       </div>
 
@@ -187,11 +189,14 @@ function verdictBadge(w: PeriodWrap): { text: string; tone: Tone } {
   return { text: "No goal set", tone: "gray" };
 }
 
-/** One of the three carrier squares; the busiest carrier's count wears the accent. */
-function CarrierSquare({ name, count, top }: { name: string; count: number; top: boolean }) {
+/** One of the three carrier squares; the busiest carrier's count wears the accent; a P&C carrier gets the purple dot. */
+function CarrierSquare({ name, count, top, pc }: { name: string; count: number; top: boolean; pc: boolean }) {
   return (
     <div className="min-w-0 rounded-[18px] bg-surface px-3 py-2.5 shadow-card">
-      <p className="truncate text-[12px] leading-tight font-bold text-gray-700">{name}</p>
+      <p className="flex items-center gap-1.5 truncate text-[12px] leading-tight font-bold text-gray-700">
+        {pc && <KindDot kind="pc" />}
+        {name}
+      </p>
       <p className="mt-1 truncate leading-none">
         <span className={cn("font-mono text-[22px] font-bold tracking-[-0.02em]", top ? "text-accent-text" : "text-gray-900")}>{count}</span>
         <span className="ml-1 text-[11px] font-semibold text-gray-500">{count === 1 ? "policy" : "policies"}</span>
@@ -215,6 +220,7 @@ function WrapRow({ line }: { line: WrapLine }) {
         {sold && (
           <p className="truncate text-[11.5px] leading-tight font-semibold text-gray-500">
             {line.policies} {line.policies === 1 ? "policy" : "policies"}
+            {line.pcPolicies > 0 && ` (${line.pcPolicies} P&C)`}
             {line.carriers.length > 0 && ` · ${carrierSummary(line.carriers)}`}
           </p>
         )}

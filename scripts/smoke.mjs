@@ -225,6 +225,31 @@ try {
   await o.waitForSelector("text=Removed.");
   check(true, "owner removed a sale");
 
+  // P&C alongside life (2026-11-04): the owner marks Moe P&C licensed, a P&C sale splits the numbers in purple
+  await o.goto(`${APP}/team`);
+  await o.click("li:has-text('Moe Karim') button:has-text('Edit')");
+  await o.click("li:has-text('Moe Karim') [role=switch]");
+  await o.waitForSelector("text=P&C licensed. Log a sale offers");
+  check(true, "the owner marks Moe P&C licensed on the Team page");
+  await o.goto(`${APP}/log`);
+  await o.click(`[role=radio]:has-text("Alex Alekseyev")`);
+  check((await o.locator("[role=radiogroup][aria-label='What kind']").count()) === 0, "no Life / P&C switch for someone who is not P&C licensed");
+  await o.click(`[role=radio]:has-text("Moe Karim")`);
+  await o.waitForSelector("[role=radiogroup][aria-label='What kind']");
+  await o.click("[role=radiogroup][aria-label='What kind'] [role=radio]:has-text('P&C')");
+  await o.fill("#premium", "1860");
+  await o.click(`[role=radiogroup][aria-label=Carrier] [role=radio]:has-text("Progressive")`);
+  check((await o.locator("button[aria-pressed]").allTextContents()).join(",") === "Auto,Renters,ATV", "P&C mode offers the lines Progressive writes");
+  await o.click(`button[aria-pressed]:has-text("Auto")`);
+  await o.click("button[type=submit]:has-text('Log')");
+  await o.waitForSelector("h2:has-text('Logged')");
+  check((await o.textContent("body")).includes("Progressive · P&C"), "a P&C sale logs with its carrier and kind");
+  await o.goto(`${APP}/`);
+  await o.waitForSelector("text=Leaderboard");
+  const pcHome = await o.textContent("body");
+  check(pcHome.includes("Life") && pcHome.includes("P&C") && pcHome.includes("$1,860"), "Home splits life and P&C under the team total and on Moe's row");
+  check(pcHome.includes("goal line today"), "Home names the goal line tick");
+
   // A sale dated last month shows up in that month's own list, fixable there
   const [ty, tm] = detroitToday();
   const lastMonthDay = new Date(Date.UTC(ty, tm - 1, 1) - 86400000 * 3).toISOString().slice(0, 10);
@@ -364,6 +389,13 @@ try {
     check(noCarrier.status() === 400, "Shortcut endpoint needs a carrier");
     const badCarrier = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "maira", premium: "10", carrier: "Nope" } });
     check(badCarrier.status() === 400 && (await badCarrier.json()).carriers.length === 7, "Shortcut endpoint lists the carriers on a wrong one");
+    const pcApi = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "Moe", premium: "2,000", kind: "pc", carrier: "geico", product: "umbrella" } });
+    const pcJson = pcApi.ok() ? await pcApi.json() : null;
+    check(pcApi.ok() && pcJson.sale.kind === "pc" && pcJson.sale.carrier === "Geico", `Shortcut endpoint logs a P&C sale (${pcApi.status()})`);
+    const pcNo = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "Alex", premium: "10", kind: "pc", carrier: "Progressive" } });
+    check(pcNo.status() === 400, "Shortcut endpoint refuses a P&C sale for someone not P&C licensed");
+    const pcBad = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "Moe", premium: "10", kind: "pc", carrier: "AHL" } });
+    check(pcBad.status() === 400 && (await pcBad.json()).carriers.includes("Progressive"), "a P&C sale needs a P&C carrier");
     const people = await owner.request.get(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` } });
     check(people.ok() && (await people.json()).people.length === 7, "Shortcut endpoint lists the people");
     const bad = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "Nobody", premium: "100", carrier: "AHL" } });
@@ -375,6 +407,8 @@ try {
     await t.screenshot({ path: `${OUT}/12-board-celebration.png` });
     const celebrate = await t.textContent("[role=status]");
     check(celebrate.includes("Maira Santos") && celebrate.includes("$2,750") && celebrate.includes("Americo"), "the board celebrates the new sale with the name, the amount and the carrier");
+    const tvText = await t.textContent("body");
+    check(tvText.includes("goal line today") && tvText.includes("P&C"), "the TV shows the goal line legend and the P&C split");
   } else {
     console.log("skip Shortcut endpoint (no LOG_TOKEN)");
   }

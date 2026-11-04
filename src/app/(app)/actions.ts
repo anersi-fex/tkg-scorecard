@@ -6,7 +6,7 @@ import { requireRole } from "@/lib/auth";
 import { addAgent, deleteSale, getSale, insertSale, listAgents, saveSettings, setAgentGoal, setTeamGoal, updateAgent, updateSale, getSettings } from "@/lib/data";
 import { isDateKey, isMonthKey, todayInDetroit, addDays } from "@/lib/month";
 import { parseDollars } from "@/lib/money";
-import { DEFAULT_CARRIERS, DEFAULT_PRODUCTS, isBoardTheme } from "@/lib/types";
+import { DEFAULT_CARRIERS, DEFAULT_PC_CARRIERS, DEFAULT_PRODUCTS, isBoardTheme, type PcCarrier } from "@/lib/types";
 import { isColorwayKey } from "@/lib/colorways";
 
 export type ActionResult = { ok: true; message?: string; id?: string } | { ok: false; error: string };
@@ -32,6 +32,7 @@ const SaleInput = z.object({
   policies: z.coerce.number().int().min(1).max(50).default(1),
   product: text(40).nullable().default(null),
   carrier: text(40).nullable().default(null),
+  kind: z.enum(["life", "pc"]).default("life"),
   note: text(200).nullable().default(null),
   sold_on: z.string().trim().default(""),
 });
@@ -55,12 +56,14 @@ export async function logSale(form: FormData): Promise<ActionResult> {
     const agents = await listAgents();
     const agent = agents.find((a) => a.id === input.agent_id);
     if (!agent) return { ok: false, error: "That person isn't on the team anymore." };
+    if (input.kind === "pc" && !agent.pc_licensed) return { ok: false, error: `${agent.name} isn't marked P&C licensed. Anersi can change that on the Team page.` };
     const sale = await insertSale({
       agent_id: agent.id,
       premium_cents: cents,
       policies: input.policies,
       product: input.product,
       carrier: input.carrier,
+      kind: input.kind,
       client: null,
       note: input.note,
       sold_on: soldOn,
@@ -98,6 +101,7 @@ const EditInput = z.object({
   policies: z.coerce.number().int().min(1).max(50),
   product: text(40).nullable().default(null),
   carrier: text(40).nullable().default(null),
+  kind: z.enum(["life", "pc"]).default("life"),
   note: text(200).nullable().default(null),
   sold_on: z.string().trim(),
   agent_id: z.string().uuid(),
@@ -122,6 +126,7 @@ export async function editSale(id: string, form: FormData): Promise<ActionResult
       policies: input.policies,
       product: input.product,
       carrier: input.carrier,
+      kind: input.kind,
       note: input.note,
       sold_on: input.sold_on,
     });
@@ -177,6 +182,19 @@ export async function setPersonActive(id: string, active: boolean): Promise<Acti
     await updateAgent(id, { active });
     refresh();
     return { ok: true, message: active ? "Back on the board." : "Off the board. Their sales stay in the history." };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}
+
+/** P&C licensed or not (owner, 2026-11-04): Log a sale offers the Life / P&C switch for them. */
+export async function setPersonPc(id: string, licensed: boolean): Promise<ActionResult> {
+  try {
+    await requireRole("owner");
+    if (!z.string().uuid().safeParse(id).success) return { ok: false, error: "That person isn't here." };
+    await updateAgent(id, { pc_licensed: licensed });
+    refresh();
+    return { ok: true, message: licensed ? "P&C licensed. Log a sale offers Life or P&C for them." : "Life only on Log a sale for them." };
   } catch (err) {
     return { ok: false, error: message(err) };
   }
@@ -261,7 +279,22 @@ export async function saveBoardSettings(form: FormData): Promise<ActionResult> {
         .slice(0, 20);
       return items.length ? items : fallback;
     };
-    await saveSettings({ ...current, message: msg, products: chips(form.get("products"), DEFAULT_PRODUCTS), carriers: chips(form.get("carriers"), DEFAULT_CARRIERS) });
+    // "Progressive: Auto, Renters, ATV", one carrier per line; a line without a colon is a carrier with no lines yet.
+    const pcCarriers: PcCarrier[] = [];
+    for (const row of String(form.get("pc_carriers") ?? "").split(/\n/)) {
+      const [head, rest = ""] = row.split(":");
+      const name = head.trim().slice(0, 40);
+      if (!name || pcCarriers.some((c) => c.name.toLowerCase() === name.toLowerCase())) continue;
+      const lines = rest
+        .split(",")
+        .map((l) => l.trim().slice(0, 40))
+        .filter(Boolean)
+        .filter((l, i, all) => all.findIndex((q) => q.toLowerCase() === l.toLowerCase()) === i)
+        .slice(0, 12);
+      pcCarriers.push({ name, lines });
+      if (pcCarriers.length === 20) break;
+    }
+    await saveSettings({ ...current, message: msg, products: chips(form.get("products"), DEFAULT_PRODUCTS), carriers: chips(form.get("carriers"), DEFAULT_CARRIERS), pcCarriers: pcCarriers.length ? pcCarriers : DEFAULT_PC_CARRIERS });
     refresh();
     return { ok: true, message: "Saved. The board updates within a few seconds." };
   } catch (err) {

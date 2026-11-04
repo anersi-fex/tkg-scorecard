@@ -14,6 +14,8 @@ export default async function LogPage({ searchParams }: PageProps<"/log">) {
   const role = await requirePage();
   const params = await searchParams;
   const preset = typeof params.agent === "string" ? params.agent : null;
+  // A desk tag can open the form set to P&C (?kind=pc) on the owner's P&C days.
+  const presetKind = params.kind === "pc" ? "pc" : null;
   if (!dbConfigured()) return <PageTitle>Log a sale</PageTitle>;
   const [agents, settings] = await Promise.all([listAgents(), getSettings()]);
   const tones = teamTones(agents);
@@ -32,7 +34,7 @@ export default async function LogPage({ searchParams }: PageProps<"/log">) {
           )}
         </Notice>
       ) : (
-        <LogForm agents={agents.map((a) => ({ id: a.id, name: a.name, tone: tones[a.id] }))} products={settings.products} carriers={settings.carriers} today={todayInDetroit()} preset={preset} />
+        <LogForm agents={agents.map((a) => ({ id: a.id, name: a.name, tone: tones[a.id], pcLicensed: a.pc_licensed }))} products={settings.products} carriers={settings.carriers} pcCarriers={settings.pcCarriers} today={todayInDetroit()} preset={preset} presetKind={presetKind} />
       )}
     </>
   );

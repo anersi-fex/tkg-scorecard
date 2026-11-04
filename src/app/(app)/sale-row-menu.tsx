@@ -14,7 +14,7 @@ const UNDO_WINDOW_MS = 15 * 60 * 1000;
  * The "…" at the end of a sale row: the owner can fix or remove any sale; the team can take back
  * one logged in the last 15 minutes.
  */
-export function SaleRowMenu({ sale, role, agents, carriers }: { sale: FeedSale; role: Role; agents: Array<{ id: string; name: string }>; carriers: string[] }) {
+export function SaleRowMenu({ sale, role, agents, carriers, pcCarriers }: { sale: FeedSale; role: Role; agents: Array<{ id: string; name: string }>; carriers: string[]; pcCarriers: string[] }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
@@ -82,14 +82,14 @@ export function SaleRowMenu({ sale, role, agents, carriers }: { sale: FeedSale; 
           )}
         </div>
       )}
-      {editing && <EditSheet sale={sale} agents={agents} carriers={carriers} onClose={() => setEditing(false)} />}
+      {editing && <EditSheet sale={sale} agents={agents} carriers={carriers} pcCarriers={pcCarriers} onClose={() => setEditing(false)} />}
     </div>
   );
 }
 
-function EditSheet({ sale, agents, carriers, onClose }: { sale: FeedSale; agents: Array<{ id: string; name: string }>; carriers: string[]; onClose: () => void }) {
-  // The row's carrier stays pickable even if it left the Settings list.
-  const carrierChoices = sale.carrier && !carriers.includes(sale.carrier) ? [sale.carrier, ...carriers] : carriers;
+function EditSheet({ sale, agents, carriers, pcCarriers, onClose }: { sale: FeedSale; agents: Array<{ id: string; name: string }>; carriers: string[]; pcCarriers: string[]; onClose: () => void }) {
+  // The row's carrier stays pickable even if it left the Settings lists.
+  const known = sale.carrier && !carriers.includes(sale.carrier) && !pcCarriers.includes(sale.carrier) ? [sale.carrier] : [];
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   return (
@@ -131,19 +131,40 @@ function EditSheet({ sale, agents, carriers, onClose }: { sale: FeedSale; agents
             <Input id="e-policies" name="policies" type="number" min={1} max={50} defaultValue={sale.policies} className="font-mono" required />
           </div>
           <div>
-            <Label htmlFor="e-product">Product</Label>
-            <Input id="e-product" name="product" defaultValue={sale.product ?? ""} maxLength={40} />
+            <Label htmlFor="e-kind">Kind</Label>
+            <Select id="e-kind" name="kind" defaultValue={sale.kind}>
+              <option value="life">Life</option>
+              <option value="pc">P&amp;C</option>
+            </Select>
           </div>
           <div>
             <Label htmlFor="e-carrier">Carrier</Label>
             <Select id="e-carrier" name="carrier" defaultValue={sale.carrier ?? ""}>
               <option value="">Not set</option>
-              {carrierChoices.map((c) => (
+              {known.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
               ))}
+              <optgroup label="Life">
+                {carriers.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="P&amp;C">
+                {pcCarriers.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </optgroup>
             </Select>
+          </div>
+          <div className="col-span-2">
+            <Label htmlFor="e-product">Product (a P&amp;C sale: the line, like Auto or Home)</Label>
+            <Input id="e-product" name="product" defaultValue={sale.product ?? ""} maxLength={40} />
           </div>
           <div className="col-span-2">
             <Label htmlFor="e-date">Day</Label>

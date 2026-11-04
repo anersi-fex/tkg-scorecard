@@ -20,6 +20,7 @@ Vercel builds the `main` branch, and right now `main` holds only a one-line READ
 2. In Supabase, open **SQL Editor** (left menu), tap **New query**, paste, tap **Run**.
 3. You should see **Success. No rows returned**.
 4. Do the same with `0002_carrier.sql` (the carrier a sale was written with; added 2026-10-27). Done already on the live project if Log a sale shows the carrier chips.
+5. Do the same with `0003_pc.sql` (P&C next to life, added 2026-11-04: a sale's kind and who is P&C licensed). Then, on the Team page, tap Edit on yourself, Moe and Maira and switch on **P&C licensed**: Log a sale then offers Life or P&C for the three of you.
 
 ### Step 4. Copy two values
 1. **Project Settings** (gear) > **Data API**: copy the **Project URL** (it looks like `https://abcd.supabase.co`, nothing after `.co`).

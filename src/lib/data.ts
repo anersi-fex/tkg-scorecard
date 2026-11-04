@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "./supabase";
-import { DEFAULT_SETTINGS, isBoardTheme, type Agent, type AppSettings, type LoggedBy, type Sale } from "./types";
+import { DEFAULT_SETTINGS, isBoardTheme, isSaleKind, type Agent, type AppSettings, type LoggedBy, type PcCarrier, type Sale } from "./types";
 import { datesOfMonth, isMonthKey } from "./month";
 import { DEFAULT_COLORWAY, isColorwayKey } from "./colorways";
 
@@ -18,7 +18,7 @@ export interface SaleWithAgent extends Sale {
   agent_name: string;
 }
 
-type SaleRow = Omit<Sale, "premium_cents"> & { premium_cents: number | string; agents: { name: string } | { name: string }[] | null };
+type SaleRow = Omit<Sale, "premium_cents" | "kind"> & { premium_cents: number | string; kind: string | null; agents: { name: string } | { name: string }[] | null };
 
 function toSale(r: SaleRow): SaleWithAgent {
   const agent = Array.isArray(r.agents) ? r.agents[0] : r.agents;
@@ -29,6 +29,7 @@ function toSale(r: SaleRow): SaleWithAgent {
     policies: r.policies,
     product: r.product,
     carrier: r.carrier,
+    kind: isSaleKind(r.kind) ? r.kind : "life",
     client: r.client,
     note: r.note,
     sold_on: r.sold_on,
@@ -38,10 +39,11 @@ function toSale(r: SaleRow): SaleWithAgent {
   };
 }
 
-const SALE_COLUMNS = "id, agent_id, premium_cents, policies, product, carrier, client, note, sold_on, logged_by, created_at, agents(name)";
+const SALE_COLUMNS = "id, agent_id, premium_cents, policies, product, carrier, kind, client, note, sold_on, logged_by, created_at, agents(name)";
+const AGENT_COLUMNS = "id, name, active, sort, pc_licensed";
 
 export async function listAgents(opts: { includeInactive?: boolean } = {}): Promise<Agent[]> {
-  let q = db().from("agents").select("id, name, active, sort").order("sort").order("name");
+  let q = db().from("agents").select(AGENT_COLUMNS).order("sort").order("name");
   if (!opts.includeInactive) q = q.eq("active", true);
   const { data, error } = await q;
   if (error) fail("agents.list", error);
@@ -49,7 +51,7 @@ export async function listAgents(opts: { includeInactive?: boolean } = {}): Prom
 }
 
 export async function getAgent(id: string): Promise<Agent | null> {
-  const { data, error } = await db().from("agents").select("id, name, active, sort").eq("id", id).maybeSingle();
+  const { data, error } = await db().from("agents").select(AGENT_COLUMNS).eq("id", id).maybeSingle();
   if (error) fail("agents.get", error);
   return (data as Agent | null) ?? null;
 }
@@ -57,12 +59,12 @@ export async function getAgent(id: string): Promise<Agent | null> {
 export async function addAgent(name: string): Promise<Agent> {
   const { data: last } = await db().from("agents").select("sort").order("sort", { ascending: false }).limit(1).maybeSingle();
   const sort = ((last?.sort as number | undefined) ?? 0) + 1;
-  const { data, error } = await db().from("agents").insert({ name, sort }).select("id, name, active, sort").single();
+  const { data, error } = await db().from("agents").insert({ name, sort }).select(AGENT_COLUMNS).single();
   if (error) fail("agents.add", error);
   return data as Agent;
 }
 
-export async function updateAgent(id: string, patch: Partial<Pick<Agent, "name" | "active" | "sort">>): Promise<void> {
+export async function updateAgent(id: string, patch: Partial<Pick<Agent, "name" | "active" | "sort" | "pc_licensed">>): Promise<void> {
   const { error } = await db()
     .from("agents")
     .update({ ...patch, updated_at: new Date().toISOString() })
@@ -105,6 +107,7 @@ export interface NewSale {
   policies: number;
   product: string | null;
   carrier: string | null;
+  kind: Sale["kind"];
   client: string | null;
   note: string | null;
   sold_on: string;
@@ -185,9 +188,24 @@ export async function getSettings(): Promise<AppSettings> {
     message: typeof v.message === "string" ? v.message.slice(0, 120) : "",
     products: list(v.products, DEFAULT_SETTINGS.products),
     carriers: list(v.carriers, DEFAULT_SETTINGS.carriers),
+    pcCarriers: pcCarrierList(v.pcCarriers),
     colorway: isColorwayKey(v.colorway) ? v.colorway : DEFAULT_COLORWAY,
     boardTheme: isBoardTheme(v.boardTheme) ? v.boardTheme : DEFAULT_SETTINGS.boardTheme,
   };
+}
+
+/** The stored P&C carriers, each with its lines; the owner's defaults when the row has none. */
+function pcCarrierList(raw: unknown): PcCarrier[] {
+  if (!Array.isArray(raw)) return DEFAULT_SETTINGS.pcCarriers;
+  const out: PcCarrier[] = [];
+  for (const item of raw.slice(0, 20)) {
+    if (!item || typeof item !== "object") continue;
+    const name = typeof (item as PcCarrier).name === "string" ? (item as PcCarrier).name.trim().slice(0, 40) : "";
+    if (!name || out.some((c) => c.name.toLowerCase() === name.toLowerCase())) continue;
+    const lines = Array.isArray((item as PcCarrier).lines) ? (item as PcCarrier).lines.filter((l): l is string => typeof l === "string" && l.trim().length > 0).map((l) => l.trim().slice(0, 40)).slice(0, 12) : [];
+    out.push({ name, lines });
+  }
+  return out.length ? out : DEFAULT_SETTINGS.pcCarriers;
 }
 
 export async function saveSettings(next: AppSettings): Promise<void> {

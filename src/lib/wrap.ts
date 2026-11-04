@@ -61,6 +61,8 @@ export interface WrapInput {
 export interface WrapCount {
   name: string;
   count: number;
+  /** True when every policy counted here was P&C (a P&C carrier or line). */
+  pc: boolean;
 }
 
 export interface WrapLine {
@@ -69,6 +71,9 @@ export interface WrapLine {
   tone: string;
   premiumCents: number;
   policies: number;
+  /** The P&C part of the premium and the policies (life is the rest). */
+  pcCents: number;
+  pcPolicies: number;
   /** The carriers this person wrote with in the period, most policies first. */
   carriers: WrapCount[];
   /** 1, 2, 3 … among the people who sold in the period; null for a person without a sale. */
@@ -95,8 +100,11 @@ export interface PeriodWrap extends WrapPeriod {
   day: string;
   /** True while the period runs through today, so its numbers are still moving. */
   current: boolean;
+  /** Every premium, life and P&C together, and the P&C part of it. */
   teamCents: number;
   policies: number;
+  pcCents: number;
+  pcPolicies: number;
   verdict: WrapVerdict;
   /** Everyone on the board, most premium first; people off the board only when they sold in the period. */
   lines: WrapLine[];
@@ -118,18 +126,24 @@ export interface PeriodWrap extends WrapPeriod {
    * stood). `withCarrier` counts the policies that name a carrier (days imported before migration
    * 0002 have none), the only ones the top carriers can cover.
    */
-  month: { key: string; policies: number; withCarrier: number; goalPct: number; goalCents: number; productionCents: number };
+  month: { key: string; policies: number; withCarrier: number; goalPct: number; goalCents: number; productionCents: number; pcCents: number };
 }
 
-function tally(items: Array<{ name: string | null; count: number }>): WrapCount[] {
-  const counts = new Map<string, number>();
+function tally(items: Array<{ name: string | null; count: number; pc: boolean }>): WrapCount[] {
+  const counts = new Map<string, { count: number; pc: number }>();
   for (const it of items) {
     const name = it.name?.trim();
     if (!name) continue;
-    counts.set(name, (counts.get(name) ?? 0) + it.count);
+    const c = counts.get(name) ?? { count: 0, pc: 0 };
+    c.count += it.count;
+    if (it.pc) c.pc += it.count;
+    counts.set(name, c);
   }
-  return [...counts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  return [...counts.entries()].map(([name, c]) => ({ name, count: c.count, pc: c.count > 0 && c.pc === c.count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 }
+
+const byCarrier = (s: FeedSale) => ({ name: s.carrier, count: s.policies, pc: s.kind === "pc" });
+const byProduct = (s: FeedSale) => ({ name: s.product, count: s.policies, pc: s.kind === "pc" });
 
 /**
  * What the team needed on `day` to stay on the line to the goal: what was left before that day,
@@ -168,7 +182,9 @@ export function buildWrap(input: WrapInput, day: string, view: WrapView = "day")
       tone: a.tone,
       premiumCents: sales.reduce((sum, s) => sum + s.premiumCents, 0),
       policies: sales.reduce((sum, s) => sum + s.policies, 0),
-      carriers: tally(sales.map((s) => ({ name: s.carrier, count: s.policies }))),
+      pcCents: sales.filter((s) => s.kind === "pc").reduce((sum, s) => sum + s.premiumCents, 0),
+      pcPolicies: sales.filter((s) => s.kind === "pc").reduce((sum, s) => sum + s.policies, 0),
+      carriers: tally(sales.map(byCarrier)),
     };
   });
   unranked.sort((a, b) => b.premiumCents - a.premiumCents || b.policies - a.policies || a.name.localeCompare(b.name));
@@ -186,7 +202,7 @@ export function buildWrap(input: WrapInput, day: string, view: WrapView = "day")
   const toDate = input.sales.filter((s) => s.soldOn <= to);
   const productionToDate = toDate.reduce((sum, s) => sum + s.premiumCents, 0);
   const goalCents = input.team.goalCents;
-  const monthCarriers = tally(toDate.map((s) => ({ name: s.carrier, count: s.policies })));
+  const monthCarriers = tally(toDate.map(byCarrier));
 
   let verdict: WrapVerdict;
   const business = datesOfMonth(monthKeyOf(from)).filter((d) => d >= from && d <= to && isBusinessDay(d));
@@ -222,12 +238,14 @@ export function buildWrap(input: WrapInput, day: string, view: WrapView = "day")
     current,
     teamCents,
     policies,
+    pcCents: inPeriod.filter((s) => s.kind === "pc").reduce((sum, s) => sum + s.premiumCents, 0),
+    pcPolicies: inPeriod.filter((s) => s.kind === "pc").reduce((sum, s) => sum + s.policies, 0),
     verdict,
     lines,
     player,
     bestSale,
-    carriers: tally(inPeriod.map((s) => ({ name: s.carrier, count: s.policies }))),
-    products: tally(inPeriod.map((s) => ({ name: s.product, count: s.policies }))),
+    carriers: tally(inPeriod.map(byCarrier)),
+    products: tally(inPeriod.map(byProduct)),
     topCarriers: monthCarriers.slice(0, 3),
     month: {
       key: input.clock.key,
@@ -236,6 +254,7 @@ export function buildWrap(input: WrapInput, day: string, view: WrapView = "day")
       goalPct: goalCents > 0 ? Math.round((productionToDate / goalCents) * 100) : 0,
       goalCents,
       productionCents: productionToDate,
+      pcCents: toDate.filter((s) => s.kind === "pc").reduce((sum, s) => sum + s.premiumCents, 0),
     },
   };
 }
