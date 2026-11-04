@@ -7,8 +7,10 @@
     ?s=phone|tv  the phone's This month screen (390 wide) or the TV board (1920x1080)
     ?t=light|dark
     ?r=22|10|6   the card radius in px (22 is today's)
-    ?pc=1        P&C alongside life (owner, 2026-11-04): a purple P&C spot on the rows of the three
-                 P&C-licensed people, a P&C tile, P&C sales in the feed; ?s=log draws Log a sale in P&C mode
+    ?pc=1        P&C alongside life (owner, 2026-11-04, second round: "scores combined ... delineate
+                 between life and P&C"): every premium counts, bars stack life (crimson) and P&C (purple),
+                 the split reads under every combined number; ?s=log draws Log a sale in P&C mode with the
+                 owner's four carriers (Progressive, Geico, Steadily, HOAIC) and the lines each one writes
   Option A carries a gray tick at the goal line today (owner, 2026-11-04: "where they need to be at to
   continue producing the same amount and still reach their goal by the end of the month").
   Rendered by design/render-leaderboard.mjs into design/out/leaderboard/.
@@ -73,6 +75,18 @@ h2{display:flex;align-items:center;gap:8px;font-size:20px;font-weight:800;letter
 .amtcol{text-align:right;flex:none}.amtcol .amt{font-size:16px;font-weight:700;display:block}.amtcol .pill{font-size:11px;padding:2px 8px;margin-top:4px}
 /* D: same scale */
 .scale{position:relative;margin-top:7px;display:flex;align-items:center;gap:10px}.scale .track{position:relative;flex:1;height:6px;border-radius:var(--rp);background:var(--track)}.scale .track i{position:absolute;left:0;top:0;height:100%;border-radius:var(--rp);background:var(--grad)}.scale .track i.done{background:var(--ring-done)}
+.track i.life{background:var(--grad)}.track i.pcseg{background:var(--purple800);border-radius:0 999px 999px 0}
+.split{display:flex;align-items:center;gap:10px;white-space:nowrap}.split span{display:inline-flex;align-items:center;gap:5px}.split i{width:6px;height:6px;border-radius:50%;display:inline-block}.split i.l{background:var(--accent)}.split i.p{background:var(--purple800)}
+.amtcol2{text-align:right;flex:none;align-self:flex-start}.amtcol2 .amt{font-size:16px;font-weight:700;display:block;line-height:1.1}.amtcol2 .td{display:block;font-size:11px;font-weight:700;color:var(--up);margin-top:2px}
+.goal .track{display:flex}.goal .track i{display:block;height:100%}.goal .track i.life{border-radius:var(--rp) 0 0 var(--rp)}.goal .track i.pcseg{background:var(--purple800);border-radius:0 var(--rp) var(--rp) 0}
+.goal .splitline{display:flex;gap:14px;margin-top:10px;font-size:13px;font-weight:600;color:var(--g600)}.goal .splitline span{display:inline-flex;align-items:center;gap:6px}.goal .splitline i{width:8px;height:8px;border-radius:50%;display:inline-block}.goal .splitline i.l{background:var(--accent)}.goal .splitline i.p{background:var(--purple800)}.goal .splitline b{color:var(--g900);font-family:"SG"}
+.legend .dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin:0 3px 0 6px}.legend .dot.l{background:var(--accent)}.legend .dot.p{background:var(--purple800)}
+.tv .amtcol2 .amt{font-size:1.5em;letter-spacing:-.02em}.tv .amtcol2 .td{font-size:.8em;margin-top:.15em}
+.tv .split{gap:.8em;font-size:.85em}.tv .split i{width:.4em;height:.4em}
+.tv .legend .dot{width:.5em;height:.5em;margin:0 .25em 0 .5em}
+.tv .donut .p2{stroke:var(--purple800);stroke-linecap:butt}
+.tv .gt .splitline{display:flex;gap:1.2em;margin-top:.5em;font-size:1em;font-weight:600;color:var(--g600)}.tv .gt .splitline span{display:inline-flex;align-items:center;gap:.4em}.tv .gt .splitline i{width:.55em;height:.55em;border-radius:50%;display:inline-block}.tv .gt .splitline i.l{background:var(--accent)}.tv .gt .splitline i.p{background:var(--purple800)}.tv .gt .splitline b{color:var(--g900);font-family:"SG"}
+.hint{font-size:12px;font-weight:600;color:var(--g500);margin:-2px 4px 8px}
 .track{position:relative}.track u{position:absolute;top:-4px;width:2px;height:14px;background:var(--mark);border-radius:1px}
 .pill.pc{background:var(--purple100);color:var(--purple800);font-size:11px;padding:2px 7px;margin-left:6px;vertical-align:middle;gap:4px}
 .pill.pc i{width:5px;height:5px;border-radius:50%;background:var(--purple800);display:inline-block}
@@ -162,12 +176,31 @@ const todayTotal = PEOPLE.reduce((s, p) => s + p.today, 0);
 const GOAL = 200000;
 const pcTotal = PEOPLE.reduce((s, p) => s + (p.pc?.amt ?? 0), 0);
 const pcPolicies = PEOPLE.reduce((s, p) => s + (p.pc?.pol ?? 0), 0);
+// Combined (owner, 2026-11-04): every premium counts; the split reads under the number.
+const lifeOf = (p) => p.amt;
+const pcOf = (p) => (PC && p.pc ? p.pc.amt : 0);
+const allOf = (p) => lifeOf(p) + pcOf(p);
+const polOf = (p) => p.pol + (PC && p.pc ? p.pc.pol : 0);
+const PC_TODAY = 1860;
+const grand = PC ? total + pcTotal : total;
+const grandPolicies = PC ? policies + pcPolicies : policies;
+const grandToday = PC ? todayTotal + PC_TODAY : todayTotal;
 const max = Math.max(...PEOPLE.map((p) => p.amt));
 const $ = (n) => "$" + Math.round(n).toLocaleString("en-US");
-const pct = (p) => Math.round((p.amt / p.goal) * 100);
+const pct = (p) => Math.round((allOf(p) / p.goal) * 100);
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 const pcPill = (p) => (PC && p.pc ? `<span class="pill pc"><i></i>P&amp;C ${p.pc.pol} · ${$(p.pc.amt)}</span>` : "");
+// The small line: a P&C person reads the split (life and P&C, premium and policies); everyone else their policies.
+const splitLine = (p) => (PC && p.pc ? `<span class="split"><span><i class="l"></i>Life ${$(p.amt)} · ${p.pol}</span><span><i class="p"></i>P&amp;C ${$(p.pc.amt)} · ${p.pc.pol}</span></span>` : `${polOf(p)} policies`);
 const smallLine = (p) => `${p.pol} policies${p.today ? ` · <span class="up">+${$(p.today)} today</span>` : ""}${pcPill(p)}`;
+// In the combined design the bar's length is the share of the goal (full once hit) and its colors split
+// life and P&C in proportion, so the mix shows even for someone past the goal on life alone.
+const stackedBar = (p) => {
+  const w = Math.min(100, (allOf(p) / p.goal) * 100);
+  const l = allOf(p) > 0 ? (w * lifeOf(p)) / allOf(p) : 0;
+  const c = w - l;
+  return `<i class="life" style="width:${l}%"></i>${c > 0 ? `<i class="pcseg" style="position:absolute;left:${l}%;top:0;height:100%;width:${c}%"></i>` : ""}<u style="left:calc(${LINE}% - 1px)"></u>`;
+};
 
 function ringSvg(p, r, cls) {
   const c = 2 * Math.PI * r;
@@ -183,6 +216,12 @@ function row(p, idx) {
   const av = `<span class="av ${p.tone}">${p.i}</span>`;
   const name = `<b>${esc(p.n)}</b>`;
   const amt = `<span class="amt mono">${$(p.amt)}</span>`;
+  if (V === "A" && PC) {
+    const todayAll = p.today + (p.i === "AK" ? PC_TODAY : 0);
+    return `${rankHtml}${av}<div class="body"><div class="l1">${name}<span class="amtcol2"><span class="amt mono">${$(allOf(p))}</span>${todayAll ? `<span class="td">+${$(todayAll)} today</span>` : ""}</span></div>
+      <div class="bar"><div class="track">${stackedBar(p)}</div><span class="pct mono ${done ? "done" : ""}">${pct(p)}%</span></div>
+      <div class="small l3">${splitLine(p)}</div></div>`;
+  }
   if (V === "A") {
     // Even bars: one track, the same length for everyone; the percent in a fixed box at its end.
     return `${rankHtml}${av}<div class="body"><div class="l1">${name}${amt}</div>
@@ -223,8 +262,8 @@ if (S === "log") {
   <div class="kind"><span><i class="life"></i>Life</span><span class="on"><i class="pc"></i>P&amp;C</span></div>
   <h2 class="sec">Annual premium</h2>
   <div class="money"><div class="box mono"><small>$</small>1,860</div><div class="step">Policies <b>−</b><em>1</em><b>+</b></div></div>
-  <h2 class="sec">Carrier</h2>${chips(["Progressive", "Safeco", "Travelers", "Nationwide", "Auto-Owners", "Citizens", "Bristol West", "Other"], "Progressive", "pcmode")}
-  <h2 class="sec">Line (optional)</h2>${chips(["Auto", "Home", "Renters", "Condo", "Umbrella", "Landlord", "Motorcycle", "Boat & RV"], "Auto", "pcmode")}
+  <h2 class="sec">Carrier</h2>${chips(["Progressive", "Geico", "Steadily", "HOAIC"], "Progressive", "pcmode")}
+  <h2 class="sec">Line</h2><p class="hint">Progressive writes Auto, Renters and ATV. Geico: Auto, Umbrella · Steadily: Dwelling · HOAIC: Home.</p>${chips(["Auto", "Renters", "ATV"], "Auto", "pcmode")}
   <p class="linklike">Day and note</p>
   <div class="btn">Log $1,860</div>
   <div class="tabbar"><div class="tab"><i></i>This month</div><div class="tab on"><i></i>Log a sale</div><div class="tab"><i></i>Wrap</div><div class="tab"><i></i>Team</div></div>
@@ -235,18 +274,20 @@ if (S === "log") {
   <h1>This month</h1>
   <p class="sub">October 2026 <span class="pill amber">1 business day left</span></p>
   <div class="card goal"><span class="eyebrow">Team production</span>
-    <div class="big mono">${$(total)}<small>of ${$(GOAL)} · <span class="mono" style="color:var(--g900)">${Math.round((total / GOAL) * 100)}%</span></small></div>
-    <div class="track"><i style="width:${Math.min(100, (total / GOAL) * 100)}%"></i></div>
-    <p class="line">Ahead by ${$(total - GOAL * (21 / 22))}. On pace for ${$((total / 21) * 22)}. ${$(GOAL - total)} today gets there.</p>
-    <div class="stats ${PC ? "four" : ""}"><div><span class="eyebrow">Policies</span><div class="v mono">${policies}</div>${PC ? `<div class="s">life</div>` : ""}</div><div><span class="eyebrow">Avg premium</span><div class="v mono">${$(total / policies)}</div>${PC ? `<div class="s">per policy</div>` : ""}</div><div><span class="eyebrow">Today</span><div class="v mono">${$(todayTotal)}</div>${PC ? `<div class="s">5 policies</div>` : ""}</div>${PC ? `<div class="pcstat"><span class="eyebrow">P&amp;C</span><div class="v mono">${$(pcTotal)}</div><div class="s">${pcPolicies} policies · +$1,860 today</div></div>` : ""}</div>
+    <div class="big mono">${$(grand)}<small>of ${$(GOAL)} · <span class="mono" style="color:var(--g900)">${Math.round((grand / GOAL) * 100)}%</span></small></div>
+    <div class="track">${PC ? `<i class="life" style="width:${(Math.min(100, (grand / GOAL) * 100) * total) / grand}%"></i><i class="pcseg" style="width:${(Math.min(100, (grand / GOAL) * 100) * pcTotal) / grand}%"></i>` : `<i style="width:${Math.min(100, (total / GOAL) * 100)}%"></i>`}</div>
+    ${PC ? `<div class="splitline"><span><i class="l"></i>Life <b>${$(total)}</b></span><span><i class="p"></i>P&amp;C <b>${$(pcTotal)}</b></span></div>` : ""}
+    <p class="line">${PC ? `Goal hit, ${$(grand - GOAL)} over. Keep going.` : `Ahead by ${$(total - GOAL * (21 / 22))}. On pace for ${$((total / 21) * 22)}. ${$(GOAL - total)} today gets there.`}</p>
+    <div class="stats"><div><span class="eyebrow">Policies</span><div class="v mono">${grandPolicies}</div>${PC ? `<div class="s">${policies} life · ${pcPolicies} P&amp;C</div>` : ""}</div><div><span class="eyebrow">Avg premium</span><div class="v mono">${$(grand / grandPolicies)}</div>${PC ? `<div class="s">per policy</div>` : ""}</div><div><span class="eyebrow">Today</span><div class="v mono">${$(grandToday)}</div>${PC ? `<div class="s">6 policies · 1 P&amp;C</div>` : ""}</div></div>
   </div>
-  <h2>Leaderboard <small>7</small>${V === "A" ? `<span class="legend"><i></i>goal line today</span>` : ""}</h2>
+  <h2>Leaderboard <small>7</small>${V === "A" ? `<span class="legend">${PC ? `<span class="dot l"></span>life<span class="dot p"></span>P&amp;C` : ""}<i style="margin-left:8px"></i>goal line today</span>` : ""}</h2>
   <ul class="list" style="list-style:none;margin:0;padding:0">${rows}</ul>
   <div class="tabbar"><div class="tab on"><i></i>This month</div><div class="tab"><i></i>Log a sale</div><div class="tab"><i></i>Wrap</div><div class="tab"><i></i>Team</div></div>
 </div>`;
 } else {
   // The TV board around the leaderboard: the goal ring, three tiles, the month chart, the feed.
-  const donutR = 42, donutC = 2 * Math.PI * donutR, gp = Math.min(100, (total / GOAL) * 100);
+  const donutR = 42, donutC = 2 * Math.PI * donutR, gp = Math.min(100, (grand / GOAL) * 100);
+  const lifeArc = (gp * total) / grand, pcArc = (gp * pcTotal) / grand;
   const pts = [0, 6, 14, 20, 26, 33, 38, 44, 50, 55, 61, 66, 71, 78, 83, 88, 92, 95, 97.5];
   const chartLine = pts.map((v, i) => `${(i / 18) * 100},${100 - v}`).join(" ");
   document.body.innerHTML = `<div class="board">
@@ -254,11 +295,11 @@ if (S === "log") {
     <div class="mid"><b>October 2026</b><small>Fri, Oct 30</small></div>
     <div class="right"><span class="pill amber">Last business day</span><span class="clock mono">9:41 AM</span></div></header>
   <div class="grid">
-    <section class="panel"><div class="ph"><b>Leaderboard</b><small>${V === "A" ? `<span class="legend"><i></i>goal line today ·</span>` : ""}annual premium · policies</small></div><ol>${rows.replace(/class="row /g, 'class="')}</ol></section>
+    <section class="panel"><div class="ph"><b>Leaderboard</b><small>${V === "A" ? `<span class="legend">${PC ? `<span class="dot l"></span>life<span class="dot p"></span>P&amp;C` : ""}<i style="margin-left:.6em"></i>goal line today ·</span>` : ""}annual premium · policies</small></div><ol>${rows.replace(/class="row /g, 'class="')}</ol></section>
     <div class="col">
-      <section class="panel goalcard"><div class="donut"><svg viewBox="0 0 100 100"><circle class="t" cx="50" cy="50" r="${donutR}"/><circle class="p" cx="50" cy="50" r="${donutR}" stroke-dasharray="${(donutC * gp) / 100} ${donutC}"/></svg><div class="c"><b class="mono">${Math.round((total / GOAL) * 100)}%</b><small>OF GOAL</small></div></div>
-        <div class="gt"><span class="eyebrow">Team production</span><div class="big mono">${$(total)}</div><div class="of">of ${$(GOAL)}</div><div class="pace">Ahead by ${$(total - GOAL * (21 / 22))} · on pace for ${$((total / 21) * 22)}</div></div></section>
-      <section class="tiles ${PC ? "four" : ""}"><div class="tile"><span class="eyebrow">Today</span><div class="v mono up">${$(todayTotal)}</div><div class="s">5 policies</div></div><div class="tile"><span class="eyebrow">Policies</span><div class="v mono">${policies}</div><div class="s">${$(total / policies)} avg</div></div>${PC ? `<div class="tile pc"><span class="eyebrow">P&amp;C</span><div class="v mono">${$(pcTotal)}</div><div class="s">${pcPolicies} policies · +$1,860 today</div></div>` : ""}<div class="tile"><span class="eyebrow">Needed today</span><div class="v mono">${$(GOAL - total)}</div><div class="s">to hit ${$(GOAL)}</div></div></section>
+      <section class="panel goalcard"><div class="donut"><svg viewBox="0 0 100 100"><circle class="t" cx="50" cy="50" r="${donutR}"/>${PC ? `<circle class="p2" cx="50" cy="50" r="${donutR}" stroke-dasharray="${(donutC * (lifeArc + pcArc)) / 100} ${donutC}"/><circle class="p" cx="50" cy="50" r="${donutR}" stroke-dasharray="${(donutC * lifeArc) / 100} ${donutC}"/>` : `<circle class="p" cx="50" cy="50" r="${donutR}" stroke-dasharray="${(donutC * gp) / 100} ${donutC}"/>`}</svg><div class="c"><b class="mono">${Math.round((grand / GOAL) * 100)}%</b><small>OF GOAL</small></div></div>
+        <div class="gt"><span class="eyebrow">Team production</span><div class="big mono">${$(grand)}</div><div class="of">of ${$(GOAL)}</div>${PC ? `<div class="splitline"><span><i class="l"></i>Life <b>${$(total)}</b></span><span><i class="p"></i>P&amp;C <b>${$(pcTotal)}</b></span></div><div class="pace">Goal hit, ${$(grand - GOAL)} over · keep going</div>` : `<div class="pace">Ahead by ${$(total - GOAL * (21 / 22))} · on pace for ${$((total / 21) * 22)}</div>`}</div></section>
+      <section class="tiles"><div class="tile"><span class="eyebrow">Today</span><div class="v mono up">${$(grandToday)}</div><div class="s">${PC ? "6 policies · 1 P&amp;C" : "5 policies"}</div></div><div class="tile"><span class="eyebrow">Policies</span><div class="v mono">${grandPolicies}</div><div class="s">${PC ? `${policies} life · ${pcPolicies} P&amp;C` : `${$(total / policies)} avg`}</div></div><div class="tile"><span class="eyebrow">${PC ? "Goal" : "Needed today"}</span><div class="v mono ${PC ? "up" : ""}">${PC ? "Hit" : $(GOAL - total)}</div><div class="s">${PC ? `${$(grand - GOAL)} over ${$(GOAL)}` : `to hit ${$(GOAL)}`}</div></div></section>
       <section class="panel chart"><div class="ph"><b>The month so far</b><span class="legend"><i class="a"></i>production<i class="b"></i>goal line</span></div>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="0" stroke="var(--line)" stroke-width=".3"/><line x1="0" y1="50" x2="100" y2="50" stroke="var(--line)" stroke-width=".3"/><line x1="0" y1="100" x2="100" y2="0" stroke="var(--chart2)" stroke-width=".7" stroke-dasharray="2 1.5" vector-effect="non-scaling-stroke"/><polyline points="${chartLine}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg></section>
       <section class="panel feed"><div class="ph"><b>Latest sales</b></div><ul>
