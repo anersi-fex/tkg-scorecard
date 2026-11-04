@@ -8,6 +8,7 @@ import { isDateKey, isMonthKey, todayInDetroit, addDays } from "@/lib/month";
 import { parseDollars } from "@/lib/money";
 import { DEFAULT_CARRIERS, DEFAULT_PC_CARRIERS, DEFAULT_PRODUCTS, isBoardTheme, type PcCarrier } from "@/lib/types";
 import { isColorwayKey } from "@/lib/colorways";
+import { isSoundKey } from "@/lib/sounds";
 
 export type ActionResult = { ok: true; message?: string; id?: string } | { ok: false; error: string };
 
@@ -264,6 +265,20 @@ export async function saveBoardTheme(theme: string): Promise<ActionResult> {
     await saveSettings({ ...current, boardTheme: theme });
     refresh();
     return { ok: true, message: "Saved. The TV changes within a few seconds." };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}
+
+/** Settings > Sale sound: what the TV plays when a sale lands; the TV follows it on its next poll. */
+export async function saveSaleSound(key: string): Promise<ActionResult> {
+  try {
+    await requireRole("owner");
+    if (!isSoundKey(key)) return { ok: false, error: "That sound isn't one of the choices." };
+    const current = await getSettings();
+    await saveSettings({ ...current, sound: key });
+    refresh();
+    return { ok: true, message: key === "off" ? "Saved. The TV stays quiet." : "Saved. The TV plays it on the next sale." };
   } catch (err) {
     return { ok: false, error: message(err) };
   }

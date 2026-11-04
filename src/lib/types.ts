@@ -37,6 +37,7 @@ export interface Sale {
 }
 
 import { DEFAULT_COLORWAY, type ColorwayKey } from "./colorways";
+import { DEFAULT_SOUND, type SoundKey } from "./sounds";
 
 /** The TV's look (Settings > TV look): dark, or light. Browser-safe. */
 export type BoardTheme = "dark" | "light";
@@ -60,6 +61,8 @@ export interface AppSettings {
   colorway: ColorwayKey;
   /** Dark or light on the TV (Settings > TV look); the TV follows it from its poll. */
   boardTheme: BoardTheme;
+  /** The sound the TV plays when a sale lands (Settings > Sale sound); "off" for none. */
+  sound: SoundKey;
 }
 
 export interface PcCarrier {
@@ -87,4 +90,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   pcCarriers: DEFAULT_PC_CARRIERS,
   colorway: DEFAULT_COLORWAY,
   boardTheme: DEFAULT_BOARD_THEME,
+  sound: DEFAULT_SOUND,
 };

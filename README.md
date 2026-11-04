@@ -4,7 +4,7 @@ The team's month, live on the office TV: the leaderboard, team production agains
 
 - Life and P&C: a P&C licensed person (Team page) logs a P&C sale with the Life / P&C switch; every premium counts, the split shows in purple on the bars, the TV ring and under every total.
 - `/wrap`: the team's day, week or month on one iPhone screenshot for the group chat (Day / Week / Month switch; player of the period, best deal, the month's top three carriers, everybody; `?view=` and `?day=` for an earlier period)
-- `/board`: the TV (full screen, refreshes itself, light or dark as set under Settings > TV look; F full screen)
+- `/board`: the TV (full screen, refreshes itself, light or dark as set under Settings > TV look, plays the sale sound picked under Settings > Sale sound; F full screen)
 - `/`: this month on a phone or computer, with earlier months
 - `/log`: log a sale in four taps (who, how much, which carrier, Log it)
 - `/team`, `/settings`: the people, their goals, the team goal, the board message, the colorway (Crimson by default; Sky, Champion, Emerald)

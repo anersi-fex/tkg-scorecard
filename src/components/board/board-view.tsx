@@ -14,6 +14,7 @@ import { KindDot, KindSplit, PcTag } from "@/components/kind";
 import { MonthChart } from "@/components/month-chart";
 import { cn, formatClock } from "@/components/ui";
 import { burst } from "./confetti";
+import { soundFile, type SoundKey } from "@/lib/sounds";
 
 /**
  * The TV board. One screen, no scrolling, sized from the viewport (1em = about 1% of the width,
@@ -26,6 +27,28 @@ import { burst } from "./confetti";
  */
 const POLL_MS = 5000;
 const CELEBRATE_MS = 9000;
+/** A long sound fades out this long before the celebration leaves, so it is never cut mid-note. */
+const SOUND_FADE_MS = 700;
+
+/**
+ * Chrome plays sound only once someone has clicked or pressed a key on the page (F for full screen
+ * counts). The board remembers that a play was refused, says so in the footer, and clears the note
+ * on the next tap or key.
+ */
+function useSoundGate(): { blocked: boolean; refused: () => void } {
+  const [blocked, setBlocked] = useState(false);
+  useEffect(() => {
+    const allow = () => setBlocked(false);
+    window.addEventListener("pointerdown", allow);
+    window.addEventListener("keydown", allow);
+    return () => {
+      window.removeEventListener("pointerdown", allow);
+      window.removeEventListener("keydown", allow);
+    };
+  }, []);
+  const refused = useCallback(() => setBlocked(true), []);
+  return { blocked, refused };
+}
 
 function useClock(): string {
   const [now, setNow] = useState("");
@@ -169,6 +192,16 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
   }, [refresh]);
 
   const { team, clock: month, agents } = snap;
+  const sound = useSoundGate();
+  // Fetch the chosen sound ahead of time, so the first celebration does not wait on a download.
+  useEffect(() => {
+    const file = soundFile(snap.sound);
+    if (!file) return;
+    const a = new Audio();
+    a.preload = "auto";
+    a.src = file;
+    a.load();
+  }, [snap.sound]);
   const leaders = agents.filter((a) => a.active || a.premiumCents > 0);
   const maxPremium = Math.max(1, ...leaders.map((a) => a.premiumCents));
   const toneById = Object.fromEntries(agents.map((a) => [a.id, a.tone]));
@@ -269,11 +302,12 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
         <p className="min-w-0 truncate text-[1.1em] font-bold text-gray-700">{snap.message || " "}</p>
         <p className="shrink-0">
           {offline >= 3 ? <span className="text-amber-800">Reconnecting…</span> : <>Updated {formatClock(snap.generatedAt)}</>}
+          {sound.blocked && snap.sound !== "off" && <span className="ml-[1em] text-amber-800">Tap the screen once for sound</span>}
           <span className="ml-[1em] text-gray-500">F full screen</span>
         </p>
       </footer>
 
-      {showing && <Celebration sale={showing} />}
+      {showing && <Celebration sale={showing} sound={snap.sound} onRefused={sound.refused} />}
     </main>
   );
 }
@@ -479,15 +513,37 @@ function Feed({ sales, tones, today }: { sales: FeedSale[]; tones: Record<string
   );
 }
 
-function Celebration({ sale }: { sale: FeedSale }) {
+function Celebration({ sale, sound, onRefused }: { sale: FeedSale; sound: SoundKey; onRefused: () => void }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
     if (!canvas.current) return;
     const stop = burst(canvas.current, { count: 320, duration: CELEBRATE_MS - 1500 });
     return stop;
   }, [sale.id]);
+  // The owner's sale sound, once per celebration; a long one fades out before the overlay leaves.
+  useEffect(() => {
+    const file = soundFile(sound);
+    if (!file) return;
+    const audio = new Audio(file);
+    let step: number | undefined;
+    audio.play().catch(onRefused);
+    const fade = window.setTimeout(() => {
+      step = window.setInterval(() => {
+        audio.volume = Math.max(0, audio.volume - 0.1);
+        if (audio.volume === 0) {
+          window.clearInterval(step);
+          audio.pause();
+        }
+      }, SOUND_FADE_MS / 10);
+    }, CELEBRATE_MS - SOUND_FADE_MS - 300);
+    return () => {
+      window.clearTimeout(fade);
+      window.clearInterval(step);
+      audio.pause();
+    };
+  }, [sale.id, sound, onRefused]);
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-ink/70" role="status" aria-live="polite">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-ink/70" role="status" aria-live="polite" data-sound={sound}>
       <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
       <div className="board-pop relative flex flex-col items-center rounded-[2em] bg-surface px-[3.2em] py-[2.4em] text-center shadow-float">
         <Avatar name={sale.agentName} tone="bg-tide text-white shadow-glow" size={96} className="!h-[6em] !w-[6em] !text-[2.2em]" />

@@ -3,6 +3,7 @@ import { db } from "./supabase";
 import { DEFAULT_SETTINGS, isBoardTheme, isSaleKind, type Agent, type AppSettings, type LoggedBy, type PcCarrier, type Sale } from "./types";
 import { datesOfMonth, isMonthKey } from "./month";
 import { DEFAULT_COLORWAY, isColorwayKey } from "./colorways";
+import { isSoundKey } from "./sounds";
 
 /**
  * Every read and write, with the service key, after the caller checked the session. Rows come
@@ -191,6 +192,7 @@ export async function getSettings(): Promise<AppSettings> {
     pcCarriers: pcCarrierList(v.pcCarriers),
     colorway: isColorwayKey(v.colorway) ? v.colorway : DEFAULT_COLORWAY,
     boardTheme: isBoardTheme(v.boardTheme) ? v.boardTheme : DEFAULT_SETTINGS.boardTheme,
+    sound: isSoundKey(v.sound) ? v.sound : DEFAULT_SETTINGS.sound,
   };
 }
 

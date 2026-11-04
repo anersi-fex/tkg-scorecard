@@ -157,6 +157,17 @@ try {
   check((await o.getAttribute("html", "data-board-theme")) === "dark", "the page carries the TV look for the pre-paint script");
   await o.click(`${tvLook} [role=radio]:has-text('Light')`);
   check((await feedUntil(owner, (j) => j.boardTheme === "light")).boardTheme === "light", "the board feed carries the TV look (light)");
+  // Sale sound (2026-11-04): the owner's four sounds plus Off, a play button each, picked on a tap, carried by the feed
+  const soundRows = "[role=radiogroup][aria-label='Sale sound']";
+  check((await o.locator(`${soundRows} [role=radio]`).count()) === 5 && (await o.locator(`${soundRows} button[aria-label^='Play ']`).count()) === 4, "Settings offers four sale sounds and Off, each sound with a play button");
+  check((await o.textContent(`${soundRows} [role=radio][aria-checked=true]`)).includes("Cash register"), "the cash register is the sale sound to start");
+  await o.click(`${soundRows} [role=radio]:has-text('Air horn')`);
+  await o.waitForSelector("text=Saved. The TV plays it on the next sale.");
+  check((await feedUntil(owner, (j) => j.sound === "air-horn")).sound === "air-horn", "the board feed carries the sale sound (air horn)");
+  for (const f of ["register", "air-horn", "guitar-riff", "upbeat-intro"]) {
+    const r = await owner.request.get(`${APP}/sounds/${f}.mp3`);
+    check(r.ok() && /audio\/mpeg/.test(r.headers()["content-type"] ?? ""), `the ${f} sound is served (${r.status()})`);
+  }
   await o.screenshot({ path: `${OUT}/03-settings.png`, fullPage: true });
 
   // Log sales through the form
@@ -427,6 +438,7 @@ try {
     await t.waitForTimeout(900);
     await t.screenshot({ path: `${OUT}/12-board-celebration.png` });
     const celebrate = await t.textContent("[role=status]");
+    check((await t.getAttribute("[role=status]", "data-sound")) === "air-horn", "the celebration carries the chosen sale sound (air horn)");
     check(celebrate.includes("Maira Santos") && celebrate.includes("$2,750") && celebrate.includes("Americo"), "the board celebrates the new sale with the name, the amount and the carrier");
     const tvText = await t.textContent("body");
     check(tvText.includes("goal line today") === tick && tvText.includes("Life $") && tvText.includes("P&C $"), "the TV shows the goal line legend (once a business day has passed) and the P&C split");
