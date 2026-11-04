@@ -70,5 +70,28 @@ await sheet("progress-tv.png", { title: "Progress to goal · the office TV", til
 const RADII = [["22", "Today: 22 px cards, pill chips"], ["10", "Slight: 10 px cards, 8 px tiles, 4 px chips"], ["6", "Very slight: 6 px cards, 5 px tiles, 3 px chips"]];
 await sheet("corners-phone.png", { title: "Corners · phone (shown with option A)", tiles: [...RADII.map(([r, c]) => ({ label: `${r} px`, caption: c, file: files[`phone-r${r}`] })), ...RADII.map(([r]) => ({ label: `${r} px · close up`, caption: "", file: files[`phone-r${r}-zoom`] }))], tileWidth: 390, perRow: 3, pageWidth: 390 * 3 + 28 * 4 });
 await sheet("corners-tv.png", { title: "Corners · the office TV", tiles: [...RADII.map(([r, c]) => ({ label: `${r} px`, caption: c.split(":")[0], file: files[`tv-r${r}`] })), ...RADII.map(([r]) => ({ label: `${r} px · close up`, caption: "", file: files[`tv-r${r}-zoom`] }))], tileWidth: 620, perRow: 3, pageWidth: 620 * 3 + 28 * 4 });
+// P&C alongside life (2026-11-04): phone Home, phone Log a sale, the TV, a TV close-up, all dark, on option A.
+const pcHome = await phone({ v: "A", s: "phone", t: "dark", r: 22, pc: 1 }, "pc-phone-home.png");
+const pcLog = await phone({ v: "A", s: "log", t: "dark", r: 22, pc: 1 }, "pc-phone-log.png");
+const pcTv = await tv({ v: "A", s: "tv", t: "dark", r: 22, pc: 1 }, "pc-tv.png");
+const pcTvZoom = await shot({ v: "A", s: "tv", t: "dark", r: 22, pc: 1 }, "pc-tv-zoom.png", { width: 1920, height: 1080, ratio: 1, clip: { x: 24, y: 160, width: 1120, height: 560 } });
+{
+  const img = (f) => `data:image/png;base64,${readFileSync(f).toString("base64")}`;
+  const cap = (t, c) => `<div style="font:800 20px/1.25 -apple-system,Helvetica,Arial;margin:0 0 4px 2px">${t}</div><div style="font:500 14px/1.35 -apple-system,Helvetica,Arial;color:#555b69;margin:0 0 10px 2px;min-height:38px">${c}</div>`;
+  const html = `<!doctype html><html><body style="margin:0;background:#f2f3f7;font-family:-apple-system,Helvetica,Arial,sans-serif;color:#15171c">
+  <div style="padding:28px 28px 8px;font:800 30px/1.2 -apple-system,Helvetica,Arial">P&amp;C alongside life · dark</div>
+  <div style="display:flex;gap:28px;padding:12px 28px 28px;align-items:flex-start">
+    <div style="width:390px;flex:none">${cap("Phone · This month", "Purple P&amp;C spot on your row and on Moe's and Maira's: policies and annual premium. A P&amp;C tile under the goal. Life bars untouched, with the goal-line tick.")}<img src="${img(pcHome)}" style="width:390px;display:block;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.12)"></div>
+    <div style="width:390px;flex:none">${cap("Phone · Log a sale", "A Life / P&amp;C switch appears only when the person picked is P&amp;C licensed (you, Moe, Maira). P&amp;C mode brings its own carriers and lines.")}<img src="${img(pcLog)}" style="width:390px;display:block;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.12)"></div>
+    <div style="width:900px;flex:none">${cap("The office TV", "Same spot on the three rows, a P&amp;C tile beside Today and Policies, and P&amp;C sales in the feed with a tag. The leaderboard and the goal stay life only.")}<img src="${img(pcTv)}" style="width:900px;display:block;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.12)">
+      ${cap("TV · close up", "")}<img src="${img(pcTvZoom)}" style="width:900px;display:block;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.12)"></div>
+  </div></body></html>`;
+  const ctx = await browser.newContext({ viewport: { width: 390 * 2 + 900 + 28 * 4, height: 800 }, deviceScaleFactor: 2 });
+  const page = await ctx.newPage();
+  await page.setContent(html);
+  await page.screenshot({ path: `${OUT}pc-sheet.png`, fullPage: true });
+  await ctx.close();
+  console.log("sheet pc-sheet.png");
+}
 await browser.close();
 console.log("done", OUT);

@@ -7,6 +7,10 @@
     ?s=phone|tv  the phone's This month screen (390 wide) or the TV board (1920x1080)
     ?t=light|dark
     ?r=22|10|6   the card radius in px (22 is today's)
+    ?pc=1        P&C alongside life (owner, 2026-11-04): a purple P&C spot on the rows of the three
+                 P&C-licensed people, a P&C tile, P&C sales in the feed; ?s=log draws Log a sale in P&C mode
+  Option A carries a gray tick at the goal line today (owner, 2026-11-04: "where they need to be at to
+  continue producing the same amount and still reach their goal by the end of the month").
   Rendered by design/render-leaderboard.mjs into design/out/leaderboard/.
 -->
 <style>
@@ -69,7 +73,28 @@ h2{display:flex;align-items:center;gap:8px;font-size:20px;font-weight:800;letter
 .amtcol{text-align:right;flex:none}.amtcol .amt{font-size:16px;font-weight:700;display:block}.amtcol .pill{font-size:11px;padding:2px 8px;margin-top:4px}
 /* D: same scale */
 .scale{position:relative;margin-top:7px;display:flex;align-items:center;gap:10px}.scale .track{position:relative;flex:1;height:6px;border-radius:var(--rp);background:var(--track)}.scale .track i{position:absolute;left:0;top:0;height:100%;border-radius:var(--rp);background:var(--grad)}.scale .track i.done{background:var(--ring-done)}
-.scale .track u{position:absolute;top:-4px;width:2px;height:14px;background:var(--mark);border-radius:1px}.scale .pct{width:40px;text-align:right;font-size:12px;font-weight:700;color:var(--g700)}.scale .pct.done{color:var(--up)}
+.track{position:relative}.track u{position:absolute;top:-4px;width:2px;height:14px;background:var(--mark);border-radius:1px}
+.pill.pc{background:var(--purple100);color:var(--purple800);font-size:11px;padding:2px 7px;margin-left:6px;vertical-align:middle;gap:4px}
+.pill.pc i{width:5px;height:5px;border-radius:50%;background:var(--purple800);display:inline-block}
+.legend{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--g500);margin-left:auto}.legend i{display:inline-block;width:2px;height:12px;background:var(--mark);border-radius:1px}
+.stats.four{grid-template-columns:repeat(4,1fr);gap:6px}.stats.four div{padding:8px 4px}.stats.four .v{font-size:16px}.stats .s{font-size:10px;font-weight:600;color:var(--g500);margin-top:2px}
+.stats div.pcstat{background:var(--purple100)}.stats div.pcstat .eyebrow,.stats div.pcstat .s{color:var(--purple800);opacity:.85}.stats div.pcstat .v{color:var(--purple800)}
+.tv .pill.pc{font-size:.8em;padding:.12em .55em;margin-left:.5em}.tv .pill.pc i{width:.35em;height:.35em}
+.tv .tiles.four{grid-template-columns:repeat(4,1fr);gap:.6em}.tv .tiles.four .tile{padding:.8em .7em}.tv .tiles.four .tile .v{font-size:1.5em}
+.tv .tile.pc{background:var(--purple100)}.tv .tile.pc .eyebrow,.tv .tile.pc .s{color:var(--purple800);opacity:.85}.tv .tile.pc .v{color:var(--purple800)}
+.tv .legend{font-size:.8em;margin:0 .6em 0 0}.tv .legend i{height:.9em;width:.12em}
+/* Log a sale */
+.log h2.sec{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--g500);margin:18px 0 8px 4px;display:flex;align-items:center;gap:8px}
+.who{display:grid;grid-template-columns:1fr 1fr;gap:8px}.who span{display:flex;align-items:center;gap:8px;min-height:44px;padding:6px 10px;border-radius:var(--r3);background:var(--card);box-shadow:var(--shadow);font-size:14px;font-weight:700}
+.who span.on{background:var(--tint);color:var(--accent-text);box-shadow:inset 0 0 0 1.5px var(--accent)}.who .av{width:28px;height:28px;font-size:10px}
+.kind{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--track);border-radius:var(--r3);padding:3px}.kind span{display:flex;align-items:center;justify-content:center;gap:7px;height:38px;border-radius:calc(var(--r3) - 2px);font-size:14px;font-weight:700;color:var(--g600)}.kind span.on{background:var(--segment);color:var(--g900);box-shadow:var(--shadow)}.kind span i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.kind span i.life{background:var(--accent)}.kind span i.pc{background:var(--purple800)}
+.money{display:flex;align-items:center;gap:12px}.money .box{flex:1;height:64px;border:1px solid var(--line);border-radius:var(--r3);background:var(--raised);display:flex;align-items:center;padding:0 16px;font-size:32px;font-weight:700;gap:8px}.money .box small{font-size:22px;color:var(--g500)}
+.money .step{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--g700)}.money .step b{width:36px;height:36px;border-radius:50%;background:var(--segment);box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--g900)}.money .step em{font-style:normal;font-family:"SG";font-weight:700;font-size:18px;width:20px;text-align:center}
+.chips2{display:flex;flex-wrap:wrap;gap:8px}.chips2 span{padding:9px 14px;border-radius:var(--rp);background:var(--card);box-shadow:var(--shadow);font-size:14px;font-weight:700;color:var(--g900)}.chips2 span.on{background:var(--tint);color:var(--accent-text);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.chips2.pcmode span.on{background:var(--purple100);color:var(--purple800);box-shadow:inset 0 0 0 1.5px var(--purple800)}
+.linklike{color:var(--accent-text);font-size:14px;font-weight:700;margin:18px 4px 0}
+.btn{display:block;background:var(--gradstrong);color:#fff;font-weight:800;text-align:center;border-radius:var(--r3);padding:15px;font-size:16px;margin-top:16px}.scale .pct{width:40px;text-align:right;font-size:12px;font-weight:700;color:var(--g700)}.scale .pct.done{color:var(--up)}
 .tabbar{position:absolute;left:16px;right:16px;bottom:22px;height:62px;background:var(--card);border-radius:var(--rtab);box-shadow:0 2px 6px rgba(21,23,28,.06),0 18px 40px rgba(21,23,28,.14);display:flex;align-items:center;justify-content:space-around;padding:0 6px}
 .tab{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;font-weight:700;color:var(--g500);width:70px}.tab.on{color:var(--accent-text);background:var(--tint);border-radius:var(--rp);padding:6px 0}.tab i{width:20px;height:20px;border-radius:5px;border:2px solid currentColor}
 /* ---------- tv ---------- */
@@ -111,6 +136,9 @@ const V = (q.get("v") || "A").toUpperCase();
 const S = q.get("s") || "phone";
 const T = q.get("t") || "dark";
 const R = Number(q.get("r") || 22);
+const PC = q.get("pc") === "1";
+// The goal line today: 21 of October's 22 business days are done on Fri Oct 30.
+const LINE = Math.round((21 / 22) * 100);
 document.documentElement.dataset.theme = T;
 document.documentElement.dataset.r = String(R);
 document.documentElement.style.setProperty("--r", R + "px");
@@ -120,10 +148,10 @@ document.body.className = S;
 
 // The team's October as the owner's screenshot showed it (2026-10-29), goals implied by the percentages.
 const PEOPLE = [
-  { n: "Anersi Koka", i: "AK", tone: "purple", amt: 67515, pol: 44, goal: 70000, today: 0 },
+  { n: "Anersi Koka", i: "AK", tone: "purple", amt: 67515, pol: 44, goal: 70000, today: 0, pc: { pol: 10, amt: 8900 } },
   { n: "Alex Alekseyev", i: "AA", tone: "amber", amt: 50660, pol: 35, goal: 50000, today: 1260 },
-  { n: "Moe Karim", i: "MK", tone: "red", amt: 36590, pol: 22, goal: 35000, today: 4424 },
-  { n: "Maira Angulo", i: "MA", tone: "blue", amt: 16920, pol: 16, goal: 20000, today: 720 },
+  { n: "Moe Karim", i: "MK", tone: "red", amt: 36590, pol: 22, goal: 35000, today: 4424, pc: { pol: 5, amt: 2400 } },
+  { n: "Maira Angulo", i: "MA", tone: "blue", amt: 16920, pol: 16, goal: 20000, today: 720, pc: { pol: 3, amt: 1040 } },
   { n: "Tina Kehrig", i: "TK", tone: "purple", amt: 9936, pol: 9, goal: 10000, today: 0 },
   { n: "Matt Fouchey", i: "MF", tone: "green", amt: 8248, pol: 10, goal: 10000, today: 828 },
   { n: "Samantha Marty", i: "SM", tone: "amber", amt: 5232, pol: 5, goal: 10000, today: 0 },
@@ -132,11 +160,14 @@ const total = PEOPLE.reduce((s, p) => s + p.amt, 0);
 const policies = PEOPLE.reduce((s, p) => s + p.pol, 0);
 const todayTotal = PEOPLE.reduce((s, p) => s + p.today, 0);
 const GOAL = 200000;
+const pcTotal = PEOPLE.reduce((s, p) => s + (p.pc?.amt ?? 0), 0);
+const pcPolicies = PEOPLE.reduce((s, p) => s + (p.pc?.pol ?? 0), 0);
 const max = Math.max(...PEOPLE.map((p) => p.amt));
 const $ = (n) => "$" + Math.round(n).toLocaleString("en-US");
 const pct = (p) => Math.round((p.amt / p.goal) * 100);
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-const smallLine = (p) => `${p.pol} policies${p.today ? ` · <span class="up">+${$(p.today)} today</span>` : ""}`;
+const pcPill = (p) => (PC && p.pc ? `<span class="pill pc"><i></i>P&amp;C ${p.pc.pol} · ${$(p.pc.amt)}</span>` : "");
+const smallLine = (p) => `${p.pol} policies${p.today ? ` · <span class="up">+${$(p.today)} today</span>` : ""}${pcPill(p)}`;
 
 function ringSvg(p, r, cls) {
   const c = 2 * Math.PI * r;
@@ -155,7 +186,7 @@ function row(p, idx) {
   if (V === "A") {
     // Even bars: one track, the same length for everyone; the percent in a fixed box at its end.
     return `${rankHtml}${av}<div class="body"><div class="l1">${name}${amt}</div>
-      <div class="bar"><div class="track"><i class="${done ? "done" : ""}" style="width:${Math.min(100, pct(p))}%"></i></div><span class="pct mono ${done ? "done" : ""}">${pct(p)}%</span></div>
+      <div class="bar"><div class="track"><i class="${done ? "done" : ""}" style="width:${Math.min(100, pct(p))}%"></i><u style="left:calc(${LINE}% - 1px)"></u></div><span class="pct mono ${done ? "done" : ""}">${pct(p)}%</span></div>
       <div class="small l3">${smallLine(p)}</div></div>`;
   }
   if (V === "B") {
@@ -179,7 +210,26 @@ function row(p, idx) {
 
 const rows = PEOPLE.map((p, i) => `<li class="row ${i === 0 ? "first" : ""}">${row(p, i)}</li>`).join("");
 
-if (S === "phone") {
+if (S === "log") {
+  document.body.className = "phone log";
+  const who = PEOPLE.map((p) => `<span class="${p.i === "AK" ? "on" : ""}"><span class="av ${p.tone}">${p.i}</span>${esc(p.n)}</span>`).join("");
+  const chips = (list, on, cls = "") => `<div class="chips2 ${cls}">${list.map((c) => `<span class="${c === on ? "on" : ""}">${c}</span>`).join("")}</div>`;
+  document.body.innerHTML = `<div class="screen">
+  <div class="nav"><div class="lockup"><div class="mark"><i class="a"></i><i class="b"></i><i class="c"></i><b></b></div><div class="t">Scorecard<small>by TKG</small></div></div><div class="ak">AK</div></div>
+  <h1>Log a sale</h1>
+  <p class="sub">Four taps and it is on the board.</p>
+  <h2 class="sec">Who sold it</h2><div class="who">${who}</div>
+  <h2 class="sec">What kind <span style="font-weight:600;text-transform:none;letter-spacing:0">· shows for Anersi, Moe and Maira</span></h2>
+  <div class="kind"><span><i class="life"></i>Life</span><span class="on"><i class="pc"></i>P&amp;C</span></div>
+  <h2 class="sec">Annual premium</h2>
+  <div class="money"><div class="box mono"><small>$</small>1,860</div><div class="step">Policies <b>−</b><em>1</em><b>+</b></div></div>
+  <h2 class="sec">Carrier</h2>${chips(["Progressive", "Safeco", "Travelers", "Nationwide", "Auto-Owners", "Citizens", "Bristol West", "Other"], "Progressive", "pcmode")}
+  <h2 class="sec">Line (optional)</h2>${chips(["Auto", "Home", "Renters", "Condo", "Umbrella", "Landlord", "Motorcycle", "Boat & RV"], "Auto", "pcmode")}
+  <p class="linklike">Day and note</p>
+  <div class="btn">Log $1,860</div>
+  <div class="tabbar"><div class="tab"><i></i>This month</div><div class="tab on"><i></i>Log a sale</div><div class="tab"><i></i>Wrap</div><div class="tab"><i></i>Team</div></div>
+</div>`;
+} else if (S === "phone") {
   document.body.innerHTML = `<div class="screen">
   <div class="nav"><div class="lockup"><div class="mark"><i class="a"></i><i class="b"></i><i class="c"></i><b></b></div><div class="t">Scorecard<small>by TKG</small></div></div><div class="ak">AK</div></div>
   <h1>This month</h1>
@@ -188,9 +238,9 @@ if (S === "phone") {
     <div class="big mono">${$(total)}<small>of ${$(GOAL)} · <span class="mono" style="color:var(--g900)">${Math.round((total / GOAL) * 100)}%</span></small></div>
     <div class="track"><i style="width:${Math.min(100, (total / GOAL) * 100)}%"></i></div>
     <p class="line">Ahead by ${$(total - GOAL * (21 / 22))}. On pace for ${$((total / 21) * 22)}. ${$(GOAL - total)} today gets there.</p>
-    <div class="stats"><div><span class="eyebrow">Policies</span><div class="v mono">${policies}</div></div><div><span class="eyebrow">Avg premium</span><div class="v mono">${$(total / policies)}</div></div><div><span class="eyebrow">Today</span><div class="v mono">${$(todayTotal)}</div></div></div>
+    <div class="stats ${PC ? "four" : ""}"><div><span class="eyebrow">Policies</span><div class="v mono">${policies}</div>${PC ? `<div class="s">life</div>` : ""}</div><div><span class="eyebrow">Avg premium</span><div class="v mono">${$(total / policies)}</div>${PC ? `<div class="s">per policy</div>` : ""}</div><div><span class="eyebrow">Today</span><div class="v mono">${$(todayTotal)}</div>${PC ? `<div class="s">5 policies</div>` : ""}</div>${PC ? `<div class="pcstat"><span class="eyebrow">P&amp;C</span><div class="v mono">${$(pcTotal)}</div><div class="s">${pcPolicies} policies · +$1,860 today</div></div>` : ""}</div>
   </div>
-  <h2>Leaderboard <small>7</small></h2>
+  <h2>Leaderboard <small>7</small>${V === "A" ? `<span class="legend"><i></i>goal line today</span>` : ""}</h2>
   <ul class="list" style="list-style:none;margin:0;padding:0">${rows}</ul>
   <div class="tabbar"><div class="tab on"><i></i>This month</div><div class="tab"><i></i>Log a sale</div><div class="tab"><i></i>Wrap</div><div class="tab"><i></i>Team</div></div>
 </div>`;
@@ -204,18 +254,19 @@ if (S === "phone") {
     <div class="mid"><b>October 2026</b><small>Fri, Oct 30</small></div>
     <div class="right"><span class="pill amber">Last business day</span><span class="clock mono">9:41 AM</span></div></header>
   <div class="grid">
-    <section class="panel"><div class="ph"><b>Leaderboard</b><small>annual premium · policies</small></div><ol>${rows.replace(/class="row /g, 'class="')}</ol></section>
+    <section class="panel"><div class="ph"><b>Leaderboard</b><small>${V === "A" ? `<span class="legend"><i></i>goal line today ·</span>` : ""}annual premium · policies</small></div><ol>${rows.replace(/class="row /g, 'class="')}</ol></section>
     <div class="col">
       <section class="panel goalcard"><div class="donut"><svg viewBox="0 0 100 100"><circle class="t" cx="50" cy="50" r="${donutR}"/><circle class="p" cx="50" cy="50" r="${donutR}" stroke-dasharray="${(donutC * gp) / 100} ${donutC}"/></svg><div class="c"><b class="mono">${Math.round((total / GOAL) * 100)}%</b><small>OF GOAL</small></div></div>
         <div class="gt"><span class="eyebrow">Team production</span><div class="big mono">${$(total)}</div><div class="of">of ${$(GOAL)}</div><div class="pace">Ahead by ${$(total - GOAL * (21 / 22))} · on pace for ${$((total / 21) * 22)}</div></div></section>
-      <section class="tiles"><div class="tile"><span class="eyebrow">Today</span><div class="v mono up">${$(todayTotal)}</div><div class="s">5 policies</div></div><div class="tile"><span class="eyebrow">Policies</span><div class="v mono">${policies}</div><div class="s">${$(total / policies)} avg</div></div><div class="tile"><span class="eyebrow">Needed today</span><div class="v mono">${$(GOAL - total)}</div><div class="s">to hit ${$(GOAL)}</div></div></section>
+      <section class="tiles ${PC ? "four" : ""}"><div class="tile"><span class="eyebrow">Today</span><div class="v mono up">${$(todayTotal)}</div><div class="s">5 policies</div></div><div class="tile"><span class="eyebrow">Policies</span><div class="v mono">${policies}</div><div class="s">${$(total / policies)} avg</div></div>${PC ? `<div class="tile pc"><span class="eyebrow">P&amp;C</span><div class="v mono">${$(pcTotal)}</div><div class="s">${pcPolicies} policies · +$1,860 today</div></div>` : ""}<div class="tile"><span class="eyebrow">Needed today</span><div class="v mono">${$(GOAL - total)}</div><div class="s">to hit ${$(GOAL)}</div></div></section>
       <section class="panel chart"><div class="ph"><b>The month so far</b><span class="legend"><i class="a"></i>production<i class="b"></i>goal line</span></div>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none"><line x1="0" y1="0" x2="100" y2="0" stroke="var(--line)" stroke-width=".3"/><line x1="0" y1="50" x2="100" y2="50" stroke="var(--line)" stroke-width=".3"/><line x1="0" y1="100" x2="100" y2="0" stroke="var(--chart2)" stroke-width=".7" stroke-dasharray="2 1.5" vector-effect="non-scaling-stroke"/><polyline points="${chartLine}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg></section>
       <section class="panel feed"><div class="ph"><b>Latest sales</b></div><ul>
+        ${PC ? `<li><span class="av purple">AK</span><span class="n"><b>Anersi</b> · Progressive · Auto <span class="pill pc"><i></i>P&amp;C</span></span><span class="t">9:30 AM</span><span class="m mono">$1,860</span></li>` : ""}
         <li><span class="av red">MK</span><span class="n"><b>Moe</b> · AHL · Whole life</span><span class="t">9:12 AM</span><span class="m mono">$4,424</span></li>
         <li><span class="av amber">AA</span><span class="n"><b>Alex</b> · Americo · Term</span><span class="t">8:58 AM</span><span class="m mono">$1,260</span></li>
         <li><span class="av green">MF</span><span class="n"><b>Matt</b> · Royal · Term</span><span class="t">8:40 AM</span><span class="m mono">$828</span></li>
-        <li><span class="av blue">MA</span><span class="n"><b>Maira</b> · Newbridge · Final expense</span><span class="t">8:21 AM</span><span class="m mono">$720</span></li></ul></section>
+        ${PC ? "" : `<li><span class="av blue">MA</span><span class="n"><b>Maira</b> · Newbridge · Final expense</span><span class="t">8:21 AM</span><span class="m mono">$720</span></li>`}</ul></section>
     </div>
   </div>
   <footer><b>Finish strong. Every policy counts.</b><span>Updated 9:41 AM <span style="margin-left:1em">F full screen</span></span></footer>
