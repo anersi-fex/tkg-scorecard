@@ -141,10 +141,19 @@ body.tv{width:1920px;height:1080px;font-size:19.2px;overflow:hidden}
 .tv footer{margin-top:.8em;display:flex;justify-content:space-between;font-size:.85em;font-weight:600;color:var(--g500)}.tv footer b{font-size:1.1em;color:var(--g700)}
 
 /* ---------- screens round (owner, 2026-11-04 second ask) ---------- */
-:root{--pc:#6d3fd3;--pc-tint:#e9dffd;--pc-text:#5b2db0}
+:root{--pc:#6d3fd3;--pc-tint:#e9dffd;--pc-text:#5b2db0;--pc-grad:var(--pc)}
+html[data-theme=dark]{--pc-grad:var(--pc)}
 html[data-theme=dark]{--pc:#b794f6;--pc-tint:#2e1d47;--pc-text:#d8b4fe}
+/* P&C color ideas (owner, 2026-11-04: "i don't like that much purple on the screen. Be more creative") */
+html[data-pc=teal]{--pc:#0d9488;--pc-text:#0f766e;--pc-tint:#ccfbf1;--pc-grad:linear-gradient(90deg,#0f766e,#14b8a6)}
+html[data-pc=teal][data-theme=dark]{--pc:#2dd4bf;--pc-text:#5eead4;--pc-tint:#0f3330;--pc-grad:linear-gradient(90deg,#14b8a6,#5eead4)}
+html[data-pc=steel]{--pc:#64748b;--pc-text:#475569;--pc-tint:#e2e8f0;--pc-grad:linear-gradient(90deg,#475569,#94a3b8)}
+html[data-pc=steel][data-theme=dark]{--pc:#a5b4c8;--pc-text:#cbd5e1;--pc-tint:#1e2533;--pc-grad:linear-gradient(90deg,#8193ab,#cbd5e1)}
+html[data-pc=stripes]{--pc:var(--accent);--pc-text:var(--accent-text);--pc-tint:var(--tint);--pc-grad:repeating-linear-gradient(135deg,var(--accent) 0 .32em,color-mix(in srgb,var(--accent) 38%,var(--card)) .32em .64em)}
+.phone[data-x]{}
+html[data-pc=stripes] .phone .track i.pcfill,html[data-pc=stripes] .phone .track i.pcseg,html[data-pc=stripes] .phone .crow2 .track i{background:repeating-linear-gradient(135deg,var(--accent) 0 4px,color-mix(in srgb,var(--accent) 38%,var(--card)) 4px 8px)}
 .crown{display:inline-block;width:1em;height:1em;fill:currentColor;vertical-align:-.12em}
-.track i.pcfill{background:var(--pc)}.track i.pcseg{background:var(--pc)}
+.track i.pcfill{background:var(--pc-grad)}.track i.pcseg{background:var(--pc-grad)}
 .split i.p,.goal .splitline i.p,.tv .gt .splitline i.p,.legend .dot.p{background:var(--pc)}
 .pill.pc{background:var(--pc-tint);color:var(--pc-text)}
 /* TV header: the month, the three screens, the clock with the date */
@@ -171,12 +180,23 @@ html[data-theme=dark]{--pc:#b794f6;--pc-tint:#2e1d47;--pc-text:#d8b4fe}
 .tv .crow .top{display:flex;align-items:baseline;justify-content:space-between;gap:1em}
 .tv .crow .top b{font-size:1.3em;font-weight:800;letter-spacing:-.02em}
 .tv .crow .top span{font-size:1.15em;font-weight:700}.tv .crow .top span small{font-family:"PJS";font-size:.75em;font-weight:600;color:var(--g500);margin-right:.6em}
-.tv .crow .track{height:.55em;border-radius:var(--rp);background:var(--track);margin-top:.35em;overflow:hidden}.tv .crow .track i{display:block;height:100%;border-radius:var(--rp);background:var(--pc)}
+.tv .crow .track{height:.55em;border-radius:var(--rp);background:var(--track);margin-top:.35em;overflow:hidden}.tv .crow .track i{display:block;height:100%;border-radius:var(--rp);background:var(--pc-grad)}
 .tv .crow .small{margin-top:.3em}
 .tv .linegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:.6em;margin-top:.7em}
 .tv .lt{background:var(--raised);border-radius:calc(var(--rtv) * .7);padding:.65em .8em}
 .tv .lt .eyebrow{font-size:.78em}.tv .lt .v{font-size:1.65em;font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:.25em;color:var(--pc-text)}.tv .lt .s{font-size:.85em;font-weight:600;color:var(--g500);margin-top:.3em}
 .tv .feed .m{min-width:4.2em;text-align:right}
+html[data-pc=stripes] .split i.p,html[data-pc=stripes] .goal .splitline i.p,html[data-pc=stripes] .tv .gt .splitline i.p,html[data-pc=stripes] .legend .dot.p,html[data-pc=stripes] .tv .screens span i.p,html[data-pc=stripes] .seg span i.p,html[data-pc=stripes] .tv .ph b .k.p,html[data-pc=stripes] .lt .eyebrow::before,html[data-pc=stripes] .linechips .eyebrow::before{background:transparent!important;box-shadow:inset 0 0 0 .14em var(--accent)}
+html[data-pc=stripes] .tv .screens span i.t,html[data-pc=stripes] .seg span i.t,html[data-pc=stripes] .tv .ph b .k.t{background:var(--accent)}
+/* less color (second round): color only on bars, dots and the screen pill */
+html:not([data-pc=purple]) .tv li.first.pcf{background:var(--raised)}
+html:not([data-pc=purple]) .row.pcf{background:transparent}
+html:not([data-pc=purple]) .tv .tile.pc{background:var(--card)}html:not([data-pc=purple]) .tv .tile.pc .eyebrow,html:not([data-pc=purple]) .tv .tile.pc .s{color:var(--g500);opacity:1}html:not([data-pc=purple]) .tv .tile.pc .v{color:var(--g900)}
+html:not([data-pc=purple]) .tv .lt .v,html:not([data-pc=purple]) .linechips .v,html:not([data-pc=purple]) .pcgoal .big{color:var(--g900)}
+html:not([data-pc=purple]) .tv .gt .big{color:var(--g900)!important}
+.tv .pcicon{width:5.4em;height:5.4em;border-radius:50%;background:var(--raised);display:flex;align-items:center;justify-content:center;flex:none;color:var(--pc-text)}
+.tv .pcicon svg{width:2.6em;height:2.6em}
+.lt .eyebrow::before,.linechips .eyebrow::before{content:"";display:inline-block;width:.55em;height:.55em;border-radius:50%;background:var(--pc-grad);margin-right:.45em;vertical-align:.05em}
 /* fixes after the first render */
 .tv .panel.goalcard{flex-direction:row;align-items:center}
 .tv .panel.chart{min-height:13em}
@@ -205,7 +225,7 @@ html[data-theme=dark]{--pc:#b794f6;--pc-tint:#2e1d47;--pc-text:#d8b4fe}
 .list .row:first-child{border-radius:var(--r) var(--r) 0 0}
 .crow2{padding:12px 16px;position:relative}.crow2+.crow2::before{content:"";position:absolute;left:16px;right:0;top:0;height:1px;background:var(--line)}
 .crow2 .top{display:flex;justify-content:space-between;align-items:baseline}.crow2 .top b{font-size:15px}.crow2 .top span{font-family:"SG";font-weight:700;font-size:15px}.crow2 .top span small{font-family:"PJS";font-size:12px;color:var(--g500);font-weight:600;margin-right:8px}
-.crow2 .track{height:6px;border-radius:999px;background:var(--track);margin-top:7px;overflow:hidden}.crow2 .track i{display:block;height:100%;background:var(--pc);border-radius:999px}
+.crow2 .track{height:6px;border-radius:999px;background:var(--track);margin-top:7px;overflow:hidden}.crow2 .track i{display:block;height:100%;background:var(--pc-grad);border-radius:999px}
 .crow2 .small{margin-top:5px}
 .strip{position:absolute;left:0;right:0;bottom:0;height:78px;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:center;padding:0 8px 10px}
 .strip .tab{width:84px}.strip .tab.on{padding:7px 0}
@@ -227,6 +247,8 @@ const SCREEN = q.get("screen") || "life"; // life | pc | total
 const T = q.get("t") || "dark";
 const P = Number(q.get("p") || 35);     // how far the current screen's time has run, in percent
 const MODE = q.get("mode") || "rotate"; // rotate | static
+const PCMODE = q.get("pc") || "teal";      // purple | teal | steel | stripes
+document.documentElement.dataset.pc = PCMODE;
 document.documentElement.dataset.theme = T;
 document.documentElement.dataset.r = "22";
 document.documentElement.style.setProperty("--r", "22px");
@@ -330,7 +352,8 @@ function ring(parts, label, big) {
   let acc = 0;
   const arcs = parts.map(([pct, color]) => { acc += pct; return { to: acc, color }; }).reverse()
     .map((a) => `<circle cx="50" cy="50" r="${r}" style="stroke:${a.color}" stroke-linecap="${a.color.includes("pc") ? "butt" : "round"}" stroke-dasharray="${(c * a.to) / 100} ${c}"/>`).join("");
-  return `<div class="donut"><svg viewBox="0 0 100 100"><circle class="t" cx="50" cy="50" r="${r}"/>${arcs}</svg><div class="c"><b class="mono">${big}</b><small>${label}</small></div></div>`;
+  const defs = PCMODE === "stripes" ? `<defs><pattern id="pcst" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="color-mix(in srgb,var(--accent) 38%,var(--card))"/><rect width="2.5" height="5" fill="var(--accent)"/></pattern></defs>` : "";
+  return `<div class="donut"><svg viewBox="0 0 100 100">${defs}<circle class="t" cx="50" cy="50" r="${r}"/>${PCMODE === "stripes" ? arcs.replace(/style="stroke:var\(--pc\)"/, 'style="stroke:url(#pcst)"') : arcs}</svg><div class="c"><b class="mono">${big}</b><small>${label}</small></div></div>`;
 }
 function feed(title, items) {
   return `<section class="panel feed"><div class="ph"><b>${title}</b></div><ul>${items.map((x) => {
@@ -366,7 +389,7 @@ function tvPc() {
       <section class="panel carriers"><div class="ph"><b>By carrier</b><small>November so far</small></div><div class="rows">${carriers}</div></section>
     </div>
     <div class="col">
-      <section class="panel goalcard"><div class="pcmark">P&amp;C</div>
+      <section class="panel goalcard">${PCMODE === "purple" ? `<div class="pcmark">P&amp;C</div>` : `<div class="pcicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 11 5l8 6.5"/><path d="M5 10v8.5h4.5V14h3v4.5H17V10"/><path d="M14.5 20.5h6.8l-.9-2.6a1.2 1.2 0 0 0-1.1-.8h-2.8a1.2 1.2 0 0 0-1.1.8z" fill="currentColor" stroke="none" opacity=".9"/></svg></div>`}
         <div class="gt"><span class="eyebrow">P&amp;C production</span><div class="big mono" style="color:var(--pc-text)">${$(PC)}</div><div class="of">${PC_POL} policies · Anersi, Moe and Maira</div><div class="pace pcp">+${$(PC_TODAY)} today · Maira, Progressive auto</div></div></section>
       <section class="tiles"><div class="tile"><span class="eyebrow">Today</span><div class="v mono up">${$(PC_TODAY)}</div><div class="s">1 policy</div></div><div class="tile pc"><span class="eyebrow">Policies</span><div class="v mono">${PC_POL}</div><div class="s">${$(PC / PC_POL)} avg</div></div><div class="tile pc"><span class="eyebrow">Share of agency</span><div class="v mono">${Math.round((PC / ALL) * 100)}%</div><div class="s">of ${$(ALL)} total</div></div></section>
       <section class="panel"><div class="ph"><b>By line</b><small>policies · annual premium</small></div><div class="linegrid">${lines}</div></section>

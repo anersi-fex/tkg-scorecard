@@ -80,7 +80,7 @@ export interface WrapLine {
   rank: number | null;
 }
 
-/** How the team's period went against the month's goal. */
+/** How the team's period went against the month's goal, in life (the goal is life). */
 export type WrapVerdict =
   /** A day or week that beat what the goal needed; a month that ended short says `short`. */
   | { kind: "won"; neededCents: number }
@@ -100,8 +100,9 @@ export interface PeriodWrap extends WrapPeriod {
   day: string;
   /** True while the period runs through today, so its numbers are still moving. */
   current: boolean;
-  /** Every premium, life and P&C together, and the P&C part of it. */
+  /** Every premium, life and P&C together, its life part (what the verdict measures) and its P&C part. */
   teamCents: number;
+  lifeCents: number;
   policies: number;
   pcCents: number;
   pcPolicies: number;
@@ -126,7 +127,7 @@ export interface PeriodWrap extends WrapPeriod {
    * stood). `withCarrier` counts the policies that name a carrier (days imported before migration
    * 0002 have none), the only ones the top carriers can cover.
    */
-  month: { key: string; policies: number; withCarrier: number; goalPct: number; goalCents: number; productionCents: number; pcCents: number };
+  month: { key: string; policies: number; withCarrier: number; goalPct: number; goalCents: number; productionCents: number; lifeCents: number; pcCents: number };
 }
 
 function tally(items: Array<{ name: string | null; count: number; pc: boolean }>): WrapCount[] {
@@ -145,13 +146,17 @@ function tally(items: Array<{ name: string | null; count: number; pc: boolean }>
 const byCarrier = (s: FeedSale) => ({ name: s.carrier, count: s.policies, pc: s.kind === "pc" });
 const byProduct = (s: FeedSale) => ({ name: s.product, count: s.policies, pc: s.kind === "pc" });
 
+/** The goal is life (owner, 2026-11-04): P&C counts in the totals, never toward the goal. */
+const isLife = (s: FeedSale) => s.kind !== "pc";
+
 /**
- * What the team needed on `day` to stay on the line to the goal: what was left before that day,
- * spread over the business days from that day on (that day included). 0 when the goal was reached.
+ * What the team needed on `day` to stay on the line to the goal: what was left of it in life
+ * before that day, spread over the business days from that day on (that day included). 0 when the
+ * goal was reached.
  */
 export function neededOnDay(input: Pick<WrapInput, "sales" | "team">, day: string): number {
   if (input.team.goalCents <= 0) return 0;
-  const before = input.sales.filter((s) => s.soldOn < day).reduce((sum, s) => sum + s.premiumCents, 0);
+  const before = input.sales.filter((s) => s.soldOn < day && isLife(s)).reduce((sum, s) => sum + s.premiumCents, 0);
   const left = input.team.goalCents - before;
   if (left <= 0) return 0;
   const businessFrom = datesOfMonth(monthKeyOf(day)).filter((d) => d >= day && isBusinessDay(d)).length;
@@ -201,6 +206,9 @@ export function buildWrap(input: WrapInput, day: string, view: WrapView = "day")
   }
   const toDate = input.sales.filter((s) => s.soldOn <= to);
   const productionToDate = toDate.reduce((sum, s) => sum + s.premiumCents, 0);
+  // The verdict and the month's percent are life against the goal; the totals keep both kinds.
+  const lifeToDate = toDate.filter(isLife).reduce((sum, s) => sum + s.premiumCents, 0);
+  const lifeCents = inPeriod.filter(isLife).reduce((sum, s) => sum + s.premiumCents, 0);
   const goalCents = input.team.goalCents;
   const monthCarriers = tally(toDate.map(byCarrier));
 
@@ -210,9 +218,9 @@ export function buildWrap(input: WrapInput, day: string, view: WrapView = "day")
   else if (view === "month") {
     // The month against the straight line to the goal, as it stood at the period's end; a month
     // that is over reads as the whole month.
-    const p = pace(productionToDate, goalCents, monthClock(input.clock.key, to));
+    const p = pace(lifeToDate, goalCents, monthClock(input.clock.key, to));
     if (p.status === "done") verdict = { kind: "goal_hit" };
-    else if (!current) verdict = { kind: "short", neededCents: goalCents, shortCents: goalCents - productionToDate };
+    else if (!current) verdict = { kind: "short", neededCents: goalCents, shortCents: goalCents - lifeToDate };
     else if (p.status === "ahead") verdict = { kind: "ahead", byCents: p.aheadCents, expectedCents: p.expectedCents };
     else if (p.status === "behind") verdict = { kind: "behind", byCents: -p.aheadCents, expectedCents: p.expectedCents };
     else verdict = { kind: "on", expectedCents: p.expectedCents };
@@ -223,11 +231,11 @@ export function buildWrap(input: WrapInput, day: string, view: WrapView = "day")
     // overshoot what was left by up to a dollar a day: never ask for more than the rest of the goal,
     // and a period that reaches the goal has won.
     const perDay = neededOnDay(input, business[0]);
-    const before = input.sales.filter((s) => s.soldOn < business[0]).reduce((sum, s) => sum + s.premiumCents, 0);
+    const before = input.sales.filter((s) => s.soldOn < business[0] && isLife(s)).reduce((sum, s) => sum + s.premiumCents, 0);
     const neededCents = Math.min(perDay * business.length, Math.ceil((goalCents - before) / 100) * 100);
     if (perDay === 0) verdict = { kind: "goal_hit" };
-    else if (teamCents >= neededCents || before + teamCents >= goalCents) verdict = { kind: "won", neededCents };
-    else verdict = { kind: "short", neededCents, shortCents: neededCents - teamCents };
+    else if (lifeCents >= neededCents || before + lifeCents >= goalCents) verdict = { kind: "won", neededCents };
+    else verdict = { kind: "short", neededCents, shortCents: neededCents - lifeCents };
   }
 
   return {
@@ -237,6 +245,7 @@ export function buildWrap(input: WrapInput, day: string, view: WrapView = "day")
     day,
     current,
     teamCents,
+    lifeCents,
     policies,
     pcCents: inPeriod.filter((s) => s.kind === "pc").reduce((sum, s) => sum + s.premiumCents, 0),
     pcPolicies: inPeriod.filter((s) => s.kind === "pc").reduce((sum, s) => sum + s.policies, 0),
@@ -251,9 +260,10 @@ export function buildWrap(input: WrapInput, day: string, view: WrapView = "day")
       key: input.clock.key,
       policies: toDate.reduce((sum, s) => sum + s.policies, 0),
       withCarrier: monthCarriers.reduce((sum, c) => sum + c.count, 0),
-      goalPct: goalCents > 0 ? Math.round((productionToDate / goalCents) * 100) : 0,
+      goalPct: goalCents > 0 ? Math.round((lifeToDate / goalCents) * 100) : 0,
       goalCents,
       productionCents: productionToDate,
+      lifeCents: lifeToDate,
       pcCents: toDate.filter((s) => s.kind === "pc").reduce((sum, s) => sum + s.premiumCents, 0),
     },
   };

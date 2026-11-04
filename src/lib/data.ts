@@ -1,8 +1,9 @@
 import "server-only";
 import { db } from "./supabase";
-import { DEFAULT_SETTINGS, isBoardTheme, isSaleKind, type Agent, type AppSettings, type LoggedBy, type PcCarrier, type Sale } from "./types";
+import { DEFAULT_SETTINGS, isBoardTheme, isSaleKind, isTvScreens, type Agent, type AppSettings, type LoggedBy, type PcCarrier, type Sale } from "./types";
 import { datesOfMonth, isMonthKey } from "./month";
 import { DEFAULT_COLORWAY, isColorwayKey } from "./colorways";
+import { DEFAULT_PC_COLOR, isPcColorKey } from "./pc-colors";
 import { isSoundKey } from "./sounds";
 
 /**
@@ -145,36 +146,59 @@ export async function monthsWithSales(): Promise<string[]> {
 }
 
 export interface MonthGoals {
+  /** The life goal: the one the board measures (owner, 2026-11-04). */
   teamCents: number;
   byAgent: Record<string, number>;
+  /** The P&C goals (0004_pc_goals.sql): the team's and each person's. */
+  pcTeamCents: number;
+  pcByAgent: Record<string, number>;
 }
 
 export async function goalsForMonth(month: string): Promise<MonthGoals> {
-  if (!isMonthKey(month)) return { teamCents: 0, byAgent: {} };
+  if (!isMonthKey(month)) return { teamCents: 0, byAgent: {}, pcTeamCents: 0, pcByAgent: {} };
   const [team, agents] = await Promise.all([
-    db().from("goals").select("team_cents").eq("month", month).maybeSingle(),
-    db().from("agent_goals").select("agent_id, cents").eq("month", month),
+    db().from("goals").select("team_cents, pc_cents").eq("month", month).maybeSingle(),
+    db().from("agent_goals").select("agent_id, cents, pc_cents").eq("month", month),
   ]);
   if (team.error) fail("goals.team", team.error);
   if (agents.error) fail("goals.agents", agents.error);
   const byAgent: Record<string, number> = {};
-  for (const r of agents.data ?? []) byAgent[String(r.agent_id)] = Number(r.cents);
-  return { teamCents: Number(team.data?.team_cents ?? 0), byAgent };
+  const pcByAgent: Record<string, number> = {};
+  for (const r of agents.data ?? []) {
+    if (Number(r.cents) > 0) byAgent[String(r.agent_id)] = Number(r.cents);
+    if (Number(r.pc_cents) > 0) pcByAgent[String(r.agent_id)] = Number(r.pc_cents);
+  }
+  return { teamCents: Number(team.data?.team_cents ?? 0), byAgent, pcTeamCents: Number(team.data?.pc_cents ?? 0), pcByAgent };
 }
 
+/** The team's life goal for a month (the P&C goal in the same row is kept). */
 export async function setTeamGoal(month: string, cents: number): Promise<void> {
   const { error } = await db().from("goals").upsert({ month, team_cents: cents, updated_at: new Date().toISOString() });
   if (error) fail("goals.set", error);
 }
 
-export async function setAgentGoal(month: string, agentId: string, cents: number): Promise<void> {
-  if (cents <= 0) {
-    const { error } = await db().from("agent_goals").delete().eq("month", month).eq("agent_id", agentId);
-    if (error) fail("goals.agent.clear", error);
-    return;
-  }
-  const { error } = await db().from("agent_goals").upsert({ month, agent_id: agentId, cents, updated_at: new Date().toISOString() });
+/** The team's P&C goal for a month (the life goal in the same row is kept). */
+export async function setTeamPcGoal(month: string, cents: number): Promise<void> {
+  const { error } = await db().from("goals").upsert({ month, pc_cents: cents, updated_at: new Date().toISOString() });
+  if (error) fail("goals.pc.set", error);
+}
+
+/** A person's row holds their life goal and their P&C goal: clearing one keeps the other; a row with neither goes. */
+async function setAgentGoalColumn(month: string, agentId: string, column: "cents" | "pc_cents", cents: number): Promise<void> {
+  const { error } = await db()
+    .from("agent_goals")
+    .upsert({ month, agent_id: agentId, [column]: Math.max(0, cents), updated_at: new Date().toISOString() });
   if (error) fail("goals.agent.set", error);
+  const { error: clear } = await db().from("agent_goals").delete().eq("month", month).eq("agent_id", agentId).eq("cents", 0).eq("pc_cents", 0);
+  if (clear) fail("goals.agent.clear", clear);
+}
+
+export async function setAgentGoal(month: string, agentId: string, cents: number): Promise<void> {
+  await setAgentGoalColumn(month, agentId, "cents", cents);
+}
+
+export async function setAgentPcGoal(month: string, agentId: string, cents: number): Promise<void> {
+  await setAgentGoalColumn(month, agentId, "pc_cents", cents);
 }
 
 export async function getSettings(): Promise<AppSettings> {
@@ -191,8 +215,10 @@ export async function getSettings(): Promise<AppSettings> {
     carriers: list(v.carriers, DEFAULT_SETTINGS.carriers),
     pcCarriers: pcCarrierList(v.pcCarriers),
     colorway: isColorwayKey(v.colorway) ? v.colorway : DEFAULT_COLORWAY,
+    pcColor: isPcColorKey(v.pcColor) ? v.pcColor : DEFAULT_PC_COLOR,
     boardTheme: isBoardTheme(v.boardTheme) ? v.boardTheme : DEFAULT_SETTINGS.boardTheme,
     sound: isSoundKey(v.sound) ? v.sound : DEFAULT_SETTINGS.sound,
+    tvScreens: isTvScreens(v.tvScreens) ? v.tvScreens : DEFAULT_SETTINGS.tvScreens,
   };
 }
 

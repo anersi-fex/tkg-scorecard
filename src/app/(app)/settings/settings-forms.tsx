@@ -3,18 +3,22 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { COLORWAYS, COLORWAY_KEYS, type ColorwayKey } from "@/lib/colorways";
+import { PC_COLORS, PC_COLOR_KEYS, pcLooksLikeLife, type PcColorKey } from "@/lib/pc-colors";
 import { cn } from "@/components/ui";
-import { BOARD_THEMES, type AppSettings, type BoardTheme } from "@/lib/types";
+import { BOARD_THEMES, TV_SCREENS, type AppSettings, type BoardTheme, type TvScreens } from "@/lib/types";
 import { SOUNDS, type SoundKey } from "@/lib/sounds";
 import { Button, Input, Label, Notice, Textarea } from "@/components/ui";
 import { ListCard, ListTitle, ROW_INSET } from "@/components/tide";
-import { saveBoardSettings, saveBoardTheme, saveColorway, saveSaleSound, saveTeamGoal } from "../actions";
+import { saveBoardSettings, saveBoardTheme, saveColorway, savePcColor, saveSaleSound, saveTeamGoal, saveTeamPcGoal, saveTvScreens } from "../actions";
 import { toast } from "@/components/toaster";
+import { KindDot } from "@/components/kind";
 
 interface MonthGoal {
   key: string;
   label: string;
+  /** The life goal (the one the board measures) and the P&C goal. */
   cents: number;
+  pcCents: number;
   current: boolean;
 }
 
@@ -37,12 +41,24 @@ export function SettingsForms({
   return (
     <div className="space-y-6">
       <section>
-        <ListTitle>Team goal</ListTitle>
-        <p className="mt-1 px-1 text-[13px] text-gray-500">Annual premium for the whole team. The board shows how close you are and what each day needs.</p>
+        <ListTitle>Life goal</ListTitle>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">Life annual premium for the whole team: the goal the board measures, with what each day needs.</p>
         <ListCard className="mt-2 divide-y divide-line">
           {months.map((m) => (
             <li key={m.key} className="px-4 py-3">
               <GoalForm month={m} />
+            </li>
+          ))}
+        </ListCard>
+      </section>
+
+      <section>
+        <ListTitle>P&amp;C goal</ListTitle>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">P&amp;C annual premium for the P&amp;C team. The P&amp;C screen measures it; the agency total adds both goals up.</p>
+        <ListCard className="mt-2 divide-y divide-line">
+          {months.map((m) => (
+            <li key={m.key} className="px-4 py-3">
+              <GoalForm month={m} pc />
             </li>
           ))}
         </ListCard>
@@ -55,9 +71,21 @@ export function SettingsForms({
       </section>
 
       <section>
+        <ListTitle>P&amp;C color</ListTitle>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">P&amp;C&apos;s own color on the bars, rings and tags, next to life&apos;s. Dusty blue is the default.</p>
+        <PcColorPicker current={settings.pcColor} colorway={settings.colorway} />
+      </section>
+
+      <section>
         <ListTitle>TV look</ListTitle>
         <p className="mt-1 px-1 text-[13px] text-gray-500">Light or dark on the office TV. The TV follows this within a few seconds.</p>
         <BoardThemePicker current={settings.boardTheme} />
+      </section>
+
+      <section>
+        <ListTitle>TV screens</ListTitle>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">What the office TV shows. It follows within a few seconds.</p>
+        <TvScreensPicker current={settings.tvScreens} />
       </section>
 
       <section>
@@ -169,6 +197,64 @@ function ColorwayPicker({ current }: { current: ColorwayKey }) {
   );
 }
 
+function PcColorPicker({ current, colorway }: { current: PcColorKey; colorway: ColorwayKey }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [picked, setPicked] = useState<PcColorKey>(current);
+  return (
+    <>
+      <div role="radiogroup" aria-label="P&C color" className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {PC_COLOR_KEYS.map((key) => {
+          const c = PC_COLORS[key];
+          const on = picked === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              data-pc-color-option={key}
+              disabled={pending}
+              onClick={() => {
+                setPicked(key);
+                // This screen changes at once; every other screen on the next load; the TV on its next poll.
+                document.documentElement.setAttribute("data-pc-color", key);
+                start(async () => {
+                  let ok = false;
+                  try {
+                    const r = await savePcColor(key);
+                    toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+                    ok = r.ok;
+                  } catch {
+                    toast("Couldn't reach the server. Try again.", false);
+                  }
+                  if (ok) router.refresh();
+                  else {
+                    setPicked(current);
+                    document.documentElement.setAttribute("data-pc-color", current);
+                  }
+                });
+              }}
+              className={cn("flex min-h-14 items-center gap-3 rounded-2xl bg-surface px-3 text-left shadow-card transition", on ? "outline-2 outline-accent" : "hover:bg-gray-50")}
+            >
+              <span aria-hidden className="h-9 w-9 shrink-0 rounded-xl" style={{ background: `linear-gradient(135deg, ${c.swatch[0]}, ${c.swatch[1]})` }} />
+              <span className="min-w-0">
+                <span className={cn("block text-[15px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{c.name}</span>
+                <span className="block truncate text-[12px] font-medium text-gray-500">{c.idea}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {pcLooksLikeLife(colorway, picked) && (
+        <p className="mt-2 px-1 text-[13px] font-medium text-down">
+          {COLORWAYS[colorway].name} is close to {PC_COLORS[picked].name}, so P&amp;C can look like life. {colorway === "emerald" ? "Dusty blue or Silver" : "Silver or Sage"} keeps them apart.
+        </p>
+      )}
+    </>
+  );
+}
+
 const BOARD_THEME_OPTIONS: Record<BoardTheme, { label: string; icon: React.ReactNode }> = {
   dark: {
     label: "Dark",
@@ -236,6 +322,93 @@ function BoardThemePicker({ current }: { current: BoardTheme }) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+const TV_SCREEN_OPTIONS: Record<TvScreens, { label: string; note: string; icon: React.ReactNode; tone: string }> = {
+  rotate: {
+    label: "Rotate",
+    note: "Life 60 s, then P&C 15 s, then Agency total 15 s",
+    tone: "bg-surface-2 text-gray-700",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M20 11a8 8 0 0 0-14.3-4.9L4 8" />
+        <path d="M4 4v4h4" />
+        <path d="M4 13a8 8 0 0 0 14.3 4.9L20 16" />
+        <path d="M20 20v-4h-4" />
+      </svg>
+    ),
+  },
+  life: { label: "Life only", note: "the goal screen, all day", tone: "bg-tint", icon: <KindDot kind="life" className="h-3 w-3" /> },
+  pc: { label: "P&C only", note: "P&C sales and the P&C team", tone: "bg-pc-tint", icon: <KindDot kind="pc" className="h-3 w-3" /> },
+  total: {
+    label: "Agency total only",
+    note: "life and P&C added up",
+    tone: "bg-surface-2",
+    icon: (
+      <span aria-hidden className="flex h-3 w-3 overflow-hidden rounded-full">
+        <span className="h-full w-1/2 bg-accent" />
+        <span className="h-full w-1/2 bg-pc" />
+      </span>
+    ),
+  },
+};
+
+/** Settings > TV screens: the TV rotates its three screens, or stays on one; saved on a tap. */
+function TvScreensPicker({ current }: { current: TvScreens }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [picked, setPicked] = useState<TvScreens>(current);
+  // Follow the saved value when the page refreshes (a change made on another phone shows here).
+  const [seen, setSeen] = useState(current);
+  if (seen !== current) {
+    setSeen(current);
+    setPicked(current);
+  }
+  const pick = (key: TvScreens) => {
+    if (key === picked) return;
+    setPicked(key);
+    start(async () => {
+      try {
+        const r = await saveTvScreens(key);
+        toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+        if (r.ok) router.refresh();
+        else setPicked(current);
+      } catch {
+        toast("Couldn't reach the server. Try again.", false);
+        setPicked(current);
+      }
+    });
+  };
+  return (
+    <div role="radiogroup" aria-label="TV screens">
+      <ListCard className="mt-2">
+        {TV_SCREENS.map((key) => {
+          const o = TV_SCREEN_OPTIONS[key];
+          const on = picked === key;
+          return (
+            <li key={key} className={ROW_INSET.button}>
+              <button type="button" role="radio" aria-checked={on} disabled={pending} onClick={() => pick(key)} className="flex min-h-[60px] w-full items-center gap-3 px-4 py-2 text-left">
+                <span aria-hidden className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full", o.tone)}>
+                  {o.icon}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={cn("block truncate text-[15px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{o.label}</span>
+                  <span className="block truncate text-[12px] font-medium text-gray-500">{o.note}</span>
+                </span>
+                <span aria-hidden className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", on ? "bg-tide-strong text-white" : "border border-line")}>
+                  {on && (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M5 12.5l4.5 4.5L19 7.5" />
+                    </svg>
+                  )}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ListCard>
     </div>
   );
 }
@@ -340,28 +513,31 @@ function SoundPicker({ current }: { current: SoundKey }) {
   );
 }
 
-function GoalForm({ month }: { month: MonthGoal }) {
+/** One month's goal: the life goal, or (`pc`) the P&C goal. */
+function GoalForm({ month, pc = false }: { month: MonthGoal; pc?: boolean }) {
   const [pending, start] = useTransition();
+  const id = `${pc ? "pc-goal" : "goal"}-${month.key}`;
+  const cents = pc ? month.pcCents : month.cents;
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
         const form = new FormData(e.currentTarget);
         start(async () => {
-          const r = await saveTeamGoal(month.key, form);
+          const r = pc ? await saveTeamPcGoal(month.key, form) : await saveTeamGoal(month.key, form);
           toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
         });
       }}
       className="flex items-end gap-2"
     >
       <div className="min-w-0 flex-1">
-        <Label htmlFor={`goal-${month.key}`}>
+        <Label htmlFor={id}>
           {month.label}
           {month.current ? " (this month)" : ""}
         </Label>
         <div className="relative">
           <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 font-mono text-[16px] font-bold text-gray-400">$</span>
-          <Input id={`goal-${month.key}`} name="goal" inputMode="decimal" defaultValue={month.cents ? String(month.cents / 100) : ""} placeholder="150000" className="pl-7 font-mono" />
+          <Input id={id} name={pc ? "pc_goal" : "goal"} inputMode="decimal" defaultValue={cents ? String(cents / 100) : ""} placeholder={pc ? "30000" : "150000"} className="pl-7 font-mono" />
         </div>
       </div>
       <Button type="submit" className="h-11 rounded-xl" disabled={pending}>

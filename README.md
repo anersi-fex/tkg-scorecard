@@ -2,12 +2,12 @@
 
 The team's month, live on the office TV: the leaderboard, team production against the goal, pace, today's sales, and confetti when a sale lands. A sibling of Sales Coach (same Tide look), for The Koka Group.
 
-- Life and P&C: a P&C licensed person (Team page) logs a P&C sale with the Life / P&C switch; every premium counts, the split shows in purple on the bars, the TV ring and under every total.
+- Life and P&C: a P&C licensed person (Team page) logs a P&C sale with the Life / P&C switch. The goal, the pace and the rank count life; P&C has its own goal and board; the agency total adds both up against both goals. P&C shows in dusty blue by default (Settings > P&C color: Dusty blue, Silver, Sage or Ocean).
 - `/wrap`: the team's day, week or month on one iPhone screenshot for the group chat (Day / Week / Month switch; player of the period, best deal, the month's top three carriers, everybody; `?view=` and `?day=` for an earlier period)
-- `/board`: the TV (full screen, refreshes itself, light or dark as set under Settings > TV look, plays the sale sound picked under Settings > Sale sound; F full screen)
-- `/`: this month on a phone or computer, with earlier months
+- `/board`: the TV (full screen, refreshes itself, rotates Life, P&C and Agency total or keeps the screen picked under Settings > TV screens, light or dark as set under Settings > TV look, plays the sale sound picked under Settings > Sale sound; F full screen)
+- `/`: this month on a phone or computer, with earlier months; a Life / P&C / Total switch (`?view=`), life first
 - `/log`: log a sale in four taps (who, how much, which carrier, Log it)
-- `/team`, `/settings`: the people, their goals, the team goal, the board message, the colorway (Crimson by default; Sky, Champion, Emerald)
+- `/team`, `/settings`: the people, their life and P&C goals, the team's life and P&C goals, the board message, the TV screens, the sale sound, the colorway (Crimson by default; Sky, Champion, Emerald)
 
 Setup for the owner is in `SETUP.md`. Working notes for Claude are in `CLAUDE.md` and `HANDOFF.md`.
 

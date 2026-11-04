@@ -69,8 +69,12 @@
   --color-purple-100: var(--t-purple-100);
   --color-purple-800: var(--t-purple-800);
   --color-purple-900: var(--t-purple-900);
-  /* P&C (owner, 2026-11-04): the purple that splits a P&C share from life on bars, rings and dots */
+  /* P&C (owner, 2026-11-04): silver, his pick ("I like silver the best ... make sure there's enough
+     gradient"), the same beside every colorway: dark steel to bright silver on bars and the ring, a
+     steel dot and tag. Kept to bars, dots, rings, the tag and the pills: numbers stay in the text color. */
   --color-pc: var(--t-pc);
+  --color-pc-text: var(--t-pc-text);
+  --color-pc-tint: var(--t-pc-tint);
 
   /* Named Tide tokens for new code: bg-line, text-muted, bg-tint, text-accent, bg-rep … */
   --color-line: var(--t-line);
@@ -155,7 +159,12 @@
   --t-purple-100: #e9dffd;
   --t-purple-800: #5b2db0;
   --t-purple-900: #4a2391;
-  --t-pc: #6d3fd3;
+  /* P&C: Dusty blue by default (owner, 2026-11-04); Silver, Sage and Ocean through data-pc-color (pc-colors blocks below) */
+  --t-pc: #4a6fa3;
+  --t-pc-text: #35588a;
+  --t-pc-tint: #e3ebf6;
+  --t-pc-from: #4e6f9f;
+  --t-pc-to: #7d9fcd;
 
   /* Crimson, the default colorway (owner pick, 2026-10-27): The Koka Group's red, coral on dark. */
   --t-accent: #c42b32;
@@ -246,7 +255,11 @@
     --t-purple-100: #2e1d47;
     --t-purple-800: #d8b4fe;
     --t-purple-900: #e9d5ff;
-    --t-pc: #b794f6;
+    --t-pc: #86a6d6;
+    --t-pc-text: #b3c8ea;
+    --t-pc-tint: #1b2539;
+    --t-pc-from: #6787b9;
+    --t-pc-to: #a5bfe3;
 
     --t-accent: #ff6b57;
     --t-accent-text: #ff8a78;
@@ -332,7 +345,11 @@
   --t-purple-100: #2e1d47;
   --t-purple-800: #d8b4fe;
   --t-purple-900: #e9d5ff;
-  --t-pc: #b794f6;
+  --t-pc: #86a6d6;
+  --t-pc-text: #b3c8ea;
+  --t-pc-tint: #1b2539;
+  --t-pc-from: #6787b9;
+  --t-pc-to: #a5bfe3;
 
   --t-accent: #ff6b57;
   --t-accent-text: #ff8a78;
@@ -523,12 +540,91 @@ html[data-colorway="emerald"][data-theme="dark"] {
   }
 }
 /* colorways:end */
+/* pc-colors:start (written by scripts/gen-colorway-css.mjs; edit PC_COLORS in design/colorways.mjs instead) */
+/* P&C's default color is Dusty blue: its values are the base tokens above. The others apply through data-pc-color on <html>. */
+/* Silver: Steel to silver, the softer gradient. */
+html[data-pc-color="silver"] {
+  --t-pc: #6b7a90;
+  --t-pc-text: #475569;
+  --t-pc-tint: #e5e9ef;
+  --t-pc-from: #6f7f96;
+  --t-pc-to: #a3b0c2;
+}
+html[data-pc-color="silver"][data-theme="dark"] {
+  --t-pc: #a5b4c8;
+  --t-pc-text: #cbd5e1;
+  --t-pc-tint: #1e2533;
+  --t-pc-from: #8193ab;
+  --t-pc-to: #cbd5e1;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-pc-color="silver"]:not([data-theme="light"]) {
+    --t-pc: #a5b4c8;
+    --t-pc-text: #cbd5e1;
+    --t-pc-tint: #1e2533;
+    --t-pc-from: #8193ab;
+    --t-pc-to: #cbd5e1;
+  }
+}
+/* Sage: A light, muted green. */
+html[data-pc-color="sage"] {
+  --t-pc: #4f8a6e;
+  --t-pc-text: #2f6b50;
+  --t-pc-tint: #e1f0e8;
+  --t-pc-from: #4f8a6e;
+  --t-pc-to: #86bb9f;
+}
+html[data-pc-color="sage"][data-theme="dark"] {
+  --t-pc: #8fc1a9;
+  --t-pc-text: #b7dcc9;
+  --t-pc-tint: #1c2c25;
+  --t-pc-from: #6fa38b;
+  --t-pc-to: #a9d3bd;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-pc-color="sage"]:not([data-theme="light"]) {
+    --t-pc: #8fc1a9;
+    --t-pc-text: #b7dcc9;
+    --t-pc-tint: #1c2c25;
+    --t-pc-from: #6fa38b;
+    --t-pc-to: #a9d3bd;
+  }
+}
+/* Ocean: Sea blue with a hint of teal. */
+html[data-pc-color="ocean"] {
+  --t-pc: #2f7f9e;
+  --t-pc-text: #1f6580;
+  --t-pc-tint: #dff0f6;
+  --t-pc-from: #2f7f9e;
+  --t-pc-to: #6cb2cc;
+}
+html[data-pc-color="ocean"][data-theme="dark"] {
+  --t-pc: #5fa9c6;
+  --t-pc-text: #a3d3e4;
+  --t-pc-tint: #13303b;
+  --t-pc-from: #43869f;
+  --t-pc-to: #86c3d8;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-pc-color="ocean"]:not([data-theme="light"]) {
+    --t-pc: #5fa9c6;
+    --t-pc-text: #a3d3e4;
+    --t-pc-tint: #13303b;
+    --t-pc-from: #43869f;
+    --t-pc-to: #86c3d8;
+  }
+}
+/* pc-colors:end */
 
 /* Tide helpers: the gradient (primary buttons, the logo, the goal ring), card and float shadows. */
 @utility bg-tide {
   background-image: var(--t-grad);
 }
 /* The gradient behind white text labels (primary buttons): a touch deeper in dark mode */
+/* A P&C share on a bar: its own gradient, like life's brand gradient */
+@utility bg-pc-grad {
+  background-image: linear-gradient(90deg, var(--t-pc-from), var(--t-pc-to));
+}
 @utility bg-tide-strong {
   background-image: var(--t-grad-strong);
 }
@@ -606,9 +702,24 @@ body {
   animation: board-flash 2.4s ease-out both;
 }
 
+/* The TV's screen pill: a line that runs out with the screen's time (owner, 2026-11-04: three screens that rotate) */
+@keyframes board-timer {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.board-timer {
+  transform-origin: left;
+  animation: board-timer linear both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .board-pop,
-  .board-flash {
+  .board-flash,
+  .board-timer {
     animation: none;
   }
 }

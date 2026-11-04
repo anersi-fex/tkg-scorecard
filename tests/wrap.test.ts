@@ -276,3 +276,24 @@ test("a day with nobody: no player, no best deal, everyone unranked", () => {
   );
   assert.equal(w.carriers.length, 0);
 });
+
+test("the goal is life: P&C fills the totals but never wins a day or moves the month's percent", () => {
+  const sales = [
+    sale("b", "Alex Alekseyev", "2026-10-01", 190_000),
+    sale("a", "Anersi Koka", "2026-10-02", 5_000, { kind: "pc", carrier: "Progressive", product: "Auto" }), // not counted toward the goal
+    sale("a", "Anersi Koka", "2026-10-28", 3_000),
+    sale("a", "Anersi Koka", "2026-10-28", 2_000, { kind: "pc", carrier: "Geico", product: "Auto" }),
+  ];
+  // What was left of the goal in life, $10,000, over Oct 28, 29 and 30
+  assert.equal(neededOnDay(input(sales), "2026-10-28"), 333_400);
+  const w = buildWrap(input(sales), "2026-10-28");
+  assert.equal(w.teamCents, 5_000 * 100);
+  assert.equal(w.lifeCents, 3_000 * 100);
+  // $5,000 written, but only $3,000 of it is life: $334 short of the $3,334 the goal needed
+  assert.deepEqual(w.verdict, { kind: "short", neededCents: 333_400, shortCents: 33_400 });
+  assert.equal(w.month.goalPct, 97); // $193,000 of life against $200,000
+  assert.equal(w.month.lifeCents, 193_000 * 100);
+  assert.equal(w.month.productionCents, 200_000 * 100);
+  // The month view: life against the straight line, not the $200,000 written in all
+  assert.notEqual(buildWrap(input(sales), "2026-10-28", "month").verdict.kind, "goal_hit");
+});

@@ -37,6 +37,7 @@ export interface Sale {
 }
 
 import { DEFAULT_COLORWAY, type ColorwayKey } from "./colorways";
+import { DEFAULT_PC_COLOR, type PcColorKey } from "./pc-colors";
 import { DEFAULT_SOUND, type SoundKey } from "./sounds";
 
 /** The TV's look (Settings > TV look): dark, or light. Browser-safe. */
@@ -46,6 +47,14 @@ export const BOARD_THEMES: BoardTheme[] = ["light", "dark"];
 export const DEFAULT_BOARD_THEME: BoardTheme = "dark";
 export function isBoardTheme(v: unknown): v is BoardTheme {
   return v === "dark" || v === "light";
+}
+
+/** What the office TV shows (owner, 2026-11-04, Settings > TV screens): the three in rotation, or one kept on. */
+export type TvScreens = "rotate" | "life" | "pc" | "total";
+export const TV_SCREENS: TvScreens[] = ["rotate", "life", "pc", "total"];
+export const DEFAULT_TV_SCREENS: TvScreens = "rotate";
+export function isTvScreens(v: unknown): v is TvScreens {
+  return v === "rotate" || v === "life" || v === "pc" || v === "total";
 }
 
 export interface AppSettings {
@@ -59,10 +68,14 @@ export interface AppSettings {
   pcCarriers: PcCarrier[];
   /** The color story on every screen and the TV (Settings > Colorway). */
   colorway: ColorwayKey;
+  /** P&C's own color on every screen and the TV (Settings > P&C color). */
+  pcColor: PcColorKey;
   /** Dark or light on the TV (Settings > TV look); the TV follows it from its poll. */
   boardTheme: BoardTheme;
   /** The sound the TV plays when a sale lands (Settings > Sale sound); "off" for none. */
   sound: SoundKey;
+  /** Rotate the TV's three screens, or keep it on one (Settings > TV screens). */
+  tvScreens: TvScreens;
 }
 
 export interface PcCarrier {
@@ -89,6 +102,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   carriers: DEFAULT_CARRIERS,
   pcCarriers: DEFAULT_PC_CARRIERS,
   colorway: DEFAULT_COLORWAY,
+  pcColor: DEFAULT_PC_COLOR,
   boardTheme: DEFAULT_BOARD_THEME,
   sound: DEFAULT_SOUND,
+  tvScreens: DEFAULT_TV_SCREENS,
 };

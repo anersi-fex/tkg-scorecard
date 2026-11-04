@@ -22,8 +22,8 @@ export default async function SettingsPage() {
       <SettingsForms
         settings={settings}
         months={[
-          { key: month, label: monthLabel(month), cents: goals.teamCents, current: true },
-          { key: next, label: monthLabel(next), cents: nextGoals.teamCents, current: false },
+          { key: month, label: monthLabel(month), cents: goals.teamCents, pcCents: goals.pcTeamCents, current: true },
+          { key: next, label: monthLabel(next), cents: nextGoals.teamCents, pcCents: nextGoals.pcTeamCents, current: false },
         ]}
         shortcutReady={(process.env.LOG_TOKEN?.length ?? 0) >= LOG_TOKEN_MIN}
         shortcutTooShort={!!process.env.LOG_TOKEN && process.env.LOG_TOKEN.length < LOG_TOKEN_MIN}

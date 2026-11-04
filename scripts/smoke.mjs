@@ -33,6 +33,8 @@ const settles = async (page, fn, ms) => {
     return false;
   }
 };
+/** A CSS custom property as the page resolves it on <html> ("#4a6fa3"). */
+const cssVar = (page, name) => page.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim(), name);
 /** The board feed once fn(json) holds (the settings save landed), else the last answer. */
 const feedUntil = async (ctx, fn, tries = 20) => {
   let json = null;
@@ -138,6 +140,11 @@ try {
   await goalInput.fill("150000");
   await o.locator("form:has(input[name=goal])").first().locator("button[type=submit]").click();
   await o.waitForSelector("text=Goal saved. The board shows it now.");
+  // P&C has a goal of its own (owner, 2026-11-04): this month's, next to the life goal
+  await o.locator("input[name=pc_goal]").first().fill("30000");
+  await o.locator("form:has(input[name=pc_goal])").first().locator("button[type=submit]").click();
+  await o.waitForSelector("text=P&C goal saved. The board shows it now.");
+  check((await (await owner.request.get(`${APP}/api/board`)).json()).team.pcGoalCents === 3_000_000, "the P&C goal saves and the feed carries it");
   await o.fill("#message", "Finish strong. Every policy counts.");
   await o.locator("form:has(#message) button[type=submit]").click();
   await o.waitForSelector("text=Saved. The board updates");
@@ -151,12 +158,27 @@ try {
   await o.goto(`${APP}/settings`);
   await o.click("[role=radio]:has-text('Crimson')");
   await o.waitForSelector("text=Saved. The TV changes");
+  // P&C color (owner, 2026-11-04): Dusty blue by default; Silver, Sage and Ocean in Settings
+  const pcColors = "[role=radiogroup][aria-label='P&C color']";
+  check((await o.locator(`${pcColors} [role=radio]`).count()) === 4 && (await o.textContent(`${pcColors} [role=radio][aria-checked=true]`)).includes("Dusty blue"), "Settings offers four P&C colors, Dusty blue to start");
+  check((await o.getAttribute("html", "data-pc-color")) === "dusty" && (await cssVar(o, "--t-pc")) === "#4a6fa3", "every screen draws P&C in dusty blue by default");
+  await o.click(`${pcColors} [role=radio]:has-text('Sage')`);
+  check((await feedUntil(owner, (j) => j.pcColor === "sage")).pcColor === "sage", "the board feed carries the P&C color");
+  await o.goto(`${APP}/`);
+  check((await o.getAttribute("html", "data-pc-color")) === "sage" && (await cssVar(o, "--t-pc")) === "#4f8a6e", "the P&C color setting colors the next screen");
+  await o.goto(`${APP}/settings`);
+  await o.click(`${pcColors} [role=radio]:has-text('Dusty blue')`);
+  check((await feedUntil(owner, (j) => j.pcColor === "dusty")).pcColor === "dusty", "back to dusty blue");
   // TV look: dark by default, Light saved on tap, carried by the feed (the TV checks below)
   const tvLook = "[role=radiogroup][aria-label='TV look']";
   check((await o.getAttribute(`${tvLook} [role=radio][aria-checked=true]`, "aria-checked")) === "true" && (await o.textContent(`${tvLook} [role=radio][aria-checked=true]`)).includes("Dark"), "the TV look starts on Dark");
   check((await o.getAttribute("html", "data-board-theme")) === "dark", "the page carries the TV look for the pre-paint script");
   await o.click(`${tvLook} [role=radio]:has-text('Light')`);
   check((await feedUntil(owner, (j) => j.boardTheme === "light")).boardTheme === "light", "the board feed carries the TV look (light)");
+  // TV screens (2026-11-04): rotate the three screens, or keep the TV on one; Rotate to start
+  const tvScreens = "[role=radiogroup][aria-label='TV screens']";
+  check((await o.locator(`${tvScreens} [role=radio]`).count()) === 4 && (await o.textContent(`${tvScreens} [role=radio][aria-checked=true]`)).includes("Rotate"), "Settings offers the TV screens, Rotate to start");
+  check((await (await owner.request.get(`${APP}/api/board`)).json()).tvScreens === "rotate", "the board feed carries the TV screens setting");
   // Sale sound (2026-11-04): the owner's four sounds plus Off, a play button each, picked on a tap, carried by the feed
   const soundRows = "[role=radiogroup][aria-label='Sale sound']";
   check((await o.locator(`${soundRows} [role=radio]`).count()) === 5 && (await o.locator(`${soundRows} button[aria-label^='Play ']`).count()) === 4, "Settings offers four sale sounds and Off, each sound with a play button");
@@ -236,12 +258,17 @@ try {
   await o.waitForSelector("text=Removed.");
   check(true, "owner removed a sale");
 
-  // P&C alongside life (2026-11-04): the owner marks Moe P&C licensed, a P&C sale splits the numbers in purple
+  // P&C alongside life (2026-11-04): the owner marks Moe P&C licensed and gives him a P&C goal; a P&C sale counts on P&C and in the total, never on Life
   await o.goto(`${APP}/team`);
   await o.click("li:has-text('Moe Karim') button:has-text('Edit')");
   await o.click("li:has-text('Moe Karim') [role=switch]");
   await o.waitForSelector("text=P&C licensed. Log a sale offers");
   check(true, "the owner marks Moe P&C licensed on the Team page");
+  await o.waitForSelector("li:has-text('Moe Karim') input[name=pc_goal]");
+  await o.fill("li:has-text('Moe Karim') input[name=pc_goal]", "5000");
+  await o.click("li:has-text('Moe Karim') form:has(input[name=pc_goal]) button");
+  await o.waitForSelector("text=P&C goal saved.");
+  check(true, "a P&C licensed person gets their own P&C goal on the Team page");
   await o.goto(`${APP}/log`);
   await o.click(`[role=radio]:has-text("Alex Alekseyev")`);
   check((await o.locator("[role=radiogroup][aria-label='What kind']").count()) === 0, "no Life / P&C switch for someone who is not P&C licensed");
@@ -258,8 +285,23 @@ try {
   await o.goto(`${APP}/`);
   await o.waitForSelector("text=Leaderboard");
   const pcHome = await o.textContent("body");
+  // The goal is life (owner, 2026-11-04): This month opens on Life, where Moe's P&C does not count
+  check((await o.locator("nav[aria-label=View] a").count()) === 3 && (await o.textContent("nav[aria-label=View] a[aria-current=true]")).includes("Life"), "This month opens on Life, with Life, P&C and Total to switch");
+  const lifeMoe = await o.locator("li:has-text('Moe Karim')").first().textContent();
+  check(pcHome.includes("Life production") && pcHome.includes("Life leaderboard") && lifeMoe.includes("$6,100") && !lifeMoe.includes("$7,960"), "the Life view counts life only (Moe: $6,100 of life, his P&C left out)");
+  await o.click("nav[aria-label=View] a:has-text('Total')");
+  await o.waitForSelector("text=Agency leaderboard");
+  const totalHome = await o.textContent("body");
   const moeRow = await o.locator("li:has-text('Moe Karim')").first().textContent();
-  check(pcHome.includes("Life $") && pcHome.includes("P&C $1,860") && moeRow.includes("Life $6,100 · 1") && moeRow.includes("P&C $1,860 · 1"), "Home splits life and P&C under the team total and on Moe's row");
+  check(totalHome.includes("Agency total") && totalHome.includes("P&C $1,860") && moeRow.includes("$7,960") && moeRow.includes("Life $6,100 · 1") && moeRow.includes("P&C $1,860 · 1"), "the Total view adds life and P&C up and splits them on Moe's row");
+  await o.click("nav[aria-label=View] a:has-text('P&C')");
+  await o.waitForSelector("text=P&C leaderboard");
+  const pcView = await o.textContent("body");
+  const pcMoe = await o.locator("li:has-text('Moe Karim')").first().textContent();
+  check(pcView.includes("P&C production") && pcView.includes("of $30,000") && pcMoe.includes("$1,860") && pcMoe.includes("37%") && pcMoe.includes("Auto 1") && pcView.includes("By carrier") && pcView.includes("Progressive"), "the P&C view: its goal, Moe on the P&C board against his own P&C goal, his line, the carrier");
+  check(!(await o.textContent("[data-board=pc]")).includes("Alex Alekseyev"), "the P&C board leaves out people who are not P&C licensed");
+  await o.goto(`${APP}/`);
+  await o.waitForSelector("text=Leaderboard");
   // Home and the TV draw the goal-line legend only once a business day of the month has passed: never on a month's first weekend.
   const tick = (await (await owner.request.get(`${APP}/api/board`)).json()).clock.elapsed > 0;
   check(pcHome.includes("goal line today") === tick, tick ? "Home names the goal line tick" : "Home hides the goal line tick before the month's first business day");
@@ -383,6 +425,12 @@ try {
   await p.goto(`${APP}/`);
   await p.waitForSelector("text=Leaderboard");
   await p.screenshot({ path: `${OUT}/09-phone-home-dark.png`, fullPage: true });
+  await p.goto(`${APP}/?view=pc`);
+  await p.waitForSelector("text=P&C leaderboard");
+  await p.screenshot({ path: `${OUT}/09b-phone-home-pc.png`, fullPage: true });
+  await p.goto(`${APP}/?view=total`);
+  await p.waitForSelector("text=Agency leaderboard");
+  await p.screenshot({ path: `${OUT}/09c-phone-home-total.png`, fullPage: true });
   await phone.close();
 
   // --- The TV board ---
@@ -412,6 +460,13 @@ try {
   await pinned.goto(`${APP}/board?theme=light`, { waitUntil: "commit" });
   check((await pinned.getAttribute("html", "data-theme")) === "dark", "?theme=light in the address changes nothing");
   await pinned.close();
+  // P&C color on the TV: dusty blue in dark by default, and a change in Settings arrives with the next poll
+  check((await t.getAttribute("html", "data-pc-color")) === "dusty" && (await cssVar(t, "--t-pc")) === "#86a6d6", "the TV draws P&C in dusty blue by default (dark)");
+  await o.goto(`${APP}/settings`);
+  await o.click(`${pcColors} [role=radio]:has-text('Silver')`);
+  check((await settles(t, () => document.documentElement.getAttribute("data-pc-color") === "silver", 12000)) && (await cssVar(t, "--t-pc")) === "#a5b4c8", "a P&C color change in Settings reaches the TV within a poll");
+  await o.click(`${pcColors} [role=radio]:has-text('Dusty blue')`);
+  check(await settles(t, () => document.documentElement.getAttribute("data-pc-color") === "dusty", 12000), "and back to dusty blue on the TV");
 
   // A Shortcut logs a sale: the board celebrates within a poll
   if (TOKEN) {
@@ -441,22 +496,68 @@ try {
     check((await t.getAttribute("[role=status]", "data-sound")) === "air-horn", "the celebration carries the chosen sale sound (air horn)");
     check(!(await t.textContent("footer")).includes("Click or press a key once for sound"), "a sale sound that plays leaves no sound hint on the TV");
     check(celebrate.includes("Maira Santos") && celebrate.includes("$2,750") && celebrate.includes("Americo"), "the board celebrates the new sale with the name, the amount and the carrier");
+    // Two sales came in (Maira's, then Moe's P&C): 9 s each on screen
+    await t.waitForSelector("[role=status]", { state: "detached", timeout: 40000 });
     const tvText = await t.textContent("body");
-    check(tvText.includes("goal line today") === tick && tvText.includes("Life $") && tvText.includes("P&C $"), "the TV shows the goal line legend (once a business day has passed) and the P&C split");
+    check((await t.getAttribute("main", "data-screen")) === "life" && tvText.includes("Life leaderboard") && tvText.includes("Life production") && tvText.includes("goal line today") === tick, "the TV opens on the life screen, with the goal line legend once a business day has passed");
+    // Settings > TV screens: keep the TV on the agency total, then on P&C, then back to rotating
+    await o.goto(`${APP}/settings`);
+    await o.click("[role=radiogroup][aria-label='TV screens'] [role=radio]:has-text('Agency total only')");
+    check(await settles(t, () => document.querySelector("main")?.dataset.screen === "total", 12000), "Agency total only in Settings puts the TV on the agency total within a poll");
+    const totalText = await t.textContent("body");
+    check(totalText.includes("Agency leaderboard") && totalText.includes("Life $") && totalText.includes("P&C $") && totalText.includes("of $180,000 · life + P&C goals"), "the agency total screen adds life and P&C up against both goals and splits them");
+    check((await t.locator("[data-pill]").count()) === 1, "a kept screen shows only its own pill");
+    await t.screenshot({ path: `${OUT}/10c-board-total.png` });
+    await o.click("[role=radiogroup][aria-label='TV screens'] [role=radio]:has-text('P&C only')");
+    check(await settles(t, () => document.querySelector("main")?.dataset.screen === "pc", 12000), "P&C only puts the TV on the P&C screen within a poll");
+    // innerText: what the screen shows (the page's own data script carries every name)
+    const pcText = await t.innerText("main");
+    check(pcText.includes("P&C leaderboard") && pcText.includes("Moe Karim") && pcText.includes("By carrier") && pcText.includes("Geico") && pcText.includes("By line") && pcText.includes("Umbrella") && !pcText.includes("Alex Alekseyev"), "the P&C screen: the P&C team, by carrier, by line, no one without P&C");
+    const pcLower = pcText.toLowerCase(); // innerText follows the eyebrows' capitals
+    check(pcLower.includes("p&c production") && pcLower.includes("of $30,000") && pcLower.includes("needed a day") && pcLower.includes("the month so far") && pcLower.includes("latest p&c sales"), "the P&C screen's right side is like the others: its goal, the tiles, the chart, the latest sales");
+    await t.screenshot({ path: `${OUT}/10b-board-pc.png` });
+    await o.click("[role=radiogroup][aria-label='TV screens'] [role=radio]:has-text('Rotate')");
+    check(await settles(t, () => document.querySelector("main")?.dataset.screen === "life" && document.querySelectorAll("[data-pill]").length === 3, 12000), "Rotate brings the TV back to life with all three pills");
   } else {
     console.log("skip Shortcut endpoint (no LOG_TOKEN)");
   }
   await tv.close();
 
+  // The rotation (2026-11-04): life for a minute, then P&C and the agency total for 15 s each
+  {
+    const rc = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+    await rc.addCookies(await owner.cookies());
+    const r = await rc.newPage();
+    await r.clock.install();
+    await r.goto(`${APP}/board`);
+    await r.waitForSelector("main[data-screen]");
+    const screenNow = () => r.getAttribute("main", "data-screen");
+    check((await screenNow()) === "life", "the rotation starts on life");
+    await r.clock.runFor(59_000);
+    check((await screenNow()) === "life", "life stays the whole minute");
+    await r.clock.runFor(2_000);
+    check((await screenNow()) === "pc", "then P&C");
+    await r.clock.runFor(15_500);
+    check((await screenNow()) === "total", "then the agency total");
+    await r.clock.runFor(15_500);
+    check((await screenNow()) === "life", "then life again");
+    await rc.close();
+  }
+
   // The sound check (2026-11-04): a browser that holds sound back until a click says so on the TV
   // before any sale (headless Chromium allows sound, so this one is launched with the desktop rule).
   const gated = await chromium.launch({ args: ["--autoplay-policy=document-user-activation-required"] });
   try {
-    const g = await (await gated.newContext({ viewport: { width: 1920, height: 1080 } })).newPage();
-    await signIn(g, TEAM);
+    // The session cookie, no sign-in click: like the TV after it reloads itself, nobody has touched the page
+    const gc = await gated.newContext({ viewport: { width: 1920, height: 1080 } });
+    await gc.addCookies(await owner.cookies());
+    const g = await gc.newPage();
     await g.goto(`${APP}/board`);
-    const hint = () => document.querySelector("footer")?.textContent?.includes("Click or press a key once for sound");
-    check(await settles(g, hint, 8000), "a browser that holds sound back gets the sound hint on the TV before any sale");
+    // Wait without touching the page: Playwright's own waits run with a user gesture, which would
+    // count as the click the browser is waiting for. The board asks the browser at load.
+    await g.waitForTimeout(2500);
+    const hinted = (await g.innerText("footer")).includes("Click or press a key once for sound");
+    check(hinted, "a browser that holds sound back gets the sound hint on the TV before any sale");
     await g.keyboard.press("Shift");
     check(await settles(g, () => !document.querySelector("footer")?.textContent?.includes("Click or press a key once for sound"), 3000), "a key on the TV clears the sound hint");
   } finally {

@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
-import { addAgent, deleteSale, getSale, insertSale, listAgents, saveSettings, setAgentGoal, setTeamGoal, updateAgent, updateSale, getSettings } from "@/lib/data";
+import { addAgent, deleteSale, getSale, insertSale, listAgents, saveSettings, setAgentGoal, setAgentPcGoal, setTeamGoal, setTeamPcGoal, updateAgent, updateSale, getSettings } from "@/lib/data";
 import { isDateKey, isMonthKey, todayInDetroit, addDays } from "@/lib/month";
 import { parseDollars } from "@/lib/money";
-import { DEFAULT_CARRIERS, DEFAULT_PC_CARRIERS, DEFAULT_PRODUCTS, isBoardTheme, type PcCarrier } from "@/lib/types";
+import { DEFAULT_CARRIERS, DEFAULT_PC_CARRIERS, DEFAULT_PRODUCTS, isBoardTheme, isTvScreens, type PcCarrier } from "@/lib/types";
 import { isColorwayKey } from "@/lib/colorways";
+import { isPcColorKey } from "@/lib/pc-colors";
 import { isSoundKey } from "@/lib/sounds";
 
 export type ActionResult = { ok: true; message?: string; id?: string } | { ok: false; error: string };
@@ -242,6 +243,38 @@ export async function savePersonGoal(month: string, agentId: string, form: FormD
   }
 }
 
+/** Settings > P&C goal: the team's P&C goal for a month (the P&C screen measures it). */
+export async function saveTeamPcGoal(month: string, form: FormData): Promise<ActionResult> {
+  try {
+    await requireRole("owner");
+    if (!Month.safeParse(month).success) return { ok: false, error: "That month isn't right." };
+    const raw = String(form.get("pc_goal") ?? "").trim();
+    const cents = raw === "" ? 0 : parseDollars(raw);
+    if (cents == null) return { ok: false, error: "The goal needs to be an amount, like 30000." };
+    await setTeamPcGoal(month, cents);
+    refresh();
+    return { ok: true, message: cents ? "P&C goal saved. The board shows it now." : "P&C goal cleared." };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}
+
+/** Team > Edit: a P&C licensed person's own P&C goal for the month. */
+export async function savePersonPcGoal(month: string, agentId: string, form: FormData): Promise<ActionResult> {
+  try {
+    await requireRole("owner");
+    if (!Month.safeParse(month).success || !z.string().uuid().safeParse(agentId).success) return { ok: false, error: "That person or month isn't right." };
+    const raw = String(form.get("pc_goal") ?? "").trim();
+    const cents = raw === "" ? 0 : parseDollars(raw);
+    if (cents == null) return { ok: false, error: "The goal needs to be an amount, like 8000." };
+    await setAgentPcGoal(month, agentId, cents);
+    refresh();
+    return { ok: true, message: cents ? "P&C goal saved." : "P&C goal cleared." };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}
+
 /** The colorway on every screen and the TV (Settings > Colorway). */
 export async function saveColorway(key: string): Promise<ActionResult> {
   try {
@@ -256,6 +289,20 @@ export async function saveColorway(key: string): Promise<ActionResult> {
   }
 }
 
+/** Settings > P&C color: P&C's own color on every screen; the TV follows it on its next poll. */
+export async function savePcColor(key: string): Promise<ActionResult> {
+  try {
+    await requireRole("owner");
+    if (!isPcColorKey(key)) return { ok: false, error: "That P&C color isn't one of the choices." };
+    const current = await getSettings();
+    await saveSettings({ ...current, pcColor: key });
+    refresh();
+    return { ok: true, message: "Saved. The TV changes within a few seconds." };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}
+
 /** Settings > TV look: dark or light on the TV, which follows it on its next poll. */
 export async function saveBoardTheme(theme: string): Promise<ActionResult> {
   try {
@@ -263,6 +310,20 @@ export async function saveBoardTheme(theme: string): Promise<ActionResult> {
     if (!isBoardTheme(theme)) return { ok: false, error: "The TV look is Dark or Light." };
     const current = await getSettings();
     await saveSettings({ ...current, boardTheme: theme });
+    refresh();
+    return { ok: true, message: "Saved. The TV changes within a few seconds." };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}
+
+/** Settings > TV screens: rotate the three screens, or keep the TV on one; the TV follows on its next poll. */
+export async function saveTvScreens(choice: string): Promise<ActionResult> {
+  try {
+    await requireRole("owner");
+    if (!isTvScreens(choice)) return { ok: false, error: "That isn't one of the TV screens." };
+    const current = await getSettings();
+    await saveSettings({ ...current, tvScreens: choice });
     refresh();
     return { ok: true, message: "Saved. The TV changes within a few seconds." };
   } catch (err) {
