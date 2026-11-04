@@ -173,7 +173,7 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
   const maxPremium = Math.max(1, ...leaders.map((a) => a.premiumCents));
   const toneById = Object.fromEntries(agents.map((a) => [a.id, a.tone]));
   // The goal line today, the same tick on every bar: how far through its business days the month is.
-  const goalLine = month.position === "current" && month.elapsed > 0 ? Math.round(month.progress * 100) : null;
+  const goalLine = month.position === "current" && month.elapsed > 0 && leaders.some((a) => a.goalCents > 0) ? Math.round(month.progress * 100) : null;
   const split = team.pcCents > 0;
 
   return (
@@ -302,7 +302,8 @@ function LeaderRow({ line, max, count, today, goalLine }: { line: AgentLine; max
   const first = line.rank === 1 && line.premiumCents > 0;
   const medal = line.premiumCents > 0 ? (line.rank === 1 ? "text-gold" : line.rank === 2 ? "text-silver" : line.rank === 3 ? "text-bronze" : "text-gray-500") : "text-gray-500";
   // Fewer people, taller rows: the type grows a little when there is room.
-  const scale = count <= 5 ? 1.15 : count <= 7 ? 1 : 0.86;
+  // Three lines a row now: nine or more people need the smaller step too.
+  const scale = count <= 5 ? 1.15 : count <= 7 ? 1 : count <= 8 ? 0.86 : 0.7;
   return (
     <li className={cn("flex min-h-0 flex-1 items-center gap-[0.9em] rounded-[1em] px-[0.8em]", first && "bg-tint/60")} style={{ fontSize: `${scale}em` }}>
       <span className={cn("w-[1.4em] shrink-0 text-center font-mono text-[1.4em] font-bold", medal)}>{first ? <Crown /> : line.rank}</span>
@@ -317,9 +318,9 @@ function LeaderRow({ line, max, count, today, goalLine }: { line: AgentLine; max
         </div>
         <div className="mt-[0.45em] flex items-center gap-[0.8em]">
           <GoalBar width={width} lifeShare={lifeShare} goalLine={hasGoal ? goalLine : null} className="h-[0.55em]" tickClassName="-top-[0.3em] h-[1.15em] w-[0.12em]" />
-          {hasGoal && <p className={cn("w-[3em] shrink-0 text-right font-mono text-[0.95em] font-bold", done ? "text-up" : "text-gray-700")}>{line.goalPct}%</p>}
+          {hasGoal && <p className={cn("w-[3em] shrink-0 text-right font-mono text-[0.95em] leading-none font-bold", done ? "text-up" : "text-gray-700")}>{line.goalPct}%</p>}
         </div>
-        <p className="mt-[0.3em] truncate text-[0.85em] font-semibold whitespace-nowrap text-gray-500">
+        <p className="mt-[0.3em] truncate text-[0.85em] leading-none font-semibold whitespace-nowrap text-gray-500">
           {line.pcCents > 0 ? (
             <KindSplit dot="h-[0.45em] w-[0.45em]" life={<span className="font-mono">{formatDollars(line.lifeCents)} · {line.lifePolicies}</span>} pc={<span className="font-mono">{formatDollars(line.pcCents)} · {line.pcPolicies}</span>} />
           ) : (

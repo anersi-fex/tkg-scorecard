@@ -91,7 +91,7 @@ export function LogForm({
   const premiumRef = useRef<HTMLInputElement | null>(null);
 
   const cents = parseDollars(premium);
-  const ready = !!who && cents != null && cents > 0 && !!carrier;
+  const ready = !!who && cents != null && cents > 0 && !!carrier && carrierChoices.includes(carrier);
 
   const submit = () => {
     if (!who) return setError("Tap who sold it.");
@@ -189,8 +189,9 @@ export function LogForm({
                 aria-checked={on}
                 onClick={() => {
                   setWho(a.id);
-                  // Someone who is not P&C licensed can only be on life: drop a P&C carrier or line picked before.
-                  if (!a.pcLicensed && kind === "pc") {
+                  // The kind this person lands on; a change in either direction drops a carrier or line from the other list.
+                  const nextKind: SaleKind = a.pcLicensed ? (kindPicked ?? presetKind ?? "life") : "life";
+                  if (nextKind !== kind) {
                     setCarrier(null);
                     setProduct(null);
                   }
