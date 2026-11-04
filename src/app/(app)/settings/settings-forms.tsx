@@ -283,12 +283,16 @@ function BoardForm({ settings }: { settings: AppSettings }) {
         <Input id="message" name="message" defaultValue={settings.message} maxLength={120} placeholder="Every policy counts. Finish strong." />
       </div>
       <div>
-        <Label htmlFor="carriers">Carriers on Log a sale (one per line; a sale always names one)</Label>
+        <Label htmlFor="carriers">Life carriers on Log a sale (one per line; a sale always names one)</Label>
         <Textarea id="carriers" name="carriers" defaultValue={settings.carriers.join("\n")} rows={7} className="font-medium" />
       </div>
       <div>
-        <Label htmlFor="products">Product chips on Log a sale (one per line)</Label>
+        <Label htmlFor="products">Life product chips on Log a sale (one per line)</Label>
         <Textarea id="products" name="products" defaultValue={settings.products.join("\n")} rows={5} className="font-medium" />
+      </div>
+      <div>
+        <Label htmlFor="pc_carriers">P&amp;C carriers and the lines each one writes (one per line, like &quot;Progressive: Auto, Renters, ATV&quot;)</Label>
+        <Textarea id="pc_carriers" name="pc_carriers" defaultValue={settings.pcCarriers.map((c) => (c.lines.length ? `${c.name}: ${c.lines.join(", ")}` : c.name)).join("\n")} rows={6} className="font-medium" />
       </div>
       <Button type="submit" className="h-11 rounded-xl" disabled={pending}>
         {pending ? "Saving..." : "Save"}

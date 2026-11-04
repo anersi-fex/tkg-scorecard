@@ -69,6 +69,8 @@
   --color-purple-100: var(--t-purple-100);
   --color-purple-800: var(--t-purple-800);
   --color-purple-900: var(--t-purple-900);
+  /* P&C (owner, 2026-11-04): the purple that splits a P&C share from life on bars, rings and dots */
+  --color-pc: var(--t-pc);
 
   /* Named Tide tokens for new code: bg-line, text-muted, bg-tint, text-accent, bg-rep … */
   --color-line: var(--t-line);
@@ -153,6 +155,7 @@
   --t-purple-100: #e9dffd;
   --t-purple-800: #5b2db0;
   --t-purple-900: #4a2391;
+  --t-pc: #6d3fd3;
 
   /* Crimson, the default colorway (owner pick, 2026-10-27): The Koka Group's red, coral on dark. */
   --t-accent: #c42b32;
@@ -243,6 +246,7 @@
     --t-purple-100: #2e1d47;
     --t-purple-800: #d8b4fe;
     --t-purple-900: #e9d5ff;
+    --t-pc: #b794f6;
 
     --t-accent: #ff6b57;
     --t-accent-text: #ff8a78;
@@ -328,6 +332,7 @@
   --t-purple-100: #2e1d47;
   --t-purple-800: #d8b4fe;
   --t-purple-900: #e9d5ff;
+  --t-pc: #b794f6;
 
   --t-accent: #ff6b57;
   --t-accent-text: #ff8a78;

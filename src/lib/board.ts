@@ -3,7 +3,7 @@ import { teamTones } from "@/components/avatar";
 import { goalsForMonth, listAgents, recentSales, salesForMonth, getSettings, type SaleWithAgent } from "./data";
 import { datesOfMonth, monthClock, pace, todayInDetroit, type MonthClock, type Pace } from "./month";
 import { percentOf } from "./money";
-import { DEFAULT_BOARD_THEME, type Agent, type BoardTheme } from "./types";
+import { DEFAULT_BOARD_THEME, type Agent, type BoardTheme, type SaleKind } from "./types";
 import { DEFAULT_COLORWAY, type ColorwayKey } from "./colorways";
 
 /**
@@ -17,8 +17,16 @@ export interface AgentLine {
   /** The avatar tint class (teamTones). */
   tone: string;
   rank: number;
+  /** Every premium, life and P&C together (owner, 2026-11-04: "scores combined"). */
   premiumCents: number;
   policies: number;
+  /** The split of `premiumCents` and `policies` (life + pc = the whole). */
+  lifeCents: number;
+  lifePolicies: number;
+  pcCents: number;
+  pcPolicies: number;
+  /** P&C licensed: Log a sale offers the switch; the rows show the split. */
+  pcLicensed: boolean;
   todayCents: number;
   todayPolicies: number;
   goalCents: number;
@@ -38,6 +46,7 @@ export interface FeedSale {
   policies: number;
   product: string | null;
   carrier: string | null;
+  kind: SaleKind;
   note: string | null;
   soldOn: string;
   createdAt: string;
@@ -59,12 +68,20 @@ export interface MonthSnapshot {
   build: string;
   clock: MonthClock;
   team: {
+    /** Every premium, life and P&C together; the goal and the pace count all of it. */
     productionCents: number;
     goalCents: number;
     goalPct: number;
     policies: number;
+    /** The split of production and policies. */
+    lifeCents: number;
+    lifePolicies: number;
+    pcCents: number;
+    pcPolicies: number;
     todayCents: number;
     todayPolicies: number;
+    todayPcCents: number;
+    todayPcPolicies: number;
     pace: Pace;
     /** The day with the most production so far. */
     bestDay: { date: string; cents: number } | null;
@@ -94,6 +111,7 @@ function toFeed(s: SaleWithAgent): FeedSale {
     policies: s.policies,
     product: s.product,
     carrier: s.carrier,
+    kind: s.kind,
     note: s.note,
     soldOn: s.sold_on,
     createdAt: s.created_at,
@@ -137,9 +155,13 @@ export function buildSnapshot(input: {
 
   const productionCents = sales.reduce((n, s) => n + s.premium_cents, 0);
   const policies = sales.reduce((n, s) => n + s.policies, 0);
+  const pcSales = sales.filter((s) => s.kind === "pc");
+  const pcCents = pcSales.reduce((n, s) => n + s.premium_cents, 0);
+  const pcPolicies = pcSales.reduce((n, s) => n + s.policies, 0);
   const todaySales = sales.filter((s) => s.sold_on === today);
   const todayCents = todaySales.reduce((n, s) => n + s.premium_cents, 0);
   const todayPolicies = todaySales.reduce((n, s) => n + s.policies, 0);
+  const todayPc = todaySales.filter((s) => s.kind === "pc");
 
   const byDay = new Map<string, { cents: number; policies: number }>();
   for (const s of sales) {
@@ -158,11 +180,15 @@ export function buildSnapshot(input: {
   let bestDay: MonthSnapshot["team"]["bestDay"] = null;
   for (const [date, d] of byDay) if (d.cents > 0 && (!bestDay || d.cents > bestDay.cents)) bestDay = { date, cents: d.cents };
 
-  const perAgent = new Map<string, { premium: number; policies: number; todayCents: number; todayPolicies: number; last: string | null }>();
+  const perAgent = new Map<string, { premium: number; policies: number; pcCents: number; pcPolicies: number; todayCents: number; todayPolicies: number; last: string | null }>();
   for (const s of sales) {
-    const a = perAgent.get(s.agent_id) ?? { premium: 0, policies: 0, todayCents: 0, todayPolicies: 0, last: null };
+    const a = perAgent.get(s.agent_id) ?? { premium: 0, policies: 0, pcCents: 0, pcPolicies: 0, todayCents: 0, todayPolicies: 0, last: null };
     a.premium += s.premium_cents;
     a.policies += s.policies;
+    if (s.kind === "pc") {
+      a.pcCents += s.premium_cents;
+      a.pcPolicies += s.policies;
+    }
     if (s.sold_on === today) {
       a.todayCents += s.premium_cents;
       a.todayPolicies += s.policies;
@@ -174,7 +200,7 @@ export function buildSnapshot(input: {
   const lines = agents
     .filter((a) => a.active || perAgent.has(a.id))
     .map((a) => {
-      const p = perAgent.get(a.id) ?? { premium: 0, policies: 0, todayCents: 0, todayPolicies: 0, last: null };
+      const p = perAgent.get(a.id) ?? { premium: 0, policies: 0, pcCents: 0, pcPolicies: 0, todayCents: 0, todayPolicies: 0, last: null };
       const goalCents = goals.byAgent[a.id] ?? 0;
       return {
         id: a.id,
@@ -182,6 +208,11 @@ export function buildSnapshot(input: {
         tone: tones[a.id],
         premiumCents: p.premium,
         policies: p.policies,
+        lifeCents: p.premium - p.pcCents,
+        lifePolicies: p.policies - p.pcPolicies,
+        pcCents: p.pcCents,
+        pcPolicies: p.pcPolicies,
+        pcLicensed: a.pc_licensed,
         todayCents: p.todayCents,
         todayPolicies: p.todayPolicies,
         goalCents,
@@ -201,8 +232,14 @@ export function buildSnapshot(input: {
       goalCents: goals.teamCents,
       goalPct: percentOf(productionCents, goals.teamCents),
       policies,
+      lifeCents: productionCents - pcCents,
+      lifePolicies: policies - pcPolicies,
+      pcCents,
+      pcPolicies,
       todayCents,
       todayPolicies,
+      todayPcCents: todayPc.reduce((n, s) => n + s.premium_cents, 0),
+      todayPcPolicies: todayPc.reduce((n, s) => n + s.policies, 0),
       pace: pace(productionCents, goals.teamCents, clock),
       bestDay,
       averageCents: policies > 0 ? Math.round(productionCents / policies) : 0,

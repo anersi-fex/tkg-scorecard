@@ -7,6 +7,8 @@ import { getSettings } from "@/lib/data";
 import { addMonths, dayLabel, daysLeftLabel, isMonthKey, monthKeyOf, monthLabel, todayInDetroit } from "@/lib/month";
 import { formatDollars, formatMoney } from "@/lib/money";
 import { Avatar } from "@/components/avatar";
+import { GoalBar } from "@/components/goal-bar";
+import { KindDot, KindSplit, PcTag } from "@/components/kind";
 import { MonthChart } from "@/components/month-chart";
 import { Eyebrow, ListCard, ListTitle, ROW_INSET } from "@/components/tide";
 import { Badge, Card, Notice, cn, formatClock, formatDate } from "@/components/ui";
@@ -57,9 +59,14 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   }
   const line = paceLine(s);
   const monthSales = s.sales;
-  const carriers = (await getSettings()).carriers;
+  const { carriers, pcCarriers } = await getSettings();
   const top = s.agents[0];
   const maxPremium = Math.max(1, ...s.agents.map((a) => a.premiumCents));
+  // The goal line today: how far through its business days the month is (the same tick on every bar).
+  const goalLine = s.clock.position === "current" && s.clock.elapsed > 0 ? Math.round(s.clock.progress * 100) : null;
+  const split = s.team.pcCents > 0;
+  const teamWidth = s.team.goalCents > 0 ? Math.min(100, s.team.goalPct) : 0;
+  const teamLife = s.team.productionCents > 0 ? (teamWidth * s.team.lifeCents) / s.team.productionCents : 0;
 
   return (
     <>
@@ -76,25 +83,56 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
             </span>
           )}
         </div>
-        <div className="mt-4 h-3 overflow-hidden rounded-full bg-track" role="progressbar" aria-valuenow={Math.min(100, s.team.goalPct)} aria-valuemin={0} aria-valuemax={100}>
-          <div className="h-full rounded-full bg-tide transition-[width] duration-700" style={{ width: `${Math.min(100, s.team.goalPct)}%` }} />
+        {/* Life in the brand gradient, the P&C share in purple, a tick at the goal line today */}
+        <div className="mt-4 flex" role="progressbar" aria-valuenow={Math.min(100, s.team.goalPct)} aria-valuemin={0} aria-valuemax={100}>
+          <GoalBar width={teamWidth} lifeShare={teamLife} goalLine={s.team.goalCents > 0 ? goalLine : null} className="h-3" tickClassName="-top-1 h-5 w-0.5" />
         </div>
+        {split && (
+          <p className="mt-2.5 text-[13px] font-semibold text-gray-600">
+            <KindSplit dot="h-2 w-2" life={<span className="font-mono text-gray-900">{formatDollars(s.team.lifeCents)}</span>} pc={<span className="font-mono text-gray-900">{formatDollars(s.team.pcCents)}</span>} />
+          </p>
+        )}
         <p className={cn("mt-3 text-[14px] leading-snug font-semibold", line.tone === "green" ? "text-green-700" : line.tone === "amber" ? "text-amber-800" : line.tone === "red" ? "text-red-700" : line.tone === "blue" ? "text-accent-text" : "text-gray-600")}>
           {line.text}
         </p>
         <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-          <Stat label="Policies" value={String(s.team.policies)} />
-          <Stat label="Avg premium" value={s.team.averageCents ? formatDollars(s.team.averageCents) : "–"} />
-          <Stat label={s.clock.position === "current" ? "Today" : "Best day"} value={s.clock.position === "current" ? formatDollars(s.team.todayCents) : s.team.bestDay ? formatDollars(s.team.bestDay.cents) : "–"} sub={s.clock.position !== "current" && s.team.bestDay ? dayLabel(s.team.bestDay.date) : undefined} />
+          <Stat label="Policies" value={String(s.team.policies)} sub={split ? `${s.team.lifePolicies} life · ${s.team.pcPolicies} P&C` : undefined} />
+          <Stat label="Avg premium" value={s.team.averageCents ? formatDollars(s.team.averageCents) : "–"} sub={split ? "per policy" : undefined} />
+          <Stat
+            label={s.clock.position === "current" ? "Today" : "Best day"}
+            value={s.clock.position === "current" ? formatDollars(s.team.todayCents) : s.team.bestDay ? formatDollars(s.team.bestDay.cents) : "–"}
+            sub={s.clock.position !== "current" ? (s.team.bestDay ? dayLabel(s.team.bestDay.date) : undefined) : split ? `${s.team.todayPolicies} ${s.team.todayPolicies === 1 ? "policy" : "policies"}${s.team.todayPcPolicies > 0 ? ` · ${s.team.todayPcPolicies} P&C` : ""}` : undefined}
+          />
         </div>
         <div className="mt-4">
           <MonthChart daily={s.daily} goalCents={s.team.goalCents} today={today} height={150} className="h-[150px] w-full" />
         </div>
       </Card>
 
-      {/* Leaderboard */}
+      {/* Leaderboard: one track per person (the share of their own goal, or of the leader's premium
+          without one), life then P&C in two colors, a gray tick at the goal line today (owner, 2026-11-04). */}
       <div className="mt-6">
-        <ListTitle count={s.agents.length}>Leaderboard</ListTitle>
+        <div className="flex items-end justify-between gap-3">
+          <ListTitle count={s.agents.length}>Leaderboard</ListTitle>
+          {(goalLine !== null || split) && (
+            <p className="flex shrink-0 items-center gap-3 pr-1 pb-0.5 text-[11px] font-semibold text-gray-500">
+              {split && (
+                <span className="flex items-center gap-1.5">
+                  <KindDot kind="life" />
+                  life
+                  <KindDot kind="pc" className="ml-1 h-1.5 w-1.5" />
+                  P&C
+                </span>
+              )}
+              {goalLine !== null && (
+                <span className="flex items-center gap-1.5">
+                  <span aria-hidden className="inline-block h-3 w-0.5 rounded-[1px] bg-gray-500" />
+                  goal line today
+                </span>
+              )}
+            </p>
+          )}
+        </div>
         <ListCard className="mt-2">
           {s.agents.length === 0 && (
             <li className="px-4 py-5 text-[14px] text-gray-600">
@@ -108,31 +146,43 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
               )}
             </li>
           )}
-          {s.agents.map((a) => (
-            <li key={a.id} className={cn("flex items-center gap-3 px-4 py-3", ROW_INSET.avatar)}>
-              <span className={cn("w-5 shrink-0 text-center font-mono text-[15px] font-bold", a.rank === 1 && a.premiumCents > 0 ? "text-amber-800" : "text-gray-500")}>{a.rank}</span>
-              <Avatar name={a.name} tone={a.tone} size={40} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-3">
-                  <p className="truncate text-[15px] font-bold text-gray-900">
-                    {a.name}
-                    {!a.active && <span className="ml-1.5 text-[12px] font-medium text-gray-500">(off the board)</span>}
-                  </p>
-                  <p className="shrink-0 font-mono text-[16px] font-bold text-gray-900">{formatDollars(a.premiumCents)}</p>
-                </div>
-                <div className="mt-1.5 flex items-center gap-2">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-track">
-                    <div className={cn("h-full rounded-full", a.rank === 1 && a.premiumCents > 0 ? "bg-tide" : "bg-bar")} style={{ width: `${a.goalCents > 0 ? Math.min(100, a.goalPct) : Math.round((a.premiumCents / maxPremium) * 100)}%` }} />
+          {s.agents.map((a) => {
+            const hasGoal = a.goalCents > 0;
+            const width = hasGoal ? Math.min(100, a.goalPct) : Math.round((a.premiumCents / maxPremium) * 100);
+            const lifeShare = a.premiumCents > 0 ? (width * a.lifeCents) / a.premiumCents : 0;
+            const done = hasGoal && a.goalPct >= 100;
+            const today = a.todayCents > 0 && s.clock.position === "current";
+            return (
+              <li key={a.id} className={cn("flex items-center gap-3 px-4 py-3", ROW_INSET.avatar)}>
+                <span className={cn("w-5 shrink-0 text-center font-mono text-[15px] font-bold", a.rank === 1 && a.premiumCents > 0 ? "text-amber-800" : "text-gray-500")}>{a.rank}</span>
+                <Avatar name={a.name} tone={a.tone} size={40} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="min-w-0 truncate pt-px text-[15px] leading-tight font-bold text-gray-900">
+                      {a.name}
+                      {!a.active && <span className="ml-1.5 text-[12px] font-medium text-gray-500">(off the board)</span>}
+                    </p>
+                    <div className="shrink-0 text-right">
+                      <p className="font-mono text-[16px] leading-none font-bold text-gray-900">{formatDollars(a.premiumCents)}</p>
+                      {today && <p className="mt-1 text-[11px] leading-none font-bold text-green-700">+{formatDollars(a.todayCents)} today</p>}
+                    </div>
                   </div>
-                  <span className="shrink-0 text-[12px] font-semibold text-gray-500">
-                    {a.policies} {a.policies === 1 ? "policy" : "policies"}
-                    {a.goalCents > 0 && ` · ${a.goalPct}% of goal`}
-                    {a.todayCents > 0 && s.clock.position === "current" && <span className="text-green-700"> · +{formatDollars(a.todayCents)} today</span>}
-                  </span>
+                  <div className="mt-2 flex items-center gap-2.5">
+                    <GoalBar width={width} lifeShare={lifeShare} goalLine={hasGoal ? goalLine : null} />
+                    {hasGoal && <span className={cn("w-10 shrink-0 text-right font-mono text-[12px] font-bold", done ? "text-green-700" : "text-gray-700")}>{a.goalPct}%</span>}
+                  </div>
+                  <p className="mt-1.5 truncate text-[12px] font-semibold text-gray-500">
+                    {a.pcCents > 0 ? (
+                      <KindSplit life={<span className="font-mono">{formatDollars(a.lifeCents)} · {a.lifePolicies}</span>} pc={<span className="font-mono">{formatDollars(a.pcCents)} · {a.pcPolicies}</span>} />
+                    ) : (
+                      `${a.policies} ${a.policies === 1 ? "policy" : "policies"}`
+                    )}
+                    {!hasGoal && " · no goal"}
+                  </p>
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ListCard>
       </div>
 
@@ -145,7 +195,10 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
             <li key={r.id} className={cn("flex items-center gap-3 px-4 py-3", ROW_INSET.avatar)}>
               <Avatar name={r.agentName} tone={s.agents.find((a) => a.id === r.agentId)?.tone} size={40} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-bold text-gray-900">{r.agentName}</p>
+                <p className="truncate text-[15px] font-bold text-gray-900">
+                  {r.agentName}
+                  {r.kind === "pc" && <PcTag className="ml-1.5 align-middle" />}
+                </p>
                 <p className="truncate text-[13px] font-medium text-gray-500">
                   {[r.carrier, r.product, r.policies > 1 ? `${r.policies} policies` : null, r.soldOn === today ? `Today, ${formatClock(r.createdAt)}` : formatDate(r.soldOn, { year: false })]
                     .filter(Boolean)
@@ -153,7 +206,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
                 </p>
               </div>
               <p className="shrink-0 font-mono text-[16px] font-bold text-gray-900">{formatMoney(r.premiumCents)}</p>
-              <SaleRowMenu sale={r} role={role} agents={s.agents.map((a) => ({ id: a.id, name: a.name }))} carriers={carriers} />
+              <SaleRowMenu sale={r} role={role} agents={s.agents.map((a) => ({ id: a.id, name: a.name }))} carriers={carriers} pcCarriers={pcCarriers.map((c) => c.name)} />
             </li>
           ))}
         </ListCard>

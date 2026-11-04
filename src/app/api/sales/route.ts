@@ -13,7 +13,9 @@ export const dynamic = "force-dynamic";
  *   POST /api/sales   Authorization: Bearer <LOG_TOKEN>
  *   { "agent": "Alex", "premium": "1250", "carrier": "Americo", "policies": 1, "product": "Term", "date": "2026-10-27" }
  * `agent` is a name (first name is enough when it is unique) or an id; `carrier` is one of the
- * names in Settings (any case). Answers { ok, sale }.
+ * names in Settings (any case). A P&C sale sends `"kind": "pc"` with one of the P&C carriers and,
+ * as `product`, the line (Auto, Home …); only a person marked P&C licensed on the Team page can
+ * have one. Answers { ok, sale }.
  */
 const Body = z.object({
   agent: z.string().trim().min(1).max(80),
@@ -21,6 +23,7 @@ const Body = z.object({
   policies: z.coerce.number().int().min(1).max(50).optional(),
   product: z.string().trim().max(40).optional(),
   carrier: z.string().trim().min(1).max(40),
+  kind: z.enum(["life", "pc"]).optional(),
   note: z.string().trim().max(200).optional(),
   date: z.string().trim().optional(),
 });
@@ -53,8 +56,12 @@ export async function POST(request: Request) {
   if (!isDateKey(soldOn) || soldOn > today || soldOn < addDays(today, -400)) return NextResponse.json({ ok: false, error: "date must be YYYY-MM-DD, not in the future" }, { status: 400 });
 
   const [agents, settings] = await Promise.all([listAgents(), getSettings()]);
-  const carrier = settings.carriers.find((c) => c.toLowerCase() === body.carrier.toLowerCase());
-  if (!carrier) return NextResponse.json({ ok: false, error: "No such carrier", carriers: settings.carriers }, { status: 400 });
+  const kind = body.kind ?? "life";
+  const pcCarrier = kind === "pc" ? settings.pcCarriers.find((c) => c.name.toLowerCase() === body.carrier.toLowerCase()) : undefined;
+  const carrier = kind === "pc" ? pcCarrier?.name : settings.carriers.find((c) => c.toLowerCase() === body.carrier.toLowerCase());
+  if (!carrier) return NextResponse.json({ ok: false, error: kind === "pc" ? "No such P&C carrier" : "No such carrier", carriers: kind === "pc" ? settings.pcCarriers.map((c) => c.name) : settings.carriers }, { status: 400 });
+  // A P&C line is kept as the carrier writes it ("auto" becomes "Auto"); anything else is kept as sent.
+  const product = kind === "pc" && body.product ? (pcCarrier?.lines.find((l) => l.toLowerCase() === body.product!.toLowerCase()) ?? body.product) : body.product;
   const want = body.agent.toLowerCase();
   const byId = agents.find((a) => a.id === body.agent);
   const byName = agents.filter((a) => a.name.toLowerCase() === want);
@@ -64,19 +71,21 @@ export async function POST(request: Request) {
     const names = agents.map((a) => a.name);
     return NextResponse.json({ ok: false, error: byFirst.length > 1 ? "Two people share that first name; send the full name" : "No such person", people: names }, { status: 404 });
   }
+  if (kind === "pc" && !match.pc_licensed) return NextResponse.json({ ok: false, error: `${match.name} isn't marked P&C licensed (Team page)` }, { status: 400 });
   try {
     const sale = await insertSale({
       agent_id: match.id,
       premium_cents: cents,
       policies: body.policies ?? 1,
-      product: body.product || null,
+      product: product || null,
       carrier,
+      kind,
       client: null,
       note: body.note || null,
       sold_on: soldOn,
       logged_by: "shortcut",
     });
-    return NextResponse.json({ ok: true, sale: { id: sale.id, agent: sale.agent_name, premium_cents: sale.premium_cents, carrier: sale.carrier, sold_on: sale.sold_on } });
+    return NextResponse.json({ ok: true, sale: { id: sale.id, agent: sale.agent_name, premium_cents: sale.premium_cents, carrier: sale.carrier, kind: sale.kind, sold_on: sale.sold_on } });
   } catch (err) {
     console.error("sale_api_failed", err instanceof Error ? err.name : "error");
     return NextResponse.json({ ok: false, error: "The database didn't answer" }, { status: 503 });
@@ -88,7 +97,7 @@ export async function GET(request: Request) {
   if (!tokenOk(request.headers.get("authorization"))) return NextResponse.json({ ok: false, error: "Not allowed" }, { status: 401 });
   try {
     const [agents, settings] = await Promise.all([listAgents(), getSettings()]);
-    return NextResponse.json({ ok: true, people: agents.map((a) => a.name), carriers: settings.carriers });
+    return NextResponse.json({ ok: true, people: agents.map((a) => a.name), carriers: settings.carriers, pcPeople: agents.filter((a) => a.pc_licensed).map((a) => a.name), pcCarriers: settings.pcCarriers });
   } catch {
     return NextResponse.json({ ok: false, error: "The database didn't answer" }, { status: 503 });
   }

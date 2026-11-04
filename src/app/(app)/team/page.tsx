@@ -28,6 +28,7 @@ export default async function TeamPage() {
     id: a.id,
     name: a.name,
     active: a.active,
+    pcLicensed: a.pc_licensed,
     tone: tones[a.id],
     cents: totals.get(a.id)?.cents ?? 0,
     policies: totals.get(a.id)?.policies ?? 0,

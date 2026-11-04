@@ -3,9 +3,11 @@
 import { useRef, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import { Avatar } from "@/components/avatar";
+import { KindDot } from "@/components/kind";
 import { Button, Input, Label, cn } from "@/components/ui";
 import { formatMoney, parseDollars } from "@/lib/money";
 import { todayInDetroit } from "@/lib/month";
+import { KIND_LABEL, SALE_KINDS, type PcCarrier, type SaleKind } from "@/lib/types";
 import { logSale, removeSale } from "../actions";
 import { toast } from "@/components/toaster";
 
@@ -13,6 +15,8 @@ interface Person {
   id: string;
   name: string;
   tone: string;
+  /** P&C licensed (Team page): the Life / P&C switch shows for them. */
+  pcLicensed: boolean;
 }
 
 const WHO_KEY = "scorecard:who";
@@ -29,10 +33,28 @@ function readSavedWho(): string | null {
 
 /**
  * Four taps: who, how much, which carrier, Log it. The person a desk tag opens (`?agent=`) or the
- * last person picked on this phone is preselected. After logging, the screen offers Undo for a
- * bit, Log another, and the board.
+ * last person picked on this phone is preselected. A P&C licensed person (Team page) gets a
+ * Life / P&C switch (owner, 2026-11-04); P&C mode brings the P&C carriers and the lines the picked
+ * carrier writes (`?kind=pc` on a desk tag opens it that way). After logging, the screen offers
+ * Undo for a bit, Log another, and the board.
  */
-export function LogForm({ agents, products, carriers, today, preset }: { agents: Person[]; products: string[]; carriers: string[]; today: string; preset: string | null }) {
+export function LogForm({
+  agents,
+  products,
+  carriers,
+  pcCarriers,
+  today,
+  preset,
+  presetKind,
+}: {
+  agents: Person[];
+  products: string[];
+  carriers: string[];
+  pcCarriers: PcCarrier[];
+  today: string;
+  preset: string | null;
+  presetKind: SaleKind | null;
+}) {
   const saved = useSyncExternalStore(noSubscribe, readSavedWho, () => null);
   const [picked, setPicked] = useState<string | null>(null);
   // A desk tag's person wins, then the last one picked on this phone, then whoever taps.
@@ -42,6 +64,21 @@ export function LogForm({ agents, products, carriers, today, preset }: { agents:
   const [policies, setPolicies] = useState(1);
   const [product, setProduct] = useState<string | null>(null);
   const [carrier, setCarrier] = useState<string | null>(null);
+  // Life or P&C: only a licensed person can be on P&C; the choice is kept per visit (a desk tag can open on P&C).
+  const [kindPicked, setKindPicked] = useState<SaleKind | null>(null);
+  const canPc = !!agents.find((a) => a.id === who)?.pcLicensed;
+  const kind: SaleKind = canPc ? (kindPicked ?? presetKind ?? "life") : "life";
+  const carrierChoices = kind === "pc" ? pcCarriers.map((c) => c.name) : carriers;
+  // P&C: the lines the picked carrier writes (every line until one is picked); life: the product chips.
+  const pcLines = kind === "pc" ? (carrier ? (pcCarriers.find((c) => c.name === carrier)?.lines ?? []) : pcCarriers.flatMap((c) => c.lines).filter((l, i, all) => all.indexOf(l) === i)) : [];
+  const productChoices = kind === "pc" ? pcLines : products;
+  const pickKind = (next: SaleKind) => {
+    if (next === kind) return;
+    setKindPicked(next);
+    setCarrier(null);
+    setProduct(null);
+    setError(null);
+  };
   const [date, setDate] = useState(today);
   // Only a day the person picked is sent; otherwise the server stamps its own Detroit today, so a
   // screen left open past midnight never dates a sale to yesterday.
@@ -67,6 +104,7 @@ export function LogForm({ agents, products, carriers, today, preset }: { agents:
     form.set("policies", String(policies));
     if (product) form.set("product", product);
     form.set("carrier", carrier);
+    form.set("kind", kind);
     if (note.trim()) form.set("note", note.trim());
     form.set("sold_on", dateTouched ? date : "");
     start(async () => {
@@ -81,7 +119,7 @@ export function LogForm({ agents, products, carriers, today, preset }: { agents:
         /* private mode */
       }
       const person = agents.find((a) => a.id === who)?.name ?? "Someone";
-      setDone({ id: r.id!, who: person, cents: cents, carrier });
+      setDone({ id: r.id!, who: person, cents: cents, carrier: carrier ? `${carrier}${kind === "pc" ? " · P&C" : ""}` : null });
       toast(r.message ?? "Logged.");
     });
   };
@@ -151,6 +189,11 @@ export function LogForm({ agents, products, carriers, today, preset }: { agents:
                 aria-checked={on}
                 onClick={() => {
                   setWho(a.id);
+                  // Someone who is not P&C licensed can only be on life: drop a P&C carrier or line picked before.
+                  if (!a.pcLicensed && kind === "pc") {
+                    setCarrier(null);
+                    setProduct(null);
+                  }
                   setError(null);
                   premiumRef.current?.focus();
                 }}
@@ -166,6 +209,30 @@ export function LogForm({ agents, products, carriers, today, preset }: { agents:
           })}
         </div>
       </section>
+
+      {canPc && (
+        <section>
+          <h2 className="mb-2 px-1 text-[13px] font-bold tracking-[0.06em] text-gray-500 uppercase">What kind</h2>
+          <div role="radiogroup" aria-label="What kind" className="grid grid-cols-2 gap-1 rounded-2xl bg-track p-1">
+            {SALE_KINDS.map((k) => {
+              const on = kind === k;
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => pickKind(k)}
+                  className={cn("flex min-h-11 items-center justify-center gap-2 rounded-xl text-[14px] font-bold transition", on ? "bg-segment text-gray-900 shadow-card" : "text-gray-600 hover:text-gray-900")}
+                >
+                  <KindDot kind={k} className="h-2 w-2" />
+                  {KIND_LABEL[k]}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <section className="rounded-[26px] bg-surface p-4 shadow-card">
         <Label htmlFor="premium" className="text-[13px] font-bold tracking-[0.06em] text-gray-500 uppercase">
@@ -205,7 +272,7 @@ export function LogForm({ agents, products, carriers, today, preset }: { agents:
       <section>
         <h2 className="mb-2 px-1 text-[13px] font-bold tracking-[0.06em] text-gray-500 uppercase">Carrier</h2>
         <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Carrier">
-          {carriers.map((c) => {
+          {carrierChoices.map((c) => {
             const on = carrier === c;
             return (
               <button
@@ -215,6 +282,8 @@ export function LogForm({ agents, products, carriers, today, preset }: { agents:
                 aria-checked={on}
                 onClick={() => {
                   setCarrier(c);
+                  // A line the new carrier does not write goes.
+                  if (kind === "pc" && product && !(pcCarriers.find((x) => x.name === c)?.lines ?? []).includes(product)) setProduct(null);
                   setError(null);
                 }}
                 className={cn("min-h-11 rounded-full px-4 text-[14px] font-bold transition", on ? "bg-tide-strong text-white shadow-glow" : "bg-surface text-gray-700 shadow-card hover:bg-gray-50")}
@@ -227,9 +296,10 @@ export function LogForm({ agents, products, carriers, today, preset }: { agents:
       </section>
 
       <section>
-        <h2 className="mb-2 px-1 text-[13px] font-bold tracking-[0.06em] text-gray-500 uppercase">Product (optional)</h2>
+        <h2 className="mb-2 px-1 text-[13px] font-bold tracking-[0.06em] text-gray-500 uppercase">{kind === "pc" ? "Line" : "Product (optional)"}</h2>
+        {kind === "pc" && carrier && <p className="mb-2 px-1 text-[12px] font-medium text-gray-500">What {carrier} writes.</p>}
         <div className="flex flex-wrap gap-2">
-          {products.map((p) => {
+          {productChoices.map((p) => {
             const on = product === p;
             return (
               <button
@@ -278,7 +348,7 @@ export function LogForm({ agents, products, carriers, today, preset }: { agents:
       </section>
 
       <Button type="submit" className="h-14 w-full rounded-2xl text-[17px]" disabled={pending || !ready}>
-        {pending ? "Logging..." : ready ? `Log ${formatMoney(cents!)}` : "Log it"}
+        {pending ? "Logging..." : ready ? `Log ${formatMoney(cents!)}${kind === "pc" ? " P&C" : ""}` : "Log it"}
       </Button>
     </form>
   );

@@ -9,6 +9,8 @@ import { dayLabel, daysLeftLabel } from "@/lib/month";
 import { TEAM_TIME_ZONE } from "@/lib/timezone";
 import { Avatar, firstName, shortName } from "@/components/avatar";
 import { ScoreMark, TkgMark } from "@/components/brand";
+import { GoalBar } from "@/components/goal-bar";
+import { KindDot, KindSplit, PcTag } from "@/components/kind";
 import { MonthChart } from "@/components/month-chart";
 import { cn, formatClock } from "@/components/ui";
 import { burst } from "./confetti";
@@ -170,6 +172,9 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
   const leaders = agents.filter((a) => a.active || a.premiumCents > 0);
   const maxPremium = Math.max(1, ...leaders.map((a) => a.premiumCents));
   const toneById = Object.fromEntries(agents.map((a) => [a.id, a.tone]));
+  // The goal line today, the same tick on every bar: how far through its business days the month is.
+  const goalLine = month.position === "current" && month.elapsed > 0 ? Math.round(month.progress * 100) : null;
+  const split = team.pcCents > 0;
 
   return (
     <main
@@ -199,14 +204,32 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
         <section className="col-span-7 flex min-h-0 flex-col rounded-[1.4em] bg-surface p-[1.1em] shadow-card">
           <div className="flex items-baseline justify-between">
             <h2 className="text-[1.25em] font-extrabold tracking-[-0.02em]">Leaderboard</h2>
-            <p className="text-[0.85em] font-semibold text-gray-500">annual premium · policies</p>
+            <p className="flex items-center gap-[0.45em] text-[0.85em] font-semibold text-gray-500">
+              {split && (
+                <>
+                  <KindDot kind="life" className="h-[0.5em] w-[0.5em]" />
+                  life
+                  <KindDot kind="pc" className="ml-[0.3em] h-[0.5em] w-[0.5em]" />
+                  P&C
+                  <span aria-hidden>·</span>
+                </>
+              )}
+              {goalLine !== null && (
+                <>
+                  <span aria-hidden className="inline-block h-[0.9em] w-[0.12em] rounded-full bg-gray-500" />
+                  goal line today
+                  <span aria-hidden>·</span>
+                </>
+              )}
+              annual premium · policies
+            </p>
           </div>
           {leaders.length === 0 ? (
             <p className="flex flex-1 items-center justify-center text-[1.2em] font-semibold text-gray-500">Add your team in Scorecard on your phone.</p>
           ) : (
             <ol className="mt-[0.6em] flex min-h-0 flex-1 flex-col gap-[0.45em]">
               {leaders.map((a) => (
-                <LeaderRow key={a.id} line={a} max={maxPremium} count={leaders.length} today={month.position === "current"} />
+                <LeaderRow key={a.id} line={a} max={maxPremium} count={leaders.length} today={month.position === "current"} goalLine={goalLine} />
               ))}
             </ol>
           )}
@@ -216,8 +239,13 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
         <div className="col-span-5 flex min-h-0 flex-col gap-[1em]">
           <GoalCard snap={snap} />
           <section className="grid shrink-0 grid-cols-3 gap-[0.7em]">
-            <Tile label={month.position === "current" ? "Today" : "Best day"} value={month.position === "current" ? formatDollars(team.todayCents) : team.bestDay ? formatDollars(team.bestDay.cents) : "–"} sub={month.position === "current" ? `${team.todayPolicies} ${team.todayPolicies === 1 ? "policy" : "policies"}` : team.bestDay ? dayLabel(team.bestDay.date) : ""} tone={team.todayCents > 0 ? "up" : undefined} />
-            <Tile label="Policies" value={String(team.policies)} sub={team.averageCents ? `${formatDollars(team.averageCents)} avg` : "this month"} />
+            <Tile
+              label={month.position === "current" ? "Today" : "Best day"}
+              value={month.position === "current" ? formatDollars(team.todayCents) : team.bestDay ? formatDollars(team.bestDay.cents) : "–"}
+              sub={month.position === "current" ? `${team.todayPolicies} ${team.todayPolicies === 1 ? "policy" : "policies"}${team.todayPcPolicies > 0 ? ` · ${team.todayPcPolicies} P&C` : ""}` : team.bestDay ? dayLabel(team.bestDay.date) : ""}
+              tone={team.todayCents > 0 ? "up" : undefined}
+            />
+            <Tile label="Policies" value={String(team.policies)} sub={split ? `${team.lifePolicies} life · ${team.pcPolicies} P&C` : team.averageCents ? `${formatDollars(team.averageCents)} avg` : "this month"} />
             <NeededTile snap={snap} />
           </section>
           <section className="min-h-0 flex-1 rounded-[1.4em] bg-surface p-[1em] shadow-card">
@@ -265,8 +293,12 @@ function BoardLockup() {
   );
 }
 
-function LeaderRow({ line, max, count, today }: { line: AgentLine; max: number; count: number; today: boolean }) {
-  const pct = line.goalCents > 0 ? Math.min(100, line.goalPct) : Math.round((line.premiumCents / max) * 100);
+function LeaderRow({ line, max, count, today, goalLine }: { line: AgentLine; max: number; count: number; today: boolean; goalLine: number | null }) {
+  const hasGoal = line.goalCents > 0;
+  // One track for everyone: the share of their own goal (of the leader's premium without one), life then P&C.
+  const width = hasGoal ? Math.min(100, line.goalPct) : Math.round((line.premiumCents / max) * 100);
+  const lifeShare = line.premiumCents > 0 ? (width * line.lifeCents) / line.premiumCents : 0;
+  const done = hasGoal && line.goalPct >= 100;
   const first = line.rank === 1 && line.premiumCents > 0;
   const medal = line.premiumCents > 0 ? (line.rank === 1 ? "text-gold" : line.rank === 2 ? "text-silver" : line.rank === 3 ? "text-bronze" : "text-gray-500") : "text-gray-500";
   // Fewer people, taller rows: the type grows a little when there is room.
@@ -276,20 +308,25 @@ function LeaderRow({ line, max, count, today }: { line: AgentLine; max: number; 
       <span className={cn("w-[1.4em] shrink-0 text-center font-mono text-[1.4em] font-bold", medal)}>{first ? <Crown /> : line.rank}</span>
       <Avatar name={line.name} tone={line.tone} size={44} className="!h-[2.6em] !w-[2.6em] !text-[0.95em]" />
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-[1em]">
-          <p className="truncate text-[1.35em] leading-tight font-extrabold tracking-[-0.02em]">{line.name.length > 18 ? shortName(line.name) : line.name}</p>
-          <p className="shrink-0 font-mono text-[1.5em] leading-none font-bold tracking-[-0.02em]">{formatDollars(line.premiumCents)}</p>
+        <div className="flex items-start justify-between gap-[1em]">
+          <p className="min-w-0 truncate text-[1.35em] leading-tight font-extrabold tracking-[-0.02em]">{line.name.length > 18 ? shortName(line.name) : line.name}</p>
+          <div className="shrink-0 text-right">
+            <p className="font-mono text-[1.5em] leading-none font-bold tracking-[-0.02em]">{formatDollars(line.premiumCents)}</p>
+            {today && line.todayCents > 0 && <p className="mt-[0.2em] text-[0.8em] leading-none font-bold text-up">+{formatDollars(line.todayCents)} today</p>}
+          </div>
         </div>
         <div className="mt-[0.45em] flex items-center gap-[0.8em]">
-          <div className="h-[0.55em] flex-1 overflow-hidden rounded-full bg-track">
-            <div className={cn("h-full rounded-full transition-[width] duration-700", first ? "bg-tide" : "bg-bar")} style={{ width: `${pct}%` }} />
-          </div>
-          <p className="w-[9.5em] shrink-0 text-right text-[0.85em] font-semibold whitespace-nowrap text-gray-500">
-            {line.policies} {line.policies === 1 ? "policy" : "policies"}
-            {line.goalCents > 0 ? ` · ${line.goalPct}%` : ""}
-          </p>
-          {today && line.todayCents > 0 && <span className="shrink-0 rounded-full bg-green-100 px-[0.6em] py-[0.15em] font-mono text-[0.8em] font-bold text-green-800">+{formatDollars(line.todayCents)}</span>}
+          <GoalBar width={width} lifeShare={lifeShare} goalLine={hasGoal ? goalLine : null} className="h-[0.55em]" tickClassName="-top-[0.3em] h-[1.15em] w-[0.12em]" />
+          {hasGoal && <p className={cn("w-[3em] shrink-0 text-right font-mono text-[0.95em] font-bold", done ? "text-up" : "text-gray-700")}>{line.goalPct}%</p>}
         </div>
+        <p className="mt-[0.3em] truncate text-[0.85em] font-semibold whitespace-nowrap text-gray-500">
+          {line.pcCents > 0 ? (
+            <KindSplit dot="h-[0.45em] w-[0.45em]" life={<span className="font-mono">{formatDollars(line.lifeCents)} · {line.lifePolicies}</span>} pc={<span className="font-mono">{formatDollars(line.pcCents)} · {line.pcPolicies}</span>} />
+          ) : (
+            `${line.policies} ${line.policies === 1 ? "policy" : "policies"}`
+          )}
+          {!hasGoal && " · no goal"}
+        </p>
       </div>
     </li>
   );
@@ -306,6 +343,8 @@ function Crown() {
 function GoalCard({ snap }: { snap: MonthSnapshot }) {
   const { team, clock } = snap;
   const pct = team.goalCents > 0 ? Math.min(100, team.goalPct) : 0;
+  // The ring is life then P&C, in the same proportion as the production.
+  const lifePct = team.productionCents > 0 ? (pct * team.lifeCents) / team.productionCents : pct;
   const r = 44;
   const c = 2 * Math.PI * r;
   const { pace } = team;
@@ -350,8 +389,11 @@ function GoalCard({ snap }: { snap: MonthSnapshot }) {
             </linearGradient>
           </defs>
           <circle cx="50" cy="50" r={r} fill="none" className="stroke-track" strokeWidth="9" />
+          {team.pcCents > 0 && (
+            <circle key={`pc-${pct}`} cx="50" cy="50" r={r} fill="none" className="stroke-pc" strokeWidth="9" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} style={{ transition: "stroke-dashoffset 900ms cubic-bezier(0.2, 0.8, 0.2, 1)" }} />
+          )}
           <circle
-            key={pct}
+            key={lifePct}
             cx="50"
             cy="50"
             r={r}
@@ -360,7 +402,7 @@ function GoalCard({ snap }: { snap: MonthSnapshot }) {
             strokeWidth="9"
             strokeLinecap="round"
             strokeDasharray={c}
-            strokeDashoffset={c * (1 - pct / 100)}
+            strokeDashoffset={c * (1 - lifePct / 100)}
             style={{ transition: "stroke-dashoffset 900ms cubic-bezier(0.2, 0.8, 0.2, 1)" }}
           />
         </svg>
@@ -375,6 +417,11 @@ function GoalCard({ snap }: { snap: MonthSnapshot }) {
           {formatDollars(team.productionCents)}
         </p>
         <p className="mt-[0.35em] text-[1em] font-semibold text-gray-500">{team.goalCents > 0 ? `of ${formatDollars(team.goalCents)}` : "no goal set yet"}</p>
+        {team.pcCents > 0 && (
+          <p className="mt-[0.4em] text-[1em] font-semibold text-gray-600">
+            <KindSplit dot="h-[0.55em] w-[0.55em]" life={<span className="font-mono text-gray-900">{formatDollars(team.lifeCents)}</span>} pc={<span className="font-mono text-gray-900">{formatDollars(team.pcCents)}</span>} />
+          </p>
+        )}
         <p className={cn("mt-[0.5em] text-[1em] leading-snug font-bold", tone)}>{line}</p>
       </div>
     </section>
@@ -419,6 +466,7 @@ function Feed({ sales, tones, today }: { sales: FeedSale[]; tones: Record<string
                   {s.product ? ` · ${s.product}` : ""}
                   {s.policies > 1 ? ` · ${s.policies} policies` : ""}
                 </span>
+                {s.kind === "pc" && <PcTag tv className="ml-[0.5em] align-middle" />}
               </p>
               <p className="shrink-0 text-[0.8em] font-semibold text-gray-500">{s.soldOn === today ? formatClock(s.createdAt) : dayLabel(s.soldOn)}</p>
               <p className="shrink-0 font-mono text-[1.1em] font-bold">{formatMoney(s.premiumCents)}</p>
@@ -442,11 +490,12 @@ function Celebration({ sale }: { sale: FeedSale }) {
       <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
       <div className="board-pop relative flex flex-col items-center rounded-[2em] bg-surface px-[3.2em] py-[2.4em] text-center shadow-float">
         <Avatar name={sale.agentName} tone="bg-tide text-white shadow-glow" size={96} className="!h-[6em] !w-[6em] !text-[2.2em]" />
-        <p className="mt-[0.9em] text-[1.1em] font-bold tracking-[0.1em] text-accent-text uppercase">New sale</p>
+        <p className={cn("mt-[0.9em] text-[1.1em] font-bold tracking-[0.1em] uppercase", sale.kind === "pc" ? "text-pc" : "text-accent-text")}>{sale.kind === "pc" ? "New P&C sale" : "New sale"}</p>
         <p className="mt-[0.2em] text-[2.8em] leading-tight font-extrabold tracking-[-0.03em]">{sale.agentName}</p>
         <p className="mt-[0.4em] font-mono text-[3.6em] leading-none font-bold tracking-[-0.035em] text-gray-900">{formatMoney(sale.premiumCents)}</p>
         <p className="mt-[0.6em] text-[1.2em] font-semibold text-gray-500">
           annual premium
+          {sale.kind === "pc" ? " · P&C" : ""}
           {sale.carrier ? ` · ${sale.carrier}` : ""}
           {sale.product ? ` · ${sale.product}` : ""}
           {sale.policies > 1 ? ` · ${sale.policies} policies` : ""}

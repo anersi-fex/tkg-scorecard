@@ -44,6 +44,21 @@ const feedUntil = async (ctx, fn, tries = 20) => {
   return json;
 };
 
+/** Today in Detroit as [year, month, day] (the sandbox's own clock may sit in another zone). */
+const detroitToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Detroit" }).split("-").map(Number);
+/** Detroit dates walked back from today in UTC arithmetic, so the sandbox's zone never shifts a weekday. */
+const daysBack = (stop) => {
+  const [y, m, d] = detroitToday();
+  const t = new Date(Date.UTC(y, m - 1, d));
+  do t.setUTCDate(t.getUTCDate() - 1);
+  while (!stop(t.getUTCDay()));
+  return t.toISOString().slice(0, 10);
+};
+/** The Detroit date of the last weekday before today. */
+const lastBusinessDay = () => daysBack((w) => w !== 0 && w !== 6);
+/** The Detroit date of the Sunday before this week's Monday: always an earlier week. */
+const lastSunday = () => daysBack((w) => w === 0);
+
 const PEOPLE = ["Anersi Koka", "Alex Alekseyev", "Mark Dusevic", "Moe Karim", "Brandon Lee", "Maira Santos", "James Park"];
 
 async function signIn(page, password) {
@@ -210,8 +225,34 @@ try {
   await o.waitForSelector("text=Removed.");
   check(true, "owner removed a sale");
 
+  // P&C alongside life (2026-11-04): the owner marks Moe P&C licensed, a P&C sale splits the numbers in purple
+  await o.goto(`${APP}/team`);
+  await o.click("li:has-text('Moe Karim') button:has-text('Edit')");
+  await o.click("li:has-text('Moe Karim') [role=switch]");
+  await o.waitForSelector("text=P&C licensed. Log a sale offers");
+  check(true, "the owner marks Moe P&C licensed on the Team page");
+  await o.goto(`${APP}/log`);
+  await o.click(`[role=radio]:has-text("Alex Alekseyev")`);
+  check((await o.locator("[role=radiogroup][aria-label='What kind']").count()) === 0, "no Life / P&C switch for someone who is not P&C licensed");
+  await o.click(`[role=radio]:has-text("Moe Karim")`);
+  await o.waitForSelector("[role=radiogroup][aria-label='What kind']");
+  await o.click("[role=radiogroup][aria-label='What kind'] [role=radio]:has-text('P&C')");
+  await o.fill("#premium", "1860");
+  await o.click(`[role=radiogroup][aria-label=Carrier] [role=radio]:has-text("Progressive")`);
+  check((await o.locator("button[aria-pressed]").allTextContents()).join(",") === "Auto,Renters,ATV", "P&C mode offers the lines Progressive writes");
+  await o.click(`button[aria-pressed]:has-text("Auto")`);
+  await o.click("button[type=submit]:has-text('Log')");
+  await o.waitForSelector("h2:has-text('Logged')");
+  check((await o.textContent("body")).includes("Progressive · P&C"), "a P&C sale logs with its carrier and kind");
+  await o.goto(`${APP}/`);
+  await o.waitForSelector("text=Leaderboard");
+  const pcHome = await o.textContent("body");
+  check(pcHome.includes("Life") && pcHome.includes("P&C") && pcHome.includes("$1,860"), "Home splits life and P&C under the team total and on Moe's row");
+  check(pcHome.includes("goal line today"), "Home names the goal line tick");
+
   // A sale dated last month shows up in that month's own list, fixable there
-  const lastMonthDay = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1) - 86400000 * 3).toISOString().slice(0, 10);
+  const [ty, tm] = detroitToday();
+  const lastMonthDay = new Date(Date.UTC(ty, tm - 1, 1) - 86400000 * 3).toISOString().slice(0, 10);
   const lastMonth = lastMonthDay.slice(0, 7);
   await o.goto(`${APP}/log`);
   await o.click(`[role=radio]:has-text("James Park")`);
@@ -247,6 +288,18 @@ try {
   await p.screenshot({ path: `${OUT}/07-phone-home.png`, fullPage: true });
   const overflow = await p.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   check(!overflow, "phone Home has no sideways scroll");
+  // The dock (owner, 2026-11-04): its own strip at the very end of the page, the last row fully above it
+  await p.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await p.waitForTimeout(250);
+  const dock = await p.evaluate(() => {
+    const nav = document.querySelector("nav[data-tabbar]").getBoundingClientRect();
+    const rows = [...document.querySelectorAll("button[aria-label=More]")];
+    const last = rows[rows.length - 1].getBoundingClientRect();
+    return { navTop: nav.top, navBottom: nav.bottom, lastRowBottom: last.bottom, h: window.innerHeight };
+  });
+  check(dock.lastRowBottom <= dock.navTop && dock.navBottom <= dock.h + 1 && dock.navBottom >= dock.h - 1, `the dock sits in its own strip at the very bottom and the last row ends above it (row ${Math.round(dock.lastRowBottom)}, dock ${Math.round(dock.navTop)} to ${Math.round(dock.navBottom)} of ${dock.h})`);
+  await p.screenshot({ path: `${OUT}/07b-phone-home-bottom.png` });
+  await p.evaluate(() => window.scrollTo(0, 0));
   await p.goto(`${APP}/log`);
   await p.screenshot({ path: `${OUT}/08-phone-log.png`, fullPage: true });
   // The Wrap: today's top producer, everybody, the carriers; one iPhone screenshot above the tab bar,
@@ -263,24 +316,44 @@ try {
   check(wrapText.includes("Alex Alekseyev") && wrapText.includes("$21,750"), "the Wrap names today's player of the day with the day's premium");
   check(wrapText.includes("Everybody today") && wrapText.includes("Best deal"), "the Wrap lists everybody and the best deal");
   check(wrapText.includes("Day won") || wrapText.includes("short of") || /(Saturday|Sunday)/.test(wrapText), "the Wrap judges the day against what the goal needed (or names the weekend)");
-  const footBottom = await p.evaluate(() => document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom);
-  check(footBottom <= 760, `the Wrap fits one iPhone screenshot above the tab bar (ends at ${Math.round(footBottom)}px of 844)`);
+  const fit = await p.evaluate(() => ({ bottom: document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom, pill: document.querySelector("nav[data-tabbar] > div").getBoundingClientRect().top, height: window.innerHeight }));
+  check(fit.bottom <= fit.pill - 8, `the Wrap fits one iPhone screenshot above the tab bar (ends at ${Math.round(fit.bottom)}px, the tab bar starts at ${Math.round(fit.pill)} of ${fit.height})`);
+  // Royal leads only once the token's three Royal sales landed; AHL is in the top three either way.
+  const square = TOKEN ? "Royal" : "AHL";
+  check(wrapText.includes("Top carriers") && new RegExp(`${square}\\s*\\d+\\s*polic`).test(wrapText), "the Wrap shows the month's top carriers with their policy counts");
+  check(wrapText.includes("Day") && wrapText.includes("Week") && wrapText.includes("Month"), "the Wrap offers Day, Week and Month");
   const wrapOverflow = await p.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
   check(!wrapOverflow, "the Wrap has no sideways scroll");
   const tabs = await p.evaluate(() => {
-    const pill = document.querySelector("nav[aria-label=Main] > div");
+    const pill = document.querySelector("nav[data-tabbar] > div");
     return { right: pill.getBoundingClientRect().right, links: pill.querySelectorAll("a").length, width: window.innerWidth };
   });
   check(tabs.links === 4 && tabs.right <= tabs.width, `the phone tab bar holds four tabs inside the screen (${Math.round(tabs.right)} of ${tabs.width}px)`);
   await p.screenshot({ path: `${OUT}/14-phone-wrap.png`, fullPage: true });
+  // The week and the month: the same screen over a longer stretch, each still one screenshot
+  const fitOf = async () => p.evaluate(() => ({ bottom: document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom, pill: document.querySelector("nav[data-tabbar] > div").getBoundingClientRect().top, height: window.innerHeight }));
+  await p.goto(`${APP}/wrap?view=week`);
+  await p.waitForSelector("text=Player of the week");
+  const weekText = await p.textContent("body");
+  check(weekText.includes("Everybody this week") && weekText.includes("Alex Alekseyev"), "the week view lists everybody this week with its player");
+  check(weekText.includes("Week won") || weekText.includes("short of") || weekText.includes("Weekend") || weekText.includes("Goal already hit"), "the week view judges the week against what the goal needed");
+  const fitWeek = await fitOf();
+  check(fitWeek.bottom <= fitWeek.pill - 8, `the week view fits one screenshot (ends at ${Math.round(fitWeek.bottom)}px, the tab bar starts at ${Math.round(fitWeek.pill)})`);
+  await p.screenshot({ path: `${OUT}/14b-phone-wrap-week.png`, fullPage: true });
+  await p.goto(`${APP}/wrap?view=month`);
+  await p.waitForSelector("text=Player of the month");
+  const monthText = await p.textContent("body");
+  check(monthText.includes("Everybody this month") && /Ahead by|Behind by|On the goal line|Goal hit/.test(monthText), "the month view lists everybody this month and reads the month against the goal line");
+  const fitMonth = await fitOf();
+  check(fitMonth.bottom <= fitMonth.pill - 8, `the month view fits one screenshot (ends at ${Math.round(fitMonth.bottom)}px, the tab bar starts at ${Math.round(fitMonth.pill)})`);
+  await p.screenshot({ path: `${OUT}/14c-phone-wrap-month.png`, fullPage: true });
+  // An earlier week (anchored on last Sunday, always before this week) shows the This week pill and a live later arrow
+  await p.goto(`${APP}/wrap?view=week&day=${lastSunday()}`);
+  await p.waitForSelector("text=Player of the week");
+  const earlierWeek = await p.evaluate(() => ({ text: document.body.textContent, later: document.querySelector("a[aria-label='Later week']")?.getAttribute("aria-disabled") }));
+  check(earlierWeek.text.includes("Everybody that week") && earlierWeek.text.includes("This week") && earlierWeek.later === "false", "an earlier week opens with the This week pill and a live later arrow");
   // The last business day before today has no sales in this run
-  const lastBusiness = (() => {
-    const d = new Date();
-    do d.setDate(d.getDate() - 1);
-    while (d.getDay() === 0 || d.getDay() === 6);
-    return d.toLocaleDateString("en-CA", { timeZone: "America/Detroit" });
-  })();
-  await p.goto(`${APP}/wrap?day=${lastBusiness}`);
+  await p.goto(`${APP}/wrap?day=${lastBusinessDay()}`);
   await p.waitForSelector("text=Player of the day");
   check((await p.textContent("body")).includes("No sales"), "a day without sales says so");
   await p.emulateMedia({ colorScheme: "dark" });
@@ -328,6 +401,13 @@ try {
     check(noCarrier.status() === 400, "Shortcut endpoint needs a carrier");
     const badCarrier = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "maira", premium: "10", carrier: "Nope" } });
     check(badCarrier.status() === 400 && (await badCarrier.json()).carriers.length === 7, "Shortcut endpoint lists the carriers on a wrong one");
+    const pcApi = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "Moe", premium: "2,000", kind: "pc", carrier: "geico", product: "umbrella" } });
+    const pcJson = pcApi.ok() ? await pcApi.json() : null;
+    check(pcApi.ok() && pcJson.sale.kind === "pc" && pcJson.sale.carrier === "Geico", `Shortcut endpoint logs a P&C sale (${pcApi.status()})`);
+    const pcNo = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "Alex", premium: "10", kind: "pc", carrier: "Progressive" } });
+    check(pcNo.status() === 400, "Shortcut endpoint refuses a P&C sale for someone not P&C licensed");
+    const pcBad = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "Moe", premium: "10", kind: "pc", carrier: "AHL" } });
+    check(pcBad.status() === 400 && (await pcBad.json()).carriers.includes("Progressive"), "a P&C sale needs a P&C carrier");
     const people = await owner.request.get(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` } });
     check(people.ok() && (await people.json()).people.length === 7, "Shortcut endpoint lists the people");
     const bad = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: "Nobody", premium: "100", carrier: "AHL" } });
@@ -339,6 +419,8 @@ try {
     await t.screenshot({ path: `${OUT}/12-board-celebration.png` });
     const celebrate = await t.textContent("[role=status]");
     check(celebrate.includes("Maira Santos") && celebrate.includes("$2,750") && celebrate.includes("Americo"), "the board celebrates the new sale with the name, the amount and the carrier");
+    const tvText = await t.textContent("body");
+    check(tvText.includes("goal line today") && tvText.includes("P&C"), "the TV shows the goal line legend and the P&C split");
   } else {
     console.log("skip Shortcut endpoint (no LOG_TOKEN)");
   }
