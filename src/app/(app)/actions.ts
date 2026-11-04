@@ -57,12 +57,20 @@ export async function logSale(form: FormData): Promise<ActionResult> {
     const agent = agents.find((a) => a.id === input.agent_id);
     if (!agent) return { ok: false, error: "That person isn't on the team anymore." };
     if (input.kind === "pc" && !agent.pc_licensed) return { ok: false, error: `${agent.name} isn't marked P&C licensed. Anersi can change that on the Team page.` };
+    // The carrier must be on the list for the kind (a screen left on the other kind cannot slip one through),
+    // and a P&C line must be one the carrier writes.
+    const settings = await getSettings();
+    const wanted = input.carrier.toLowerCase();
+    const pcCarrier = input.kind === "pc" ? settings.pcCarriers.find((c) => c.name.toLowerCase() === wanted) : undefined;
+    const carrier = input.kind === "pc" ? pcCarrier?.name : settings.carriers.find((c) => c.toLowerCase() === wanted);
+    if (!carrier) return { ok: false, error: "Tap the carrier it was written with." };
+    const product = input.kind === "pc" ? (pcCarrier?.lines.find((l) => l.toLowerCase() === input.product?.toLowerCase()) ?? null) : input.product;
     const sale = await insertSale({
       agent_id: agent.id,
       premium_cents: cents,
       policies: input.policies,
-      product: input.product,
-      carrier: input.carrier,
+      product,
+      carrier,
       kind: input.kind,
       client: null,
       note: input.note,

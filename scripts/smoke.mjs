@@ -247,8 +247,11 @@ try {
   await o.goto(`${APP}/`);
   await o.waitForSelector("text=Leaderboard");
   const pcHome = await o.textContent("body");
-  check(pcHome.includes("Life") && pcHome.includes("P&C") && pcHome.includes("$1,860"), "Home splits life and P&C under the team total and on Moe's row");
-  check(pcHome.includes("goal line today"), "Home names the goal line tick");
+  const moeRow = await o.locator("li:has-text('Moe Karim')").first().textContent();
+  check(pcHome.includes("Life $") && pcHome.includes("P&C $1,860") && moeRow.includes("Life $6,100 · 1") && moeRow.includes("P&C $1,860 · 1"), "Home splits life and P&C under the team total and on Moe's row");
+  // Home and the TV draw the goal-line legend only once a business day of the month has passed: never on a month's first weekend.
+  const tick = (await (await owner.request.get(`${APP}/api/board`)).json()).clock.elapsed > 0;
+  check(pcHome.includes("goal line today") === tick, tick ? "Home names the goal line tick" : "Home hides the goal line tick before the month's first business day");
 
   // A sale dated last month shows up in that month's own list, fixable there
   const [ty, tm] = detroitToday();
@@ -420,7 +423,7 @@ try {
     const celebrate = await t.textContent("[role=status]");
     check(celebrate.includes("Maira Santos") && celebrate.includes("$2,750") && celebrate.includes("Americo"), "the board celebrates the new sale with the name, the amount and the carrier");
     const tvText = await t.textContent("body");
-    check(tvText.includes("goal line today") && tvText.includes("P&C"), "the TV shows the goal line legend and the P&C split");
+    check(tvText.includes("goal line today") === tick && tvText.includes("Life $") && tvText.includes("P&C $"), "the TV shows the goal line legend (once a business day has passed) and the P&C split");
   } else {
     console.log("skip Shortcut endpoint (no LOG_TOKEN)");
   }

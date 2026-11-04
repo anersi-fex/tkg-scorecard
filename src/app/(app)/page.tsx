@@ -62,8 +62,9 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   const { carriers, pcCarriers } = await getSettings();
   const top = s.agents[0];
   const maxPremium = Math.max(1, ...s.agents.map((a) => a.premiumCents));
-  // The goal line today: how far through its business days the month is (the same tick on every bar).
-  const goalLine = s.clock.position === "current" && s.clock.elapsed > 0 ? Math.round(s.clock.progress * 100) : null;
+  // The goal line today: how far through its business days the month is (the same tick on every bar);
+  // nothing, and no legend, until a goal gives a bar something to measure against.
+  const goalLine = s.clock.position === "current" && s.clock.elapsed > 0 && (s.team.goalCents > 0 || s.agents.some((a) => a.goalCents > 0)) ? Math.round(s.clock.progress * 100) : null;
   const split = s.team.pcCents > 0;
   const teamWidth = s.team.goalCents > 0 ? Math.min(100, s.team.goalPct) : 0;
   const teamLife = s.team.productionCents > 0 ? (teamWidth * s.team.lifeCents) / s.team.productionCents : 0;
