@@ -16,5 +16,5 @@ export async function loadMonthSnapshot(month: string, opts: { today?: string; r
     recentSales(opts.recentLimit ?? 12),
     getSettings(),
   ]);
-  return buildSnapshot({ month, today, agents, sales, goals, recent, message: settings.message, colorway: settings.colorway, boardTheme: settings.boardTheme, sound: settings.sound, tvScreens: settings.tvScreens });
+  return buildSnapshot({ month, today, agents, sales, goals, recent, message: settings.message, colorway: settings.colorway, pcColor: settings.pcColor, boardTheme: settings.boardTheme, sound: settings.sound, tvScreens: settings.tvScreens });
 }

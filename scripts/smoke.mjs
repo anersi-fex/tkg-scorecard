@@ -33,6 +33,8 @@ const settles = async (page, fn, ms) => {
     return false;
   }
 };
+/** A CSS custom property as the page resolves it on <html> ("#4a6fa3"). */
+const cssVar = (page, name) => page.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim(), name);
 /** The board feed once fn(json) holds (the settings save landed), else the last answer. */
 const feedUntil = async (ctx, fn, tries = 20) => {
   let json = null;
@@ -156,6 +158,17 @@ try {
   await o.goto(`${APP}/settings`);
   await o.click("[role=radio]:has-text('Crimson')");
   await o.waitForSelector("text=Saved. The TV changes");
+  // P&C color (owner, 2026-11-04): Dusty blue by default; Silver, Sage and Ocean in Settings
+  const pcColors = "[role=radiogroup][aria-label='P&C color']";
+  check((await o.locator(`${pcColors} [role=radio]`).count()) === 4 && (await o.textContent(`${pcColors} [role=radio][aria-checked=true]`)).includes("Dusty blue"), "Settings offers four P&C colors, Dusty blue to start");
+  check((await o.getAttribute("html", "data-pc-color")) === "dusty" && (await cssVar(o, "--t-pc")) === "#4a6fa3", "every screen draws P&C in dusty blue by default");
+  await o.click(`${pcColors} [role=radio]:has-text('Sage')`);
+  check((await feedUntil(owner, (j) => j.pcColor === "sage")).pcColor === "sage", "the board feed carries the P&C color");
+  await o.goto(`${APP}/`);
+  check((await o.getAttribute("html", "data-pc-color")) === "sage" && (await cssVar(o, "--t-pc")) === "#4f8a6e", "the P&C color setting colors the next screen");
+  await o.goto(`${APP}/settings`);
+  await o.click(`${pcColors} [role=radio]:has-text('Dusty blue')`);
+  check((await feedUntil(owner, (j) => j.pcColor === "dusty")).pcColor === "dusty", "back to dusty blue");
   // TV look: dark by default, Light saved on tap, carried by the feed (the TV checks below)
   const tvLook = "[role=radiogroup][aria-label='TV look']";
   check((await o.getAttribute(`${tvLook} [role=radio][aria-checked=true]`, "aria-checked")) === "true" && (await o.textContent(`${tvLook} [role=radio][aria-checked=true]`)).includes("Dark"), "the TV look starts on Dark");
@@ -447,6 +460,13 @@ try {
   await pinned.goto(`${APP}/board?theme=light`, { waitUntil: "commit" });
   check((await pinned.getAttribute("html", "data-theme")) === "dark", "?theme=light in the address changes nothing");
   await pinned.close();
+  // P&C color on the TV: dusty blue in dark by default, and a change in Settings arrives with the next poll
+  check((await t.getAttribute("html", "data-pc-color")) === "dusty" && (await cssVar(t, "--t-pc")) === "#86a6d6", "the TV draws P&C in dusty blue by default (dark)");
+  await o.goto(`${APP}/settings`);
+  await o.click(`${pcColors} [role=radio]:has-text('Silver')`);
+  check((await settles(t, () => document.documentElement.getAttribute("data-pc-color") === "silver", 12000)) && (await cssVar(t, "--t-pc")) === "#a5b4c8", "a P&C color change in Settings reaches the TV within a poll");
+  await o.click(`${pcColors} [role=radio]:has-text('Dusty blue')`);
+  check(await settles(t, () => document.documentElement.getAttribute("data-pc-color") === "dusty", 12000), "and back to dusty blue on the TV");
 
   // A Shortcut logs a sale: the board celebrates within a poll
   if (TOKEN) {

@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { COLORWAYS, COLORWAY_KEYS, type ColorwayKey } from "@/lib/colorways";
+import { PC_COLORS, PC_COLOR_KEYS, pcLooksLikeLife, type PcColorKey } from "@/lib/pc-colors";
 import { cn } from "@/components/ui";
 import { BOARD_THEMES, TV_SCREENS, type AppSettings, type BoardTheme, type TvScreens } from "@/lib/types";
 import { SOUNDS, type SoundKey } from "@/lib/sounds";
 import { Button, Input, Label, Notice, Textarea } from "@/components/ui";
 import { ListCard, ListTitle, ROW_INSET } from "@/components/tide";
-import { saveBoardSettings, saveBoardTheme, saveColorway, saveSaleSound, saveTeamGoal, saveTeamPcGoal, saveTvScreens } from "../actions";
+import { saveBoardSettings, saveBoardTheme, saveColorway, savePcColor, saveSaleSound, saveTeamGoal, saveTeamPcGoal, saveTvScreens } from "../actions";
 import { toast } from "@/components/toaster";
 import { KindDot } from "@/components/kind";
 
@@ -67,6 +68,12 @@ export function SettingsForms({
         <ListTitle>Colorway</ListTitle>
         <p className="mt-1 px-1 text-[13px] text-gray-500">The color story on every phone and the TV. Crimson is the default; the app icon stays Crimson.</p>
         <ColorwayPicker current={settings.colorway} />
+      </section>
+
+      <section>
+        <ListTitle>P&amp;C color</ListTitle>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">P&amp;C&apos;s own color on the bars, rings and tags, next to life&apos;s. Dusty blue is the default.</p>
+        <PcColorPicker current={settings.pcColor} colorway={settings.colorway} />
       </section>
 
       <section>
@@ -187,6 +194,64 @@ function ColorwayPicker({ current }: { current: ColorwayKey }) {
         );
       })}
     </div>
+  );
+}
+
+function PcColorPicker({ current, colorway }: { current: PcColorKey; colorway: ColorwayKey }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [picked, setPicked] = useState<PcColorKey>(current);
+  return (
+    <>
+      <div role="radiogroup" aria-label="P&C color" className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {PC_COLOR_KEYS.map((key) => {
+          const c = PC_COLORS[key];
+          const on = picked === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              data-pc-color-option={key}
+              disabled={pending}
+              onClick={() => {
+                setPicked(key);
+                // This screen changes at once; every other screen on the next load; the TV on its next poll.
+                document.documentElement.setAttribute("data-pc-color", key);
+                start(async () => {
+                  let ok = false;
+                  try {
+                    const r = await savePcColor(key);
+                    toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+                    ok = r.ok;
+                  } catch {
+                    toast("Couldn't reach the server. Try again.", false);
+                  }
+                  if (ok) router.refresh();
+                  else {
+                    setPicked(current);
+                    document.documentElement.setAttribute("data-pc-color", current);
+                  }
+                });
+              }}
+              className={cn("flex min-h-14 items-center gap-3 rounded-2xl bg-surface px-3 text-left shadow-card transition", on ? "outline-2 outline-accent" : "hover:bg-gray-50")}
+            >
+              <span aria-hidden className="h-9 w-9 shrink-0 rounded-xl" style={{ background: `linear-gradient(135deg, ${c.swatch[0]}, ${c.swatch[1]})` }} />
+              <span className="min-w-0">
+                <span className={cn("block text-[15px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{c.name}</span>
+                <span className="block truncate text-[12px] font-medium text-gray-500">{c.idea}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {pcLooksLikeLife(colorway, picked) && (
+        <p className="mt-2 px-1 text-[13px] font-medium text-down">
+          {COLORWAYS[colorway].name} is close to {PC_COLORS[picked].name}, so P&amp;C can look like life. {colorway === "emerald" ? "Dusty blue or Silver" : "Silver or Sage"} keeps them apart.
+        </p>
+      )}
+    </>
   );
 }
 

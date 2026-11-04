@@ -183,10 +183,13 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
     applyTheme(snap.boardTheme);
   }, [snap.boardTheme]);
 
-  // The owner's colorway from the latest poll (a change in Settings reaches the TV within 5 s).
+  // The owner's colorway and P&C color from the latest poll (a change in Settings reaches the TV within 5 s).
   useEffect(() => {
     document.documentElement.setAttribute("data-colorway", snap.colorway);
   }, [snap.colorway]);
+  useEffect(() => {
+    document.documentElement.setAttribute("data-pc-color", snap.pcColor);
+  }, [snap.pcColor]);
 
   // Key: F full screen.
   useEffect(() => {

@@ -8,6 +8,7 @@ import { isDateKey, isMonthKey, todayInDetroit, addDays } from "@/lib/month";
 import { parseDollars } from "@/lib/money";
 import { DEFAULT_CARRIERS, DEFAULT_PC_CARRIERS, DEFAULT_PRODUCTS, isBoardTheme, isTvScreens, type PcCarrier } from "@/lib/types";
 import { isColorwayKey } from "@/lib/colorways";
+import { isPcColorKey } from "@/lib/pc-colors";
 import { isSoundKey } from "@/lib/sounds";
 
 export type ActionResult = { ok: true; message?: string; id?: string } | { ok: false; error: string };
@@ -281,6 +282,20 @@ export async function saveColorway(key: string): Promise<ActionResult> {
     if (!isColorwayKey(key)) return { ok: false, error: "That colorway isn't one of the choices." };
     const current = await getSettings();
     await saveSettings({ ...current, colorway: key });
+    refresh();
+    return { ok: true, message: "Saved. The TV changes within a few seconds." };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}
+
+/** Settings > P&C color: P&C's own color on every screen; the TV follows it on its next poll. */
+export async function savePcColor(key: string): Promise<ActionResult> {
+  try {
+    await requireRole("owner");
+    if (!isPcColorKey(key)) return { ok: false, error: "That P&C color isn't one of the choices." };
+    const current = await getSettings();
+    await saveSettings({ ...current, pcColor: key });
     refresh();
     return { ok: true, message: "Saved. The TV changes within a few seconds." };
   } catch (err) {

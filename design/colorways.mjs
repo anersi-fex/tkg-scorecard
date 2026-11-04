@@ -76,3 +76,41 @@ export function overrideCss(c) {
   // html:root[...] outranks the theme's own :root[data-theme] blocks, so these win in both modes.
   return `html:root,html:root[data-theme="light"]{${block(c.light)}} html:root[data-theme="dark"]{${block(c.dark)}} @media (prefers-color-scheme: dark){html:root:not([data-theme="light"]){${block(c.dark)}}}`;
 }
+
+// P&C's own color (owner, 2026-11-04: "just pick one for me, whichever one you think is the best.
+// If you want, you can have options for it as well in the settings"). Dusty blue by default (the
+// base tokens in globals.css); Silver, Sage and Ocean through html[data-pc-color]. Each gradient is
+// gentle on purpose: he found a strong steel-to-silver one "too much". No neon.
+// Keys: pc (dots, the chart line), pcText (the P&C tag's words), pcTint (the tag's fill),
+// pcFrom and pcTo (bars and the goal ring). The swatches in src/lib/pc-colors.ts copy light pcFrom/pcTo.
+export const PC_COLORS = [
+  {
+    key: "dusty",
+    name: "Dusty blue",
+    idea: "A soft, grayed blue: calm next to life's color, never neon.",
+    light: { pc: "#4a6fa3", pcText: "#35588a", pcTint: "#e3ebf6", pcFrom: "#4e6f9f", pcTo: "#7d9fcd" },
+    dark: { pc: "#86a6d6", pcText: "#b3c8ea", pcTint: "#1b2539", pcFrom: "#6787b9", pcTo: "#a5bfe3" },
+  },
+  {
+    key: "silver",
+    name: "Silver",
+    idea: "Steel to silver, the softer gradient.",
+    light: { pc: "#6b7a90", pcText: "#475569", pcTint: "#e5e9ef", pcFrom: "#6f7f96", pcTo: "#a3b0c2" },
+    dark: { pc: "#a5b4c8", pcText: "#cbd5e1", pcTint: "#1e2533", pcFrom: "#8193ab", pcTo: "#cbd5e1" },
+  },
+  {
+    key: "sage",
+    name: "Sage",
+    idea: "A light, muted green.",
+    light: { pc: "#4f8a6e", pcText: "#2f6b50", pcTint: "#e1f0e8", pcFrom: "#4f8a6e", pcTo: "#86bb9f" },
+    dark: { pc: "#8fc1a9", pcText: "#b7dcc9", pcTint: "#1c2c25", pcFrom: "#6fa38b", pcTo: "#a9d3bd" },
+  },
+  {
+    key: "ocean",
+    name: "Ocean",
+    idea: "Sea blue with a hint of teal.",
+    light: { pc: "#2f7f9e", pcText: "#1f6580", pcTint: "#dff0f6", pcFrom: "#2f7f9e", pcTo: "#6cb2cc" },
+    dark: { pc: "#5fa9c6", pcText: "#a3d3e4", pcTint: "#13303b", pcFrom: "#43869f", pcTo: "#86c3d8" },
+  },
+];
+export const DEFAULT_PC_COLOR = "dusty";

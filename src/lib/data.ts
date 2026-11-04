@@ -3,6 +3,7 @@ import { db } from "./supabase";
 import { DEFAULT_SETTINGS, isBoardTheme, isSaleKind, isTvScreens, type Agent, type AppSettings, type LoggedBy, type PcCarrier, type Sale } from "./types";
 import { datesOfMonth, isMonthKey } from "./month";
 import { DEFAULT_COLORWAY, isColorwayKey } from "./colorways";
+import { DEFAULT_PC_COLOR, isPcColorKey } from "./pc-colors";
 import { isSoundKey } from "./sounds";
 
 /**
@@ -214,6 +215,7 @@ export async function getSettings(): Promise<AppSettings> {
     carriers: list(v.carriers, DEFAULT_SETTINGS.carriers),
     pcCarriers: pcCarrierList(v.pcCarriers),
     colorway: isColorwayKey(v.colorway) ? v.colorway : DEFAULT_COLORWAY,
+    pcColor: isPcColorKey(v.pcColor) ? v.pcColor : DEFAULT_PC_COLOR,
     boardTheme: isBoardTheme(v.boardTheme) ? v.boardTheme : DEFAULT_SETTINGS.boardTheme,
     sound: isSoundKey(v.sound) ? v.sound : DEFAULT_SETTINGS.sound,
     tvScreens: isTvScreens(v.tvScreens) ? v.tvScreens : DEFAULT_SETTINGS.tvScreens,

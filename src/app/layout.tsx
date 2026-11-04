@@ -81,11 +81,12 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  // The owner's colorway (Settings) colors every screen, and the TV look says whether /board opens
-  // dark or light (THEME_SCRIPT reads it before paint); the TV re-applies both from its 5-second poll.
+  // The owner's colorway and P&C color (Settings) color every screen, and the TV look says whether
+  // /board opens dark or light (THEME_SCRIPT reads it before paint); the TV re-applies all three
+  // from its 5-second poll.
   const look = await loadLook();
   return (
-    <html lang="en" className="h-full antialiased" data-colorway={look.colorway} data-board-theme={look.boardTheme} suppressHydrationWarning>
+    <html lang="en" className="h-full antialiased" data-colorway={look.colorway} data-pc-color={look.pcColor} data-board-theme={look.boardTheme} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>

@@ -4,6 +4,7 @@ import { datesOfMonth, monthClock, pace, type MonthClock, type Pace } from "./mo
 import { percentOf } from "./money";
 import { DEFAULT_BOARD_THEME, DEFAULT_TV_SCREENS, type Agent, type BoardTheme, type SaleKind, type TvScreens } from "./types";
 import { DEFAULT_COLORWAY, type ColorwayKey } from "./colorways";
+import { DEFAULT_PC_COLOR, type PcColorKey } from "./pc-colors";
 import { DEFAULT_SOUND, type SoundKey } from "./sounds";
 import { pcBreakdown, rankOrder, type PcCarrierCount, type PcCount } from "./views";
 
@@ -146,6 +147,8 @@ export interface MonthSnapshot {
   message: string;
   /** The colorway the owner picked (the TV applies it on each poll). */
   colorway: ColorwayKey;
+  /** P&C's color the owner picked (the TV applies it on each poll). */
+  pcColor: PcColorKey;
   /** The TV look the owner picked, dark or light (the TV applies it on each poll). */
   boardTheme: BoardTheme;
   /** The sound the TV plays with a celebration (Settings > Sale sound); "off" for none. */
@@ -194,6 +197,7 @@ export function buildSnapshot(input: {
   recent: SaleWithAgent[];
   message: string;
   colorway?: ColorwayKey;
+  pcColor?: PcColorKey;
   boardTheme?: BoardTheme;
   sound?: SoundKey;
   tvScreens?: TvScreens;
@@ -359,6 +363,7 @@ export function buildSnapshot(input: {
     daily,
     message,
     colorway: input.colorway ?? DEFAULT_COLORWAY,
+    pcColor: input.pcColor ?? DEFAULT_PC_COLOR,
     boardTheme: input.boardTheme ?? DEFAULT_BOARD_THEME,
     sound: input.sound ?? DEFAULT_SOUND,
     tvScreens: input.tvScreens ?? DEFAULT_TV_SCREENS,
