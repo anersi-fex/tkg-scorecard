@@ -285,10 +285,54 @@ function AccountMenu({ role }: { role: Role }) {
 
 const TAB_HEIGHT = 62;
 
+/** A field that brings up the phone's keyboard (or a picker) when it has focus. */
+function takesTyping(el: Element | null): boolean {
+  if (!el) return false;
+  if (el.tagName === "TEXTAREA" || el.tagName === "SELECT" || (el as HTMLElement).isContentEditable) return true;
+  if (el.tagName !== "INPUT") return false;
+  const type = (el as HTMLInputElement).type;
+  return !["checkbox", "radio", "button", "submit", "reset", "range", "file", "color"].includes(type);
+}
+
+/**
+ * True while the phone's keyboard is likely up (owner, 2026-11-04: "the keyboard pulls up, and then so do
+ * the bottom menu buttons ... really annoying"): a field that takes typing has focus on a touch screen, or
+ * the visible part of the screen shrank by more than a browser bar would. The tab bar hides meanwhile and
+ * comes back when the keyboard goes.
+ */
+function useKeyboardUp(): boolean {
+  const [up, setUp] = useState(false);
+  useEffect(() => {
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    const vv = window.visualViewport;
+    let timer: number | undefined;
+    const compute = () => {
+      const shrunk = vv ? window.innerHeight - vv.height > 120 : false;
+      setUp(shrunk || (coarse && takesTyping(document.activeElement)));
+    };
+    // After a blur the focus may land on another field in the same tick: look again a moment later.
+    const later = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(compute, 60);
+    };
+    document.addEventListener("focusin", compute);
+    document.addEventListener("focusout", later);
+    vv?.addEventListener("resize", compute);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("focusin", compute);
+      document.removeEventListener("focusout", later);
+      vv?.removeEventListener("resize", compute);
+    };
+  }, []);
+  return up;
+}
+
 /** The phone's tab bar, a strip of its own at the bottom (computers keep the links in the header). */
 export function TabBar() {
   const pathname = usePathname();
   const ref = useRef<HTMLElement | null>(null);
+  const keyboardUp = useKeyboardUp();
 
   useEffect(() => {
     const root = document.documentElement;
@@ -304,16 +348,24 @@ export function TabBar() {
     };
   }, []);
 
-  return <TabBarView pathname={pathname} navRef={ref} />;
+  return <TabBarView pathname={pathname} navRef={ref} hidden={keyboardUp} />;
 }
 
-export function TabBarView({ pathname, navRef }: { pathname: string; navRef?: Ref<HTMLElement> }) {
+export function TabBarView({ pathname, navRef, hidden = false }: { pathname: string; navRef?: Ref<HTMLElement>; hidden?: boolean }) {
   const { isOn, pick } = usePickedLink(pathname);
   return (
     // Its own strip at the end of the page (owner, 2026-11-04: "its own container ... make it sticky"): it
     // sticks to the bottom edge while the page is longer than the screen and rests in its own place at the
     // very end, so no row is ever under it. Solid, a hairline above, the home indicator's space inside it.
-    <nav ref={navRef} data-tabbar aria-label="Main" className="sticky bottom-0 z-30 mt-auto border-t border-line bg-surface sm:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+    // While the keyboard is up it is gone, so it never rides on top of the keyboard.
+    <nav
+      ref={navRef}
+      data-tabbar
+      aria-label="Main"
+      hidden={hidden}
+      className={cn("sticky bottom-0 z-30 mt-auto border-t border-line bg-surface sm:hidden", hidden && "!hidden")}
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+    >
       <div className="mx-auto flex w-full max-w-3xl items-center justify-around px-2" style={{ height: TAB_HEIGHT }}>
         {LINKS.map((l) => {
           const active = isOn(l);

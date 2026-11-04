@@ -305,6 +305,12 @@ try {
   await p.evaluate(() => window.scrollTo(0, 0));
   await p.goto(`${APP}/log`);
   await p.screenshot({ path: `${OUT}/08-phone-log.png`, fullPage: true });
+  // The keyboard (owner, 2026-11-04): while a field that takes typing has focus on a touch screen the tab bar is gone
+  await p.waitForSelector("nav[data-tabbar]", { state: "visible" });
+  await p.focus("#premium");
+  check(await settles(p, () => document.querySelector("nav[data-tabbar]")?.offsetParent === null, 2000), "the tab bar hides while the premium box has focus (the keyboard is up)");
+  await p.evaluate(() => document.activeElement.blur());
+  check(await settles(p, () => document.querySelector("nav[data-tabbar]")?.offsetParent !== null, 2000), "the tab bar comes back once the keyboard goes");
   // The Wrap: today's top producer, everybody, the carriers; one iPhone screenshot above the tab bar,
   // measured on the fullest day: everyone sells.
   if (TOKEN) {
