@@ -198,7 +198,7 @@ function PcRow({ person }: { person: Person }) {
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="text-[14px] font-bold text-gray-900">P&amp;C licensed</p>
-        <p className="text-[12px] font-medium text-gray-500">Log a sale offers Life or P&amp;C for them; a P&amp;C sale counts in purple.</p>
+        <p className="text-[12px] font-medium text-gray-500">Log a sale offers Life or P&amp;C for them; a P&amp;C sale shows on its own P&amp;C board.</p>
       </div>
       <Switch
         checked={on}

@@ -79,7 +79,7 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
 
   return (
     <>
-      <Header period={period} day={day} today={today} badge={verdict} total={wrap.teamCents > 0 ? `${formatDollars(wrap.teamCents)} · ${wrap.policies} ${wrap.policies === 1 ? "policy" : "policies"}` : undefined} />
+      <Header period={period} day={day} today={today} badge={verdict} total={wrap.teamCents > 0 ? `${wrap.pcCents > 0 ? `${formatDollars(wrap.lifeCents)} life + ${formatDollars(wrap.pcCents)} P&C` : formatDollars(wrap.teamCents)} · ${wrap.policies} ${wrap.policies === 1 ? "policy" : "policies"}` : undefined} />
 
       {/* Player of the period */}
       {wrap.player ? (
@@ -189,7 +189,7 @@ function verdictBadge(w: PeriodWrap): { text: string; tone: Tone } {
   return { text: "No goal set", tone: "gray" };
 }
 
-/** One of the three carrier squares; the busiest carrier's count wears the accent; a P&C carrier gets the purple dot. */
+/** One of the three carrier squares; the busiest carrier's count wears the accent; a P&C carrier gets the P&C dot. */
 function CarrierSquare({ name, count, top, pc }: { name: string; count: number; top: boolean; pc: boolean }) {
   return (
     <div className="min-w-0 rounded-[18px] bg-surface px-3 py-2.5 shadow-card">

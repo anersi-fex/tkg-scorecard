@@ -157,6 +157,10 @@ try {
   check((await o.getAttribute("html", "data-board-theme")) === "dark", "the page carries the TV look for the pre-paint script");
   await o.click(`${tvLook} [role=radio]:has-text('Light')`);
   check((await feedUntil(owner, (j) => j.boardTheme === "light")).boardTheme === "light", "the board feed carries the TV look (light)");
+  // TV screens (2026-11-04): rotate the three screens, or keep the TV on one; Rotate to start
+  const tvScreens = "[role=radiogroup][aria-label='TV screens']";
+  check((await o.locator(`${tvScreens} [role=radio]`).count()) === 4 && (await o.textContent(`${tvScreens} [role=radio][aria-checked=true]`)).includes("Rotate"), "Settings offers the TV screens, Rotate to start");
+  check((await (await owner.request.get(`${APP}/api/board`)).json()).tvScreens === "rotate", "the board feed carries the TV screens setting");
   // Sale sound (2026-11-04): the owner's four sounds plus Off, a play button each, picked on a tap, carried by the feed
   const soundRows = "[role=radiogroup][aria-label='Sale sound']";
   check((await o.locator(`${soundRows} [role=radio]`).count()) === 5 && (await o.locator(`${soundRows} button[aria-label^='Play ']`).count()) === 4, "Settings offers four sale sounds and Off, each sound with a play button");
@@ -258,8 +262,23 @@ try {
   await o.goto(`${APP}/`);
   await o.waitForSelector("text=Leaderboard");
   const pcHome = await o.textContent("body");
+  // The goal is life (owner, 2026-11-04): This month opens on Life, where Moe's P&C does not count
+  check((await o.locator("nav[aria-label=View] a").count()) === 3 && (await o.textContent("nav[aria-label=View] a[aria-current=true]")).includes("Life"), "This month opens on Life, with Life, P&C and Total to switch");
+  const lifeMoe = await o.locator("li:has-text('Moe Karim')").first().textContent();
+  check(pcHome.includes("Life production") && pcHome.includes("Life leaderboard") && lifeMoe.includes("$6,100") && !lifeMoe.includes("$7,960"), "the Life view counts life only (Moe: $6,100 of life, his P&C left out)");
+  await o.click("nav[aria-label=View] a:has-text('Total')");
+  await o.waitForSelector("text=Agency leaderboard");
+  const totalHome = await o.textContent("body");
   const moeRow = await o.locator("li:has-text('Moe Karim')").first().textContent();
-  check(pcHome.includes("Life $") && pcHome.includes("P&C $1,860") && moeRow.includes("Life $6,100 · 1") && moeRow.includes("P&C $1,860 · 1"), "Home splits life and P&C under the team total and on Moe's row");
+  check(totalHome.includes("Agency total") && totalHome.includes("P&C $1,860") && moeRow.includes("$7,960") && moeRow.includes("Life $6,100 · 1") && moeRow.includes("P&C $1,860 · 1"), "the Total view adds life and P&C up and splits them on Moe's row");
+  await o.click("nav[aria-label=View] a:has-text('P&C')");
+  await o.waitForSelector("text=P&C leaderboard");
+  const pcView = await o.textContent("body");
+  const pcMoe = await o.locator("li:has-text('Moe Karim')").first().textContent();
+  check(pcView.includes("P&C production") && pcMoe.includes("$1,860") && pcMoe.includes("Auto 1") && pcView.includes("By carrier") && pcView.includes("Progressive"), "the P&C view: Moe on the P&C board with his line, and the carrier");
+  check(!(await o.textContent("[data-board=pc]")).includes("Alex Alekseyev"), "the P&C board leaves out people who are not P&C licensed");
+  await o.goto(`${APP}/`);
+  await o.waitForSelector("text=Leaderboard");
   // Home and the TV draw the goal-line legend only once a business day of the month has passed: never on a month's first weekend.
   const tick = (await (await owner.request.get(`${APP}/api/board`)).json()).clock.elapsed > 0;
   check(pcHome.includes("goal line today") === tick, tick ? "Home names the goal line tick" : "Home hides the goal line tick before the month's first business day");
@@ -383,6 +402,12 @@ try {
   await p.goto(`${APP}/`);
   await p.waitForSelector("text=Leaderboard");
   await p.screenshot({ path: `${OUT}/09-phone-home-dark.png`, fullPage: true });
+  await p.goto(`${APP}/?view=pc`);
+  await p.waitForSelector("text=P&C leaderboard");
+  await p.screenshot({ path: `${OUT}/09b-phone-home-pc.png`, fullPage: true });
+  await p.goto(`${APP}/?view=total`);
+  await p.waitForSelector("text=Agency leaderboard");
+  await p.screenshot({ path: `${OUT}/09c-phone-home-total.png`, fullPage: true });
   await phone.close();
 
   // --- The TV board ---
@@ -441,12 +466,51 @@ try {
     check((await t.getAttribute("[role=status]", "data-sound")) === "air-horn", "the celebration carries the chosen sale sound (air horn)");
     check(!(await t.textContent("footer")).includes("Click or press a key once for sound"), "a sale sound that plays leaves no sound hint on the TV");
     check(celebrate.includes("Maira Santos") && celebrate.includes("$2,750") && celebrate.includes("Americo"), "the board celebrates the new sale with the name, the amount and the carrier");
+    // Two sales came in (Maira's, then Moe's P&C): 9 s each on screen
+    await t.waitForSelector("[role=status]", { state: "detached", timeout: 40000 });
     const tvText = await t.textContent("body");
-    check(tvText.includes("goal line today") === tick && tvText.includes("Life $") && tvText.includes("P&C $"), "the TV shows the goal line legend (once a business day has passed) and the P&C split");
+    check((await t.getAttribute("main", "data-screen")) === "life" && tvText.includes("Life leaderboard") && tvText.includes("Life production") && tvText.includes("goal line today") === tick, "the TV opens on the life screen, with the goal line legend once a business day has passed");
+    // Settings > TV screens: keep the TV on the agency total, then on P&C, then back to rotating
+    await o.goto(`${APP}/settings`);
+    await o.click("[role=radiogroup][aria-label='TV screens'] [role=radio]:has-text('Agency total only')");
+    check(await settles(t, () => document.querySelector("main")?.dataset.screen === "total", 12000), "Agency total only in Settings puts the TV on the agency total within a poll");
+    const totalText = await t.textContent("body");
+    check(totalText.includes("Agency leaderboard") && totalText.includes("Life $") && totalText.includes("P&C $") && totalText.includes("with P&C"), "the agency total screen adds life and P&C up and splits them");
+    check((await t.locator("[data-pill]").count()) === 1, "a kept screen shows only its own pill");
+    await t.screenshot({ path: `${OUT}/10c-board-total.png` });
+    await o.click("[role=radiogroup][aria-label='TV screens'] [role=radio]:has-text('P&C only')");
+    check(await settles(t, () => document.querySelector("main")?.dataset.screen === "pc", 12000), "P&C only puts the TV on the P&C screen within a poll");
+    // innerText: what the screen shows (the page's own data script carries every name)
+    const pcText = await t.innerText("main");
+    check(pcText.includes("P&C leaderboard") && pcText.includes("Moe Karim") && pcText.includes("By carrier") && pcText.includes("Geico") && pcText.includes("By line") && pcText.includes("Umbrella") && !pcText.includes("Alex Alekseyev"), "the P&C screen: the P&C team, by carrier, by line, no one without P&C");
+    await t.screenshot({ path: `${OUT}/10b-board-pc.png` });
+    await o.click("[role=radiogroup][aria-label='TV screens'] [role=radio]:has-text('Rotate')");
+    check(await settles(t, () => document.querySelector("main")?.dataset.screen === "life" && document.querySelectorAll("[data-pill]").length === 3, 12000), "Rotate brings the TV back to life with all three pills");
   } else {
     console.log("skip Shortcut endpoint (no LOG_TOKEN)");
   }
   await tv.close();
+
+  // The rotation (2026-11-04): life for a minute, then P&C and the agency total for 15 s each
+  {
+    const rc = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+    await rc.addCookies(await owner.cookies());
+    const r = await rc.newPage();
+    await r.clock.install();
+    await r.goto(`${APP}/board`);
+    await r.waitForSelector("main[data-screen]");
+    const screenNow = () => r.getAttribute("main", "data-screen");
+    check((await screenNow()) === "life", "the rotation starts on life");
+    await r.clock.runFor(59_000);
+    check((await screenNow()) === "life", "life stays the whole minute");
+    await r.clock.runFor(2_000);
+    check((await screenNow()) === "pc", "then P&C");
+    await r.clock.runFor(15_500);
+    check((await screenNow()) === "total", "then the agency total");
+    await r.clock.runFor(15_500);
+    check((await screenNow()) === "life", "then life again");
+    await rc.close();
+  }
 
   // The sound check (2026-11-04): a browser that holds sound back until a click says so on the TV
   // before any sale (headless Chromium allows sound, so this one is launched with the desktop rule).

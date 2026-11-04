@@ -6,7 +6,7 @@ import { requireRole } from "@/lib/auth";
 import { addAgent, deleteSale, getSale, insertSale, listAgents, saveSettings, setAgentGoal, setTeamGoal, updateAgent, updateSale, getSettings } from "@/lib/data";
 import { isDateKey, isMonthKey, todayInDetroit, addDays } from "@/lib/month";
 import { parseDollars } from "@/lib/money";
-import { DEFAULT_CARRIERS, DEFAULT_PC_CARRIERS, DEFAULT_PRODUCTS, isBoardTheme, type PcCarrier } from "@/lib/types";
+import { DEFAULT_CARRIERS, DEFAULT_PC_CARRIERS, DEFAULT_PRODUCTS, isBoardTheme, isTvScreens, type PcCarrier } from "@/lib/types";
 import { isColorwayKey } from "@/lib/colorways";
 import { isSoundKey } from "@/lib/sounds";
 
@@ -263,6 +263,20 @@ export async function saveBoardTheme(theme: string): Promise<ActionResult> {
     if (!isBoardTheme(theme)) return { ok: false, error: "The TV look is Dark or Light." };
     const current = await getSettings();
     await saveSettings({ ...current, boardTheme: theme });
+    refresh();
+    return { ok: true, message: "Saved. The TV changes within a few seconds." };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}
+
+/** Settings > TV screens: rotate the three screens, or keep the TV on one; the TV follows on its next poll. */
+export async function saveTvScreens(choice: string): Promise<ActionResult> {
+  try {
+    await requireRole("owner");
+    if (!isTvScreens(choice)) return { ok: false, error: "That isn't one of the TV screens." };
+    const current = await getSettings();
+    await saveSettings({ ...current, tvScreens: choice });
     refresh();
     return { ok: true, message: "Saved. The TV changes within a few seconds." };
   } catch (err) {

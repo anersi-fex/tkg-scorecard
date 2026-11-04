@@ -69,8 +69,12 @@
   --color-purple-100: var(--t-purple-100);
   --color-purple-800: var(--t-purple-800);
   --color-purple-900: var(--t-purple-900);
-  /* P&C (owner, 2026-11-04): the purple that splits a P&C share from life on bars, rings and dots */
+  /* P&C (owner, 2026-11-04): its own color, apart from life, on bars, rings, dots and the P&C tag; teal
+     beside Crimson and Champion, coral beside Sky and Emerald (owner, 2026-11-04: "i don't like that much
+     purple on the screen"). Kept to bars, dots and pills: numbers stay in the text color. */
   --color-pc: var(--t-pc);
+  --color-pc-text: var(--t-pc-text);
+  --color-pc-tint: var(--t-pc-tint);
 
   /* Named Tide tokens for new code: bg-line, text-muted, bg-tint, text-accent, bg-rep … */
   --color-line: var(--t-line);
@@ -155,7 +159,11 @@
   --t-purple-100: #e9dffd;
   --t-purple-800: #5b2db0;
   --t-purple-900: #4a2391;
-  --t-pc: #6d3fd3;
+  --t-pc: #0d9488;
+  --t-pc-text: #0f766e;
+  --t-pc-tint: #ccfbf1;
+  --t-pc-from: #0f766e;
+  --t-pc-to: #14b8a6;
 
   /* Crimson, the default colorway (owner pick, 2026-10-27): The Koka Group's red, coral on dark. */
   --t-accent: #c42b32;
@@ -246,7 +254,11 @@
     --t-purple-100: #2e1d47;
     --t-purple-800: #d8b4fe;
     --t-purple-900: #e9d5ff;
-    --t-pc: #b794f6;
+    --t-pc: #2dd4bf;
+    --t-pc-text: #5eead4;
+    --t-pc-tint: #0f3330;
+    --t-pc-from: #14b8a6;
+    --t-pc-to: #5eead4;
 
     --t-accent: #ff6b57;
     --t-accent-text: #ff8a78;
@@ -332,7 +344,11 @@
   --t-purple-100: #2e1d47;
   --t-purple-800: #d8b4fe;
   --t-purple-900: #e9d5ff;
-  --t-pc: #b794f6;
+  --t-pc: #2dd4bf;
+  --t-pc-text: #5eead4;
+  --t-pc-tint: #0f3330;
+  --t-pc-from: #14b8a6;
+  --t-pc-to: #5eead4;
 
   --t-accent: #ff6b57;
   --t-accent-text: #ff8a78;
@@ -375,6 +391,11 @@ html[data-colorway="sky"] {
   --t-chip-text: #075985;
   --t-chart-1: #0284c7;
   --t-chart-2: #d98a00;
+  --t-pc: #e5534b;
+  --t-pc-text: #b42318;
+  --t-pc-tint: #fde7e4;
+  --t-pc-from: #d6453d;
+  --t-pc-to: #f2785f;
 }
 html[data-colorway="sky"][data-theme="dark"] {
   --t-accent: #38bdf8;
@@ -390,6 +411,11 @@ html[data-colorway="sky"][data-theme="dark"] {
   --t-chip-text: #bae6fd;
   --t-chart-1: #38bdf8;
   --t-chart-2: #f5c451;
+  --t-pc: #ff8a78;
+  --t-pc-text: #ffb4a8;
+  --t-pc-tint: #3a1a1a;
+  --t-pc-from: #e5534b;
+  --t-pc-to: #ff9a85;
 }
 @media (prefers-color-scheme: dark) {
   html[data-colorway="sky"]:not([data-theme="light"]) {
@@ -406,6 +432,11 @@ html[data-colorway="sky"][data-theme="dark"] {
     --t-chip-text: #bae6fd;
     --t-chart-1: #38bdf8;
     --t-chart-2: #f5c451;
+    --t-pc: #ff8a78;
+    --t-pc-text: #ffb4a8;
+    --t-pc-tint: #3a1a1a;
+    --t-pc-from: #e5534b;
+    --t-pc-to: #ff9a85;
   }
 }
 /* Champion: Gold to bronze on warm neutrals: trophy case, podium, awards night. The warmest of the set. */
@@ -489,6 +520,11 @@ html[data-colorway="emerald"] {
   --t-chip-text: #0b5a3a;
   --t-chart-1: #0f8f5a;
   --t-chart-2: #c98a00;
+  --t-pc: #e5534b;
+  --t-pc-text: #b42318;
+  --t-pc-tint: #fde7e4;
+  --t-pc-from: #d6453d;
+  --t-pc-to: #f2785f;
 }
 html[data-colorway="emerald"][data-theme="dark"] {
   --t-accent: #34d399;
@@ -504,6 +540,11 @@ html[data-colorway="emerald"][data-theme="dark"] {
   --t-chip-text: #86efac;
   --t-chart-1: #34d399;
   --t-chart-2: #f5c451;
+  --t-pc: #ff8a78;
+  --t-pc-text: #ffb4a8;
+  --t-pc-tint: #3a1a1a;
+  --t-pc-from: #e5534b;
+  --t-pc-to: #ff9a85;
 }
 @media (prefers-color-scheme: dark) {
   html[data-colorway="emerald"]:not([data-theme="light"]) {
@@ -520,6 +561,11 @@ html[data-colorway="emerald"][data-theme="dark"] {
     --t-chip-text: #86efac;
     --t-chart-1: #34d399;
     --t-chart-2: #f5c451;
+    --t-pc: #ff8a78;
+    --t-pc-text: #ffb4a8;
+    --t-pc-tint: #3a1a1a;
+    --t-pc-from: #e5534b;
+    --t-pc-to: #ff9a85;
   }
 }
 /* colorways:end */
@@ -529,6 +575,10 @@ html[data-colorway="emerald"][data-theme="dark"] {
   background-image: var(--t-grad);
 }
 /* The gradient behind white text labels (primary buttons): a touch deeper in dark mode */
+/* A P&C share on a bar: its own gradient, like life's brand gradient */
+@utility bg-pc-grad {
+  background-image: linear-gradient(90deg, var(--t-pc-from), var(--t-pc-to));
+}
 @utility bg-tide-strong {
   background-image: var(--t-grad-strong);
 }
@@ -606,9 +656,24 @@ body {
   animation: board-flash 2.4s ease-out both;
 }
 
+/* The TV's screen pill: a line that runs out with the screen's time (owner, 2026-11-04: three screens that rotate) */
+@keyframes board-timer {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.board-timer {
+  transform-origin: left;
+  animation: board-timer linear both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .board-pop,
-  .board-flash {
+  .board-flash,
+  .board-timer {
     animation: none;
   }
 }

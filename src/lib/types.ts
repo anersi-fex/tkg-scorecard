@@ -48,6 +48,14 @@ export function isBoardTheme(v: unknown): v is BoardTheme {
   return v === "dark" || v === "light";
 }
 
+/** What the office TV shows (owner, 2026-11-04, Settings > TV screens): the three in rotation, or one kept on. */
+export type TvScreens = "rotate" | "life" | "pc" | "total";
+export const TV_SCREENS: TvScreens[] = ["rotate", "life", "pc", "total"];
+export const DEFAULT_TV_SCREENS: TvScreens = "rotate";
+export function isTvScreens(v: unknown): v is TvScreens {
+  return v === "rotate" || v === "life" || v === "pc" || v === "total";
+}
+
 export interface AppSettings {
   /** One line under the board's title ("Q4 push: every policy counts"). */
   message: string;
@@ -63,6 +71,8 @@ export interface AppSettings {
   boardTheme: BoardTheme;
   /** The sound the TV plays when a sale lands (Settings > Sale sound); "off" for none. */
   sound: SoundKey;
+  /** Rotate the TV's three screens, or keep it on one (Settings > TV screens). */
+  tvScreens: TvScreens;
 }
 
 export interface PcCarrier {
@@ -91,4 +101,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   colorway: DEFAULT_COLORWAY,
   boardTheme: DEFAULT_BOARD_THEME,
   sound: DEFAULT_SOUND,
+  tvScreens: DEFAULT_TV_SCREENS,
 };

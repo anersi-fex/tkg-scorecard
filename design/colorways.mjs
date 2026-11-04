@@ -13,8 +13,8 @@ export const COLORWAYS = [
     key: "emerald",
     name: "Emerald",
     idea: "Deep green to mint: money, growth, in the black. Calm and premium on the same cool neutrals.",
-    light: { accent: "#0f7a4f", accentText: "#0b6a44", tint: "#e3f5ec", gradFrom: "#0b7a4f", gradTo: "#22a36e", strongFrom: "#0b6e47", strongTo: "#15895a", glow: "rgba(15,122,79,0.3)", bar: "#9bdcbb", chipBg: "#dcf3e7", chipText: "#0b5a3a", chart1: "#0f8f5a", chart2: "#c98a00" },
-    dark: { accent: "#34d399", accentText: "#5ee3ad", tint: "#10332a", gradFrom: "#22b37a", gradTo: "#4ad99e", strongFrom: "#138a5b", strongTo: "#1aa36c", glow: "rgba(52,211,153,0.35)", bar: "#1f4a3a", chipBg: "#143221", chipText: "#86efac", chart1: "#34d399", chart2: "#f5c451" },
+    light: { accent: "#0f7a4f", accentText: "#0b6a44", tint: "#e3f5ec", gradFrom: "#0b7a4f", gradTo: "#22a36e", strongFrom: "#0b6e47", strongTo: "#15895a", glow: "rgba(15,122,79,0.3)", bar: "#9bdcbb", chipBg: "#dcf3e7", chipText: "#0b5a3a", chart1: "#0f8f5a", chart2: "#c98a00", pc: "#e5534b", pcText: "#b42318", pcTint: "#fde7e4", pcFrom: "#d6453d", pcTo: "#f2785f" },
+    dark: { accent: "#34d399", accentText: "#5ee3ad", tint: "#10332a", gradFrom: "#22b37a", gradTo: "#4ad99e", strongFrom: "#138a5b", strongTo: "#1aa36c", glow: "rgba(52,211,153,0.35)", bar: "#1f4a3a", chipBg: "#143221", chipText: "#86efac", chart1: "#34d399", chart2: "#f5c451", pc: "#ff8a78", pcText: "#ffb4a8", pcTint: "#3a1a1a", pcFrom: "#e5534b", pcTo: "#ff9a85" },
   },
   {
     key: "lagoon",
@@ -34,8 +34,8 @@ export const COLORWAYS = [
     key: "sky",
     name: "Sky",
     idea: "Sky blue to cyan: lighter, brighter and cooler than Sales Coach's cobalt, still a blue family cousin.",
-    light: { accent: "#0369a1", accentText: "#075985", tint: "#e0f2fe", gradFrom: "#0284c7", gradTo: "#06b6d4", strongFrom: "#0369a1", strongTo: "#0e7490", glow: "rgba(2,132,199,0.3)", bar: "#7dd3fc", chipBg: "#e0f2fe", chipText: "#075985", chart1: "#0284c7", chart2: "#d98a00" },
-    dark: { accent: "#38bdf8", accentText: "#7dd3fc", tint: "#0c2a3d", gradFrom: "#0ea5e9", gradTo: "#22d3ee", strongFrom: "#0369a1", strongTo: "#0e7490", glow: "rgba(56,189,248,0.35)", bar: "#1e3a4f", chipBg: "#0c2a3d", chipText: "#bae6fd", chart1: "#38bdf8", chart2: "#f5c451" },
+    light: { accent: "#0369a1", accentText: "#075985", tint: "#e0f2fe", gradFrom: "#0284c7", gradTo: "#06b6d4", strongFrom: "#0369a1", strongTo: "#0e7490", glow: "rgba(2,132,199,0.3)", bar: "#7dd3fc", chipBg: "#e0f2fe", chipText: "#075985", chart1: "#0284c7", chart2: "#d98a00", pc: "#e5534b", pcText: "#b42318", pcTint: "#fde7e4", pcFrom: "#d6453d", pcTo: "#f2785f" },
+    dark: { accent: "#38bdf8", accentText: "#7dd3fc", tint: "#0c2a3d", gradFrom: "#0ea5e9", gradTo: "#22d3ee", strongFrom: "#0369a1", strongTo: "#0e7490", glow: "rgba(56,189,248,0.35)", bar: "#1e3a4f", chipBg: "#0c2a3d", chipText: "#bae6fd", chart1: "#38bdf8", chart2: "#f5c451", pc: "#ff8a78", pcText: "#ffb4a8", pcTint: "#3a1a1a", pcFrom: "#e5534b", pcTo: "#ff9a85" },
   },
   {
     key: "field",

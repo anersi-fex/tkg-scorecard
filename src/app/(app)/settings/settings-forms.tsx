@@ -4,12 +4,13 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { COLORWAYS, COLORWAY_KEYS, type ColorwayKey } from "@/lib/colorways";
 import { cn } from "@/components/ui";
-import { BOARD_THEMES, type AppSettings, type BoardTheme } from "@/lib/types";
+import { BOARD_THEMES, TV_SCREENS, type AppSettings, type BoardTheme, type TvScreens } from "@/lib/types";
 import { SOUNDS, type SoundKey } from "@/lib/sounds";
 import { Button, Input, Label, Notice, Textarea } from "@/components/ui";
 import { ListCard, ListTitle, ROW_INSET } from "@/components/tide";
-import { saveBoardSettings, saveBoardTheme, saveColorway, saveSaleSound, saveTeamGoal } from "../actions";
+import { saveBoardSettings, saveBoardTheme, saveColorway, saveSaleSound, saveTeamGoal, saveTvScreens } from "../actions";
 import { toast } from "@/components/toaster";
+import { KindDot } from "@/components/kind";
 
 interface MonthGoal {
   key: string;
@@ -58,6 +59,12 @@ export function SettingsForms({
         <ListTitle>TV look</ListTitle>
         <p className="mt-1 px-1 text-[13px] text-gray-500">Light or dark on the office TV. The TV follows this within a few seconds.</p>
         <BoardThemePicker current={settings.boardTheme} />
+      </section>
+
+      <section>
+        <ListTitle>TV screens</ListTitle>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">What the office TV shows. It follows within a few seconds.</p>
+        <TvScreensPicker current={settings.tvScreens} />
       </section>
 
       <section>
@@ -236,6 +243,93 @@ function BoardThemePicker({ current }: { current: BoardTheme }) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+const TV_SCREEN_OPTIONS: Record<TvScreens, { label: string; note: string; icon: React.ReactNode; tone: string }> = {
+  rotate: {
+    label: "Rotate",
+    note: "Life 60 s, then P&C 15 s, then Agency total 15 s",
+    tone: "bg-surface-2 text-gray-700",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M20 11a8 8 0 0 0-14.3-4.9L4 8" />
+        <path d="M4 4v4h4" />
+        <path d="M4 13a8 8 0 0 0 14.3 4.9L20 16" />
+        <path d="M20 20v-4h-4" />
+      </svg>
+    ),
+  },
+  life: { label: "Life only", note: "the goal screen, all day", tone: "bg-tint", icon: <KindDot kind="life" className="h-3 w-3" /> },
+  pc: { label: "P&C only", note: "P&C sales and the P&C team", tone: "bg-pc-tint", icon: <KindDot kind="pc" className="h-3 w-3" /> },
+  total: {
+    label: "Agency total only",
+    note: "life and P&C added up",
+    tone: "bg-surface-2",
+    icon: (
+      <span aria-hidden className="flex h-3 w-3 overflow-hidden rounded-full">
+        <span className="h-full w-1/2 bg-accent" />
+        <span className="h-full w-1/2 bg-pc" />
+      </span>
+    ),
+  },
+};
+
+/** Settings > TV screens: the TV rotates its three screens, or stays on one; saved on a tap. */
+function TvScreensPicker({ current }: { current: TvScreens }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [picked, setPicked] = useState<TvScreens>(current);
+  // Follow the saved value when the page refreshes (a change made on another phone shows here).
+  const [seen, setSeen] = useState(current);
+  if (seen !== current) {
+    setSeen(current);
+    setPicked(current);
+  }
+  const pick = (key: TvScreens) => {
+    if (key === picked) return;
+    setPicked(key);
+    start(async () => {
+      try {
+        const r = await saveTvScreens(key);
+        toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+        if (r.ok) router.refresh();
+        else setPicked(current);
+      } catch {
+        toast("Couldn't reach the server. Try again.", false);
+        setPicked(current);
+      }
+    });
+  };
+  return (
+    <div role="radiogroup" aria-label="TV screens">
+      <ListCard className="mt-2">
+        {TV_SCREENS.map((key) => {
+          const o = TV_SCREEN_OPTIONS[key];
+          const on = picked === key;
+          return (
+            <li key={key} className={ROW_INSET.button}>
+              <button type="button" role="radio" aria-checked={on} disabled={pending} onClick={() => pick(key)} className="flex min-h-[60px] w-full items-center gap-3 px-4 py-2 text-left">
+                <span aria-hidden className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full", o.tone)}>
+                  {o.icon}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={cn("block truncate text-[15px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{o.label}</span>
+                  <span className="block truncate text-[12px] font-medium text-gray-500">{o.note}</span>
+                </span>
+                <span aria-hidden className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", on ? "bg-tide-strong text-white" : "border border-line")}>
+                  {on && (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M5 12.5l4.5 4.5L19 7.5" />
+                    </svg>
+                  )}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ListCard>
     </div>
   );
 }

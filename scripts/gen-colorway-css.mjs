@@ -31,6 +31,12 @@ const lines = (t, indent) =>
     `--t-chart-1: ${t.chart1};`,
     `--t-chart-2: ${t.chart2};`,
     t.down && `--t-down: ${t.down};`,
+    // P&C's own color where the colorway's accent sits near the default teal (owner, 2026-11-04)
+    t.pc && `--t-pc: ${t.pc};`,
+    t.pcText && `--t-pc-text: ${t.pcText};`,
+    t.pcTint && `--t-pc-tint: ${t.pcTint};`,
+    t.pcFrom && `--t-pc-from: ${t.pcFrom};`,
+    t.pcTo && `--t-pc-to: ${t.pcTo};`,
   ]
     .filter(Boolean)
     .map((l) => indent + l)
