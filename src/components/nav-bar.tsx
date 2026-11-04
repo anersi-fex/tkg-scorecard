@@ -13,7 +13,7 @@ import { logout } from "@/app/login/actions";
 /**
  * Tide app shell (the same as Sales Coach). The header (logo, and on a computer the main links)
  * stays at the top and publishes its height as --nav-h. On a phone the main links move to a
- * floating pill at the bottom (TabBar), which publishes --tabbar-h. Everything else (theme, the
+ * strip of their own at the bottom (TabBar, sticky, never over a row), which publishes --tabbar-h. Everything else (theme, the
  * TV board, Settings, Sign out) sits behind the initials at the top right.
  */
 
@@ -283,10 +283,9 @@ function AccountMenu({ role }: { role: Role }) {
   );
 }
 
-const TAB_BOTTOM = "max(14px, calc(env(safe-area-inset-bottom, 0px) - 6px))";
 const TAB_HEIGHT = 62;
 
-/** The phone's floating tab bar (computers keep the links in the header). */
+/** The phone's tab bar, a strip of its own at the bottom (computers keep the links in the header). */
 export function TabBar() {
   const pathname = usePathname();
   const ref = useRef<HTMLElement | null>(null);
@@ -311,31 +310,31 @@ export function TabBar() {
 export function TabBarView({ pathname, navRef }: { pathname: string; navRef?: Ref<HTMLElement> }) {
   const { isOn, pick } = usePickedLink(pathname);
   return (
-    <>
-      <div aria-hidden className="shrink-0 sm:hidden" style={{ height: `calc(${TAB_HEIGHT}px + ${TAB_BOTTOM} + 10px)` }} />
-      <nav ref={navRef} aria-label="Main" className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-3 sm:hidden" style={{ paddingBottom: TAB_BOTTOM }}>
-        <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-surface px-2 shadow-float" style={{ height: TAB_HEIGHT }}>
-          {LINKS.map((l) => {
-            const active = isOn(l);
-            return (
-              <Link
-                key={l.href}
-                href={l.href}
-                aria-current={isActive(pathname, l) ? "page" : undefined}
-                onClick={() => pick(l.href)}
-                className={cn(
-                  // Four named tabs fit a 390px phone with the label under the icon (iOS style).
-                  "flex h-[50px] w-[76px] flex-col items-center justify-center gap-0.5 rounded-2xl text-[10.5px] leading-none whitespace-nowrap transition-colors max-[359px]:w-[66px]",
-                  active ? "bg-tint font-bold text-accent-text" : "font-semibold text-gray-600 active:bg-gray-100",
-                )}
-              >
-                <NavIcon name={l.icon} active={active} size={22} />
-                <span>{l.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
-    </>
+    // Its own strip at the end of the page (owner, 2026-11-04: "its own container ... make it sticky"): it
+    // sticks to the bottom edge while the page is longer than the screen and rests in its own place at the
+    // very end, so no row is ever under it. Solid, a hairline above, the home indicator's space inside it.
+    <nav ref={navRef} data-tabbar aria-label="Main" className="sticky bottom-0 z-30 mt-auto border-t border-line bg-surface sm:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+      <div className="mx-auto flex w-full max-w-3xl items-center justify-around px-2" style={{ height: TAB_HEIGHT }}>
+        {LINKS.map((l) => {
+          const active = isOn(l);
+          return (
+            <Link
+              key={l.href}
+              href={l.href}
+              aria-current={isActive(pathname, l) ? "page" : undefined}
+              onClick={() => pick(l.href)}
+              className={cn(
+                // Four named tabs fit a 390px phone with the label under the icon (iOS style).
+                "flex h-[50px] w-[76px] flex-col items-center justify-center gap-0.5 rounded-2xl text-[10.5px] leading-none whitespace-nowrap transition-colors max-[359px]:w-[66px]",
+                active ? "bg-tint font-bold text-accent-text" : "font-semibold text-gray-600 active:bg-gray-100",
+              )}
+            >
+              <NavIcon name={l.icon} active={active} size={22} />
+              <span>{l.label}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
   );
 }

@@ -14,7 +14,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <NavBar role={role} />
-      <div className="mx-auto w-full max-w-3xl flex-1 px-4 pt-2 pb-8">
+      <div className="mx-auto w-full max-w-3xl flex-1 px-4 pt-2 pb-6">
         {!dbConfigured() && (
           <div className="mb-4">
             <Notice tone="amber">The database isn&apos;t connected yet. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in Vercel (SETUP.md, step 5).</Notice>

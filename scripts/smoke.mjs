@@ -288,6 +288,18 @@ try {
   await p.screenshot({ path: `${OUT}/07-phone-home.png`, fullPage: true });
   const overflow = await p.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   check(!overflow, "phone Home has no sideways scroll");
+  // The dock (owner, 2026-11-04): its own strip at the very end of the page, the last row fully above it
+  await p.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await p.waitForTimeout(250);
+  const dock = await p.evaluate(() => {
+    const nav = document.querySelector("nav[data-tabbar]").getBoundingClientRect();
+    const rows = [...document.querySelectorAll("button[aria-label=More]")];
+    const last = rows[rows.length - 1].getBoundingClientRect();
+    return { navTop: nav.top, navBottom: nav.bottom, lastRowBottom: last.bottom, h: window.innerHeight };
+  });
+  check(dock.lastRowBottom <= dock.navTop && dock.navBottom <= dock.h + 1 && dock.navBottom >= dock.h - 1, `the dock sits in its own strip at the very bottom and the last row ends above it (row ${Math.round(dock.lastRowBottom)}, dock ${Math.round(dock.navTop)} to ${Math.round(dock.navBottom)} of ${dock.h})`);
+  await p.screenshot({ path: `${OUT}/07b-phone-home-bottom.png` });
+  await p.evaluate(() => window.scrollTo(0, 0));
   await p.goto(`${APP}/log`);
   await p.screenshot({ path: `${OUT}/08-phone-log.png`, fullPage: true });
   // The Wrap: today's top producer, everybody, the carriers; one iPhone screenshot above the tab bar,
@@ -304,7 +316,7 @@ try {
   check(wrapText.includes("Alex Alekseyev") && wrapText.includes("$21,750"), "the Wrap names today's player of the day with the day's premium");
   check(wrapText.includes("Everybody today") && wrapText.includes("Best deal"), "the Wrap lists everybody and the best deal");
   check(wrapText.includes("Day won") || wrapText.includes("short of") || /(Saturday|Sunday)/.test(wrapText), "the Wrap judges the day against what the goal needed (or names the weekend)");
-  const fit = await p.evaluate(() => ({ bottom: document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom, pill: document.querySelector("nav[aria-label=Main] > div").getBoundingClientRect().top, height: window.innerHeight }));
+  const fit = await p.evaluate(() => ({ bottom: document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom, pill: document.querySelector("nav[data-tabbar] > div").getBoundingClientRect().top, height: window.innerHeight }));
   check(fit.bottom <= fit.pill - 8, `the Wrap fits one iPhone screenshot above the tab bar (ends at ${Math.round(fit.bottom)}px, the tab bar starts at ${Math.round(fit.pill)} of ${fit.height})`);
   // Royal leads only once the token's three Royal sales landed; AHL is in the top three either way.
   const square = TOKEN ? "Royal" : "AHL";
@@ -313,13 +325,13 @@ try {
   const wrapOverflow = await p.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
   check(!wrapOverflow, "the Wrap has no sideways scroll");
   const tabs = await p.evaluate(() => {
-    const pill = document.querySelector("nav[aria-label=Main] > div");
+    const pill = document.querySelector("nav[data-tabbar] > div");
     return { right: pill.getBoundingClientRect().right, links: pill.querySelectorAll("a").length, width: window.innerWidth };
   });
   check(tabs.links === 4 && tabs.right <= tabs.width, `the phone tab bar holds four tabs inside the screen (${Math.round(tabs.right)} of ${tabs.width}px)`);
   await p.screenshot({ path: `${OUT}/14-phone-wrap.png`, fullPage: true });
   // The week and the month: the same screen over a longer stretch, each still one screenshot
-  const fitOf = async () => p.evaluate(() => ({ bottom: document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom, pill: document.querySelector("nav[aria-label=Main] > div").getBoundingClientRect().top, height: window.innerHeight }));
+  const fitOf = async () => p.evaluate(() => ({ bottom: document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom, pill: document.querySelector("nav[data-tabbar] > div").getBoundingClientRect().top, height: window.innerHeight }));
   await p.goto(`${APP}/wrap?view=week`);
   await p.waitForSelector("text=Player of the week");
   const weekText = await p.textContent("body");
