@@ -31,11 +31,47 @@ const CELEBRATE_MS = 9000;
 const SOUND_FADE_MS = 700;
 
 /**
- * Chrome plays sound only once someone has clicked or pressed a key on the page (F for full screen
- * counts). The board remembers that a play was refused, says so in the footer, and clears the note
- * on the next tap or key.
+ * A tenth of a second of silence as a WAV (8 kHz, 8-bit, mono) in a data address: the board's sound
+ * check. A data address needs no fetch and nothing to clean up (a revoked blob address would still be
+ * fetched after a refused play and log an error).
  */
-function useSoundGate(): { blocked: boolean; refused: () => void } {
+function silence(): string {
+  const n = 800;
+  const bytes = new Uint8Array(44 + n);
+  const view = new DataView(bytes.buffer);
+  const word = (at: number, s: string) => [...s].forEach((ch, i) => (bytes[at + i] = ch.charCodeAt(0)));
+  word(0, "RIFF");
+  view.setUint32(4, 36 + n, true);
+  word(8, "WAVE");
+  word(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, 8000, true);
+  view.setUint32(28, 8000, true);
+  view.setUint16(32, 1, true);
+  view.setUint16(34, 8, true);
+  word(36, "data");
+  view.setUint32(40, n, true);
+  bytes.fill(128, 44); // 8-bit silence sits at the midpoint
+  let text = "";
+  for (const b of bytes) text += String.fromCharCode(b);
+  return `data:audio/wav;base64,${btoa(text)}`;
+}
+
+/** True only for the browser's "no sound before a click" answer, not a load error or an interrupted play. */
+function isAutoplayRefusal(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "NotAllowedError";
+}
+
+/**
+ * Browsers play sound only after someone clicked or pressed a key on the page (F for full screen
+ * counts), unless the site may auto-play (Safari > Settings > Websites > Auto-Play). The board asks
+ * the browser at load with a tenth of a second of silence, so the footer says so before a sale
+ * goes quiet (the board reloads itself after a deploy, which can lose the earlier click). A click,
+ * a key or any sound that plays clears it.
+ */
+function useSoundGate(soundOn: boolean): { blocked: boolean; refused: () => void; played: () => void } {
   const [blocked, setBlocked] = useState(false);
   useEffect(() => {
     const allow = () => setBlocked(false);
@@ -46,8 +82,24 @@ function useSoundGate(): { blocked: boolean; refused: () => void } {
       window.removeEventListener("keydown", allow);
     };
   }, []);
+  useEffect(() => {
+    if (!soundOn) return;
+    let live = true;
+    const check = new Audio(silence());
+    check.play().then(
+      () => check.pause(),
+      (err: unknown) => {
+        if (live && isAutoplayRefusal(err)) setBlocked(true);
+      },
+    );
+    return () => {
+      live = false;
+      check.pause();
+    };
+  }, [soundOn]);
   const refused = useCallback(() => setBlocked(true), []);
-  return { blocked, refused };
+  const played = useCallback(() => setBlocked(false), []);
+  return { blocked, refused, played };
 }
 
 function useClock(): string {
@@ -192,7 +244,7 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
   }, [refresh]);
 
   const { team, clock: month, agents } = snap;
-  const sound = useSoundGate();
+  const sound = useSoundGate(snap.sound !== "off");
   // Fetch the chosen sound ahead of time, so the first celebration does not wait on a download.
   useEffect(() => {
     const file = soundFile(snap.sound);
@@ -302,12 +354,12 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
         <p className="min-w-0 truncate text-[1.1em] font-bold text-gray-700">{snap.message || " "}</p>
         <p className="shrink-0">
           {offline >= 3 ? <span className="text-amber-800">Reconnecting…</span> : <>Updated {formatClock(snap.generatedAt)}</>}
-          {sound.blocked && snap.sound !== "off" && <span className="ml-[1em] text-amber-800">Tap the screen once for sound</span>}
+          {sound.blocked && snap.sound !== "off" && <span className="ml-[1em] text-amber-800">Click or press a key once for sound</span>}
           <span className="ml-[1em] text-gray-500">F full screen</span>
         </p>
       </footer>
 
-      {showing && <Celebration sale={showing} sound={snap.sound} onRefused={sound.refused} />}
+      {showing && <Celebration sale={showing} sound={snap.sound} onRefused={sound.refused} onPlayed={sound.played} />}
     </main>
   );
 }
@@ -513,7 +565,7 @@ function Feed({ sales, tones, today }: { sales: FeedSale[]; tones: Record<string
   );
 }
 
-function Celebration({ sale, sound, onRefused }: { sale: FeedSale; sound: SoundKey; onRefused: () => void }) {
+function Celebration({ sale, sound, onRefused, onPlayed }: { sale: FeedSale; sound: SoundKey; onRefused: () => void; onPlayed: () => void }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
     if (!canvas.current) return;
@@ -526,7 +578,10 @@ function Celebration({ sale, sound, onRefused }: { sale: FeedSale; sound: SoundK
     if (!file) return;
     const audio = new Audio(file);
     let step: number | undefined;
-    audio.play().catch(onRefused);
+    // Only the browser's autoplay answer means "click first"; an interrupted play or a load error does not.
+    audio.play().then(onPlayed, (err: unknown) => {
+      if (isAutoplayRefusal(err)) onRefused();
+    });
     const fade = window.setTimeout(() => {
       step = window.setInterval(() => {
         audio.volume = Math.max(0, audio.volume - 0.1);
@@ -541,7 +596,7 @@ function Celebration({ sale, sound, onRefused }: { sale: FeedSale; sound: SoundK
       window.clearInterval(step);
       audio.pause();
     };
-  }, [sale.id, sound, onRefused]);
+  }, [sale.id, sound, onRefused, onPlayed]);
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-ink/70" role="status" aria-live="polite" data-sound={sound}>
       <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />

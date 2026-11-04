@@ -10,9 +10,12 @@ import { cn } from "@/components/ui";
 /**
  * Inset hairlines between grouped list rows (iOS style): put one of these on each row of a
  * `ListCard`. The line starts where the row's text starts (16px padding, then 12px gap): after a
- * 40px avatar (`avatar`), a 28px icon (`icon`), or at the row's padding (`plain`).
+ * 40px avatar (`avatar`), a 44px round button (`button`), a 28px icon (`icon`), or at the row's
+ * padding (`plain`).
  */
 export const ROW_INSET = {
+  button:
+    "relative not-first:before:pointer-events-none not-first:before:absolute not-first:before:top-0 not-first:before:right-0 not-first:before:left-[72px] not-first:before:h-px not-first:before:bg-line",
   avatar:
     "relative not-first:before:pointer-events-none not-first:before:absolute not-first:before:top-0 not-first:before:right-0 not-first:before:left-[68px] not-first:before:h-px not-first:before:bg-line",
   icon: "relative not-first:before:pointer-events-none not-first:before:absolute not-first:before:top-0 not-first:before:right-0 not-first:before:left-14 not-first:before:h-px not-first:before:bg-line",

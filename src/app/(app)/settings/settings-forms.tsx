@@ -1,13 +1,13 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { COLORWAYS, COLORWAY_KEYS, type ColorwayKey } from "@/lib/colorways";
 import { cn } from "@/components/ui";
 import { BOARD_THEMES, type AppSettings, type BoardTheme } from "@/lib/types";
 import { SOUNDS, type SoundKey } from "@/lib/sounds";
 import { Button, Input, Label, Notice, Textarea } from "@/components/ui";
-import { ListCard, ListTitle } from "@/components/tide";
+import { ListCard, ListTitle, ROW_INSET } from "@/components/tide";
 import { saveBoardSettings, saveBoardTheme, saveColorway, saveSaleSound, saveTeamGoal } from "../actions";
 import { toast } from "@/components/toaster";
 
@@ -253,15 +253,28 @@ function SoundPicker({ current }: { current: SoundKey }) {
   }
   const [playing, setPlaying] = useState<SoundKey | null>(null);
   const player = useRef<HTMLAudioElement | null>(null);
+  // A test sound stops when the page goes (the 16 s intro would play on over the next screen).
+  useEffect(() => {
+    const ref = player;
+    return () => ref.current?.pause();
+  }, []);
   const play = (key: SoundKey, file: string) => {
     player.current?.pause();
+    // A second tap on the row that is playing stops it.
+    if (playing === key) {
+      player.current = null;
+      setPlaying(null);
+      return;
+    }
     const a = new Audio(file);
     player.current = a;
     setPlaying(key);
     a.onended = () => setPlaying((p) => (p === key ? null : p));
-    a.play().catch(() => {
+    a.play().catch((err: unknown) => {
+      // A tap on another row pauses this one before it starts: that is not a failure.
+      if (player.current !== a || (err instanceof DOMException && err.name === "AbortError")) return;
       setPlaying(null);
-      toast("Couldn't play it. Check the volume and try again.", false);
+      toast("Couldn't play that sound. Try again.", false);
     });
   };
   const pick = (key: SoundKey) => {
@@ -282,20 +295,21 @@ function SoundPicker({ current }: { current: SoundKey }) {
   const rows: Array<{ key: SoundKey; label: string; note: string; file: string | null }> = [...SOUNDS, { key: "off", label: "Off", note: "confetti only", file: null }];
   return (
     <div role="radiogroup" aria-label="Sale sound">
-      <ListCard className="mt-2 divide-y divide-line">
+      <ListCard className="mt-2">
         {rows.map((r) => {
           const on = picked === r.key;
+          const live = playing === r.key;
           return (
-            <li key={r.key} className="flex items-center gap-3 px-4 py-2">
+            <li key={r.key} className={cn("flex items-center gap-3 px-4 py-2", ROW_INSET.button)}>
               {r.file ? (
                 <button
                   type="button"
-                  aria-label={`Play ${r.label}`}
+                  aria-label={`${live ? "Stop" : "Play"} ${r.label}`}
                   onClick={() => play(r.key, r.file as string)}
-                  className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition", playing === r.key ? "bg-tide-strong text-white shadow-glow" : "bg-tint text-accent-text")}
+                  className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition", live ? "bg-tide-strong text-white shadow-glow" : "bg-tint text-accent-text")}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" className="ml-0.5 fill-current" aria-hidden>
-                    <path d="M7 5.5v13l11-6.5z" />
+                  <svg width="16" height="16" viewBox="0 0 24 24" className={cn("fill-current", !live && "ml-0.5")} aria-hidden>
+                    {live ? <rect x="6.5" y="6.5" width="11" height="11" rx="2" /> : <path d="M7 5.5v13l11-6.5z" />}
                   </svg>
                 </button>
               ) : (
