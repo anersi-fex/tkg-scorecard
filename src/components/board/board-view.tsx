@@ -562,20 +562,20 @@ function PcScreen({ snap, tones, flash }: { snap: MonthSnapshot; tones: Record<s
             {team.pcByCarrier.length === 0 ? (
               <p className="flex flex-1 items-center justify-center text-[1em] font-semibold text-gray-500">No P&C yet this month.</p>
             ) : (
-              <ul className="mt-[0.6em] flex min-h-0 flex-col gap-[0.75em]">
+              <ul className="mt-[0.5em] flex min-h-0 flex-col gap-[0.4em]">
                 {carriers.map((c) => (
                   <li key={c.name} className="min-w-0">
                     <div className="flex items-baseline justify-between gap-[0.8em]">
-                      <p className="truncate text-[1.05em] font-extrabold tracking-[-0.02em]">{c.name}</p>
+                      <p className="truncate text-[1em] font-extrabold tracking-[-0.02em]">{c.name}</p>
                       <p className="shrink-0 font-mono text-[1em] font-bold">
                         <span className="mr-[0.5em] font-sans text-[0.8em] font-semibold text-gray-500">{c.policies}</span>
                         {formatDollars(c.cents)}
                       </p>
                     </div>
-                    <div className="mt-[0.25em] h-[0.5em] overflow-hidden rounded-full bg-track">
+                    <div className="mt-[0.2em] h-[0.5em] overflow-hidden rounded-full bg-track">
                       <div className="h-full rounded-full bg-pc-grad" style={{ width: `${Math.round((c.policies / maxCarrier) * 100)}%` }} />
                     </div>
-                    <p className="mt-[0.2em] truncate text-[0.8em] font-semibold text-gray-500">{linesSummary(c.lines)}</p>
+                    <p className="mt-[0.15em] truncate text-[0.8em] leading-tight font-semibold text-gray-500">{linesSummary(c.lines)}</p>
                   </li>
                 ))}
                 {moreCarriers.length > 0 && (
@@ -654,7 +654,7 @@ function LeaderRow({ line, view, max, count, today, goalLine }: { line: AgentLin
   const policies = life ? line.lifePolicies : pc ? line.pcPolicies : line.policies;
   return (
     <li
-      className={cn("flex min-h-0 items-center gap-[0.9em] rounded-[1em] px-[0.8em]", pc ? (count <= 3 ? "h-[5.2em] shrink-0" : "h-[4.3em] shrink-0") : "flex-1", first && (pc ? "bg-surface-2" : "bg-tint/60"))}
+      className={cn("flex min-h-0 items-center gap-[0.9em] rounded-[1em] px-[0.8em]", pc ? (count <= 3 ? "h-[4.9em] shrink-0" : "h-[4.3em] shrink-0") : "flex-1", first && (pc ? "bg-surface-2" : "bg-tint/60"))}
       style={{ fontSize: `${scale}em` }}
     >
       <span className={cn("w-[1.4em] shrink-0 text-center font-mono text-[1.4em] font-bold", medal)}>{first ? <Crown /> : rank}</span>
