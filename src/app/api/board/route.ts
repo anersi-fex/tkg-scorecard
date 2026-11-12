@@ -5,7 +5,11 @@ import { monthKeyOf, todayInDetroit } from "@/lib/month";
 
 export const dynamic = "force-dynamic";
 
-/** The board's live feed: the current month's snapshot, for a signed-in viewer (the TV polls it). */
+/**
+ * The board's live feed: the current month's snapshot, for a signed-in viewer (the TV polls it).
+ * It carries the Scoreboard (`scoreboard`) and never a phone number or a sign-in detail: the
+ * snapshot and the Scoreboard are built field by field from rows read without those columns.
+ */
 export async function GET() {
   if (!(await currentRole())) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   try {

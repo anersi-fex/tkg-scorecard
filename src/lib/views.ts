@@ -24,6 +24,14 @@ export const SCREEN_LABEL: Record<Screen, string> = { life: "Leaderboard", score
 /** How long each screen stays on the TV while it rotates: the leaderboard 40 s, every other screen 20 s. */
 export const SCREEN_MS: Record<Screen, number> = { life: 40_000, scoreboard: 20_000, production: 20_000, teams: 20_000, pc: 20_000, total: 20_000 };
 
+/** How long one page of a long list stays before the next (the TV pages, it never scrolls). */
+export const PAGE_MS = 8000;
+
+/** A screen's time on the TV: its own, or longer when its list has more pages than that leaves time for. */
+export function screenMs(screen: Screen, pages = 1): number {
+  return Math.max(SCREEN_MS[screen], Math.max(1, Math.floor(pages)) * PAGE_MS);
+}
+
 /** What the month has to show, so the rotation skips a screen that would be empty. */
 export interface ScreenFacts {
   /** The Scoreboard has numbers: it was loaded and somebody sold. */

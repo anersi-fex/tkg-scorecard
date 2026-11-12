@@ -70,7 +70,7 @@ export function PageDots({ pages, page, className }: { pages: number; page: numb
 }
 
 /** A medal with its number: silver for 2, bronze for 3. */
-export function Medal({ place }: { place: number }) {
+function Medal({ place }: { place: number }) {
   return (
     <svg viewBox="0 0 24 24" className="inline-block h-[1.15em] w-[1.15em]" aria-label={place === 2 ? "Second" : "Third"}>
       <path d="M7 1.5h4l1 5.2-3.4 1.6zM17 1.5h-4l-1 5.2 3.4 1.6z" className="fill-current opacity-60" />
@@ -145,8 +145,10 @@ export function goalOf(line: AgentLine, view: View): { goal: number; pct: number
  * same for each screen: a graph, recent sales, and numbers and stats"): the goal ring, three tiles,
  * the month's chart against the goal line, and the latest sales.
  */
-export function RightSide({ snap, view, tones, flash }: { snap: MonthSnapshot; view: View; tones: Record<string, string>; flash: string[] }) {
+export function RightSide({ snap, view, tones, flash, className }: { snap: MonthSnapshot; view: View; tones: Record<string, string>; flash: string[]; className?: string }) {
   const { team, clock: month } = snap;
+  // Life only (P&C switched off): the words never set life apart from anything else.
+  const only = !snap.pcEnabled;
   const m = measure(snap, view);
   const current = month.position === "current";
   const best = view === "life" ? team.bestLifeDay : view === "total" ? team.bestDay : null;
@@ -154,7 +156,7 @@ export function RightSide({ snap, view, tones, flash }: { snap: MonthSnapshot; v
   const feed = view === "pc" ? snap.pcRecent.slice(0, 4) : view === "life" ? snap.lifeRecent.slice(0, 4) : snap.recent.filter((r) => r.soldOn.slice(0, 7) === month.key).slice(0, 4);
   const daily = view === "life" ? lifeDaily(snap.daily) : view === "pc" ? pcDaily(snap.daily) : snap.daily;
   return (
-    <div className="col-span-5 flex min-h-0 flex-col gap-[1em]">
+    <div className={cn("flex min-h-0 flex-col gap-[1em]", className ?? "col-span-5")}>
       <GoalCard snap={snap} view={view} />
       <section className="grid shrink-0 grid-cols-3 gap-[0.7em]">
         {current ? (
@@ -181,7 +183,7 @@ export function RightSide({ snap, view, tones, flash }: { snap: MonthSnapshot; v
           <h2 className="text-[1.05em] font-extrabold tracking-[-0.02em]">The month so far</h2>
           <p className="text-[0.8em] font-semibold text-gray-500">
             <span className={cn("mr-[0.5em] inline-block h-[0.55em] w-[1.4em] rounded-full align-middle", view === "pc" ? "bg-pc-grad" : "bg-chart-1")} />
-            {view === "life" ? "life production" : view === "pc" ? "P&C production" : "life + P&C"}
+            {only ? "production" : view === "life" ? "life production" : view === "pc" ? "P&C production" : "life + P&C"}
             <span className="mr-[0.5em] ml-[1em] inline-block h-[0.55em] w-[1.4em] rounded-full bg-chart-2 align-middle" />
             goal line
           </p>
@@ -189,7 +191,8 @@ export function RightSide({ snap, view, tones, flash }: { snap: MonthSnapshot; v
         <MonthChart daily={daily} goalCents={m.goal} today={month.today} height={150} tone={view === "pc" ? "pc" : "brand"} className="mt-[0.4em] h-[calc(100%-1.8em)] w-full" />
       </section>
       <Feed
-        title={view === "life" ? "Latest life sales" : view === "pc" ? "Latest P&C sales" : "Latest sales"}
+        title={only ? "Latest sales" : view === "life" ? "Latest life sales" : view === "pc" ? "Latest P&C sales" : "Latest sales"}
+        pc={!only}
         sales={feed}
         tones={tones}
         today={month.today}
@@ -236,7 +239,7 @@ export function GoalCard({ snap, view }: { snap: MonthSnapshot; view: View }) {
   const r = 44;
   const c = 2 * Math.PI * r;
   const { line, tone } = paceWords(clock, m.pace, m.production, m.goal);
-  const eyebrow = view === "life" ? "Life production" : view === "pc" ? "P&C production" : "Agency total · life + P&C";
+  const eyebrow = !snap.pcEnabled ? "Production" : view === "life" ? "Life production" : view === "pc" ? "P&C production" : "Agency total · life + P&C";
   const of = m.goal > 0 ? `of ${formatDollars(m.goal)}${view === "total" && team.pcGoalCents > 0 ? " · life + P&C goals" : ""}` : view === "pc" ? "no P&C goal set yet" : "no goal set yet";
   return (
     <section className="flex shrink-0 items-center gap-[1.2em] rounded-[1.4em] bg-surface p-[1.1em] shadow-card">
@@ -315,7 +318,7 @@ export function Tile({ label, value, sub, tone }: { label: string; value: string
   );
 }
 
-export function Feed({ title, sales, tones, today, empty, grow = false, flash = [] }: { title: string; sales: FeedSale[]; tones: Record<string, string>; today: string; empty?: string; grow?: boolean; flash?: string[] }) {
+export function Feed({ title, sales, tones, today, empty, grow = false, flash = [], pc = false }: { title: string; sales: FeedSale[]; tones: Record<string, string>; today: string; empty?: string; grow?: boolean; flash?: string[]; pc?: boolean }) {
   return (
     <section className={cn("min-h-0 overflow-hidden rounded-[1.4em] bg-surface p-[1em] shadow-card", grow ? "flex-1" : "shrink-0")}>
       <h2 className="text-[1.05em] font-extrabold tracking-[-0.02em]">{title}</h2>
@@ -333,7 +336,7 @@ export function Feed({ title, sales, tones, today, empty, grow = false, flash = 
                   {s.product ? ` · ${s.product}` : ""}
                   {s.policies > 1 ? ` · ${s.policies} policies` : ""}
                 </span>
-                {s.kind === "pc" && <PcTag tv className="ml-[0.5em] align-middle" />}
+                {pc && s.kind === "pc" && <PcTag tv className="ml-[0.5em] align-middle" />}
               </p>
               <p className="shrink-0 text-[0.8em] font-semibold text-gray-500">{s.soldOn === today ? formatClock(s.createdAt) : dayLabel(s.soldOn)}</p>
               <p className="shrink-0 font-mono text-[1.1em] font-bold">{formatMoney(s.premiumCents)}</p>
