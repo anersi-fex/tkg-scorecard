@@ -160,7 +160,15 @@ export function LbRow({ r, rank, me, compact, sub }: { r: BoardRow; rank: number
           {me && <span className="you">You</span>}
           {!r.active && <span className="muted"> (off the board)</span>}
         </span>
-        <span className="lb-sub ell num">{sub ?? (dim ? "No sale yet" : `${policies(r.policies)}${r.todayCents > 0 ? ` · +${formatDollars(r.todayCents)} today` : ""}`)}</span>
+        {sub !== undefined || dim || r.todayCents <= 0 ? (
+          <span className="lb-sub ell num">{sub ?? (dim ? "No sale yet" : policies(r.policies))}</span>
+        ) : (
+          // Today's delta wraps under the policies on a narrow column instead of being cut off.
+          <span className="lb-sub lb-sub-split num">
+            <span>{policies(r.policies)}</span>
+            <span className="lb-today">+{formatDollars(r.todayCents)} today</span>
+          </span>
+        )}
       </span>
       <span className="lb-amt num">{dim ? "—" : formatDollars(r.cents)}</span>
       {!dim && (

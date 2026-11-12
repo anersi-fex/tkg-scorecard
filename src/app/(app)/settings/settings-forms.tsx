@@ -163,7 +163,7 @@ export function SettingsForms({
             </div>
           ) : (
             <div>
-              {["Sign-ins", "Other lines of business (P&C)"].map((t) => (
+              {["Sign-ins", "Other lines of business"].map((t) => (
                 <div key={t} className={s.locked}>
                   <span className={s.lockIco}>
                     <Icon name="lock" size={16} />
@@ -541,7 +541,7 @@ function SoundPicker({ current }: { current: SoundKey }) {
       else setPicked(current);
     });
   };
-  const rows: Array<{ key: SoundKey; label: string; note: string; file: string | null }> = [...SOUNDS, { key: "off", label: "Off", note: "Confetti only", file: null }];
+  const rows: Array<{ key: SoundKey; label: string; note: string; file: string | null }> = [...SOUNDS, { key: "off", label: "Off", note: "The banner only, no sound", file: null }];
   return (
     <div role="radiogroup" aria-label="Sale sound" className={s.radios} data-sound>
       {rows.map((r) => {

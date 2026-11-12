@@ -31,10 +31,9 @@ export function LifeScreen({ snap, flash, onPages }: { snap: MonthSnapshot; tone
   const { split, office, others } = boardGroups(snap.agents);
   const everyone = [...office, ...others];
   const max = Math.max(1, ...everyone.map((a) => a.lifeCents));
-  // Places since yesterday come from the agency's own ranking (the Scoreboard's), so they show on
-  // the one list; the office group's places are its own, which no ranking of yesterday matches.
-  const changes = new Map((snap.scoreboard?.rows ?? []).map((r) => [r.agentId, r.rankChange]));
-  const change = split ? undefined : changes;
+  // Places since yesterday come from the agency's own ranking (the Scoreboard's), shown in both
+  // groups as Home shows them (the arrow is the agency move, the number the place in the group).
+  const change = new Map((snap.scoreboard?.rows ?? []).map((r) => [r.agentId, r.rankChange]));
   const mainRows = Math.max(1, Math.min(MAX_ROWS, Math.ceil(office.length / COLS)));
   const smallRows = Math.max(1, Math.ceil(others.length / COLS));
   const [pages, setPages] = useState({ main: 1, small: 1 });

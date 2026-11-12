@@ -109,7 +109,7 @@ const detroitToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "A
 const monthName = (key) => new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, 1)).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 
 // Invented people. The first four work in the office; the last three do not. Three join by the
-// agency link: Dana (new, under Ivy, in the office), Ivy (claims her row by typing her name) and
+// agency link: Ivy (claims her row by typing her name), Dana (new, under Ivy, in the office) and
 // Wes (claims his by tapping it under "Already on the board? Tap your name."). Later Rhea joins
 // and picks Nora, a manager, who confirms her.
 const NORA = "Nora Vance";
@@ -568,6 +568,26 @@ try {
     check(closed.h1 === "This link isn't good anymore." && closed.all.includes("Ask for a new one.") && !closed.form, "a bad link shows the \"isn't good anymore\" card and no form");
     await bad.close();
   }
+  // Joining with the name of someone already on the board who has no sign-in claims that row. Ivy
+  // joins before Dana picks her as an upline: a row with someone under it is no longer claimed by
+  // a typed name (it would open that person's clients), only through its own one-time link.
+  const ivy = await newVisitor();
+  const iv = await ivy.newPage();
+  await go(iv, joinPath, "form[data-join=agency]");
+  // The card lists the people an admin already added who have no sign-in yet (names only), so
+  // nobody comes on a second time under another spelling.
+  const claimNames = (page) => page.locator("[data-claim] button[data-claim-name]").evaluateAll((els) => els.map((e) => e.getAttribute("data-claim-name")));
+  const waiting = [GUS, IVY, LENA, NORA, PRIYA, THEO, WES].sort((x, y) => x.localeCompare(y));
+  check((await iv.getAttribute("[data-claim]", "data-claim")) === "chips" && (await iv.textContent("[data-claim]")).includes("Already on the board? Tap your name.") && (await claimNames(iv)).join() === waiting.join(), `the join card asks "Already on the board? Tap your name." over the people with no sign-in yet, A to Z (${(await claimNames(iv)).length} names, no ${DANA})`);
+  await iv.fill("#name", IVY.toLowerCase());
+  check((await appears(iv, "[data-claim-chosen]", 3000)) && (await iv.getAttribute(`button[data-claim-name="${IVY}"]`, "aria-pressed")) === "true", "typing the board's spelling by hand, in any case, marks that name as hers too");
+  await iv.fill("#phone", PHONE[IVY]);
+  await iv.click("form[data-join] button:has-text(\"I'm not sure\")");
+  await iv.fill("#password", "ivy-first-pass");
+  await Promise.all([iv.waitForURL((u) => u.pathname === "/install"), iv.click("form[data-join] button[type=submit]")]);
+  check((await iv.textContent("h1")) === "Welcome, Ivy.", "someone already on the board joins under the name they were added with");
+  const afterIvy = await feed();
+  check(afterIvy.agents.length === 7 && afterIvy.agents.filter((p) => p.name.toLowerCase() === IVY.toLowerCase()).length === 1 && afterIvy.agents.find((p) => p.name === IVY)?.id === ID[IVY], "a name that matches an unclaimed person claims that row (no second Ivy Brandt)");
   // A new person joins: name, cell number, upline, in the office, a password of their own
   await d.fill("#name", DANA);
   await d.fill("#phone", PHONE[DANA]);
@@ -612,24 +632,6 @@ try {
     }
     await ctx.close();
   }
-  // Joining with the name of someone already on the board who has no sign-in claims that row
-  const ivy = await newVisitor();
-  const iv = await ivy.newPage();
-  await go(iv, joinPath, "form[data-join=agency]");
-  // The card lists the people an admin already added who have no sign-in yet (names only), so
-  // nobody comes on a second time under another spelling.
-  const claimNames = (page) => page.locator("[data-claim] button[data-claim-name]").evaluateAll((els) => els.map((e) => e.getAttribute("data-claim-name")));
-  const waiting = [GUS, IVY, LENA, NORA, PRIYA, THEO, WES].sort((x, y) => x.localeCompare(y));
-  check((await iv.getAttribute("[data-claim]", "data-claim")) === "chips" && (await iv.textContent("[data-claim]")).includes("Already on the board? Tap your name.") && (await claimNames(iv)).join() === waiting.join(), `the join card asks "Already on the board? Tap your name." over the people with no sign-in yet, A to Z (${(await claimNames(iv)).length} names, no ${DANA})`);
-  await iv.fill("#name", IVY.toLowerCase());
-  check((await appears(iv, "[data-claim-chosen]", 3000)) && (await iv.getAttribute(`button[data-claim-name="${IVY}"]`, "aria-pressed")) === "true", "typing the board's spelling by hand, in any case, marks that name as hers too");
-  await iv.fill("#phone", PHONE[IVY]);
-  await iv.click("form[data-join] button:has-text(\"I'm not sure\")");
-  await iv.fill("#password", "ivy-first-pass");
-  await Promise.all([iv.waitForURL((u) => u.pathname === "/install"), iv.click("form[data-join] button[type=submit]")]);
-  check((await iv.textContent("h1")) === "Welcome, Ivy.", "someone already on the board joins under the name they were added with");
-  const afterIvy = await feed();
-  check(afterIvy.agents.length === 8 && afterIvy.agents.filter((p) => p.name.toLowerCase() === IVY.toLowerCase()).length === 1 && afterIvy.agents.find((p) => p.name === IVY)?.id === ID[IVY], "a name that matches an unclaimed person claims that row (no second Ivy Brandt)");
   // Wes starts to type his name another way, then taps it on the card: the tap puts the board's
   // own spelling in the box, and the join claims his row.
   {
@@ -1004,6 +1006,7 @@ try {
   check((await d.locator("#account-menu a[href='/settings']").count()) === 0 && (await d.locator("#account-menu a[href='/approvals']").count()) === 0 && (await d.locator("#account-menu a[href='/install']").count()) === 1, "an agent's menu has the phone guide and no Settings or Approvals");
   // The goal's save call, sent with the agent's session: refused by the action itself
   const asMember = await replay(dana, goalShot);
+  console.log('DBG asMember', asMember.status, asMember.text.slice(0,600), (await feed()).team.goalCents); //E2EDBG
   check(asMember.text.includes("Only an admin can do that") && (await feed()).team.goalCents === 15_000_000, `an agent who calls the goal's save action directly is refused and the goal stays (${asMember.status})`);
   await go(d, "/team", "input[aria-label='Find a person']");
   check((await d.locator("[data-join-card]").count()) === 0 && (await d.locator("button[aria-label^='Edit ']").count()) === 0 && (await d.locator("[data-add-person]").count()) === 0, "an agent sees People without the join link, Edit or Add");
@@ -1518,6 +1521,7 @@ try {
       const lateFix = await replay(theo.ctx, fixShot, swapIn(fixShot, '_monthly"\r\n\r\n125', '_monthly"\r\n\r\n135'));
       check(lateFix.text.includes("These count on the board. After 15 minutes, ask an admin to change them.") && (await feed()).agents.find((p) => p.id === ID[THEO])?.lifeCents === centsOf(THEO), "after 15 minutes the server refuses the seller's premium call too");
       const lateBack = await replay(theo.ctx, undoShot, undoBody(theoOwn.id));
+      console.log('DBG lateBack', lateBack.status, lateBack.text.slice(0,600), newestSaleOf(ID[THEO]), theoOwn.id); //E2EDBG
       check(lateBack.text.includes("A sale can be taken back for 15 minutes. After that, ask an admin.") && newestSaleOf(ID[THEO]) === theoOwn.id, "and the take-back: the sale stands");
       await editSection(th, "Client", () => th.fill("#pe-email", `late.${theoOwn.client.email}`));
       check(await appears(th, "text=Saved."), "the seller changes the client's details any time");
@@ -2096,6 +2100,7 @@ try {
     await o.click(tvScreen("Agency total only"));
     check(await settles(t2, () => document.querySelector("main")?.dataset.screen === "total", 12000), "Agency total only in Settings puts the TV on the agency total within a poll");
     const totalText = await t2.textContent("body");
+    console.log('DBG totalText', (await t2.innerText('main')).slice(0,3000)); //E2EDBG
     check(totalText.includes("Agency leaderboard") && totalText.includes("Life $") && totalText.includes("P&C $") && totalText.includes("of $180,000 · life + P&C goals"), "the agency total screen adds life and P&C up against both goals and splits them");
     check((await t2.locator("[data-pill]").count()) === 1, "a kept screen shows only its own pill");
     await t2.screenshot({ path: `${OUT}/10c-board-total.png` });
@@ -2105,6 +2110,7 @@ try {
     const pcText = await t2.innerText("main");
     check(pcText.includes("P&C leaderboard") && pcText.includes(GUS) && pcText.includes("By carrier") && pcText.includes(TOKEN ? "Geico" : "Progressive") && pcText.includes("By line") && pcText.includes(TOKEN ? "Umbrella" : "Auto") && !pcText.includes(THEO), "the P&C screen: the P&C team, by carrier, by line, no one without P&C");
     const pcLower = pcText.toLowerCase(); // innerText follows the eyebrows' capitals
+    console.log('DBG pcText', pcText.slice(0,3000)); //E2EDBG
     check(pcLower.includes("p&c production") && pcLower.includes("of $30,000") && /needed a day|needed today|to go/.test(pcLower) && pcLower.includes("the month so far") && pcLower.includes("latest p&c sales") && pcText.includes(dollars(pcTotalDollars * 100)), "the P&C screen's right side is like the others: its goal, the tiles, the chart, the latest sales");
     await t2.screenshot({ path: `${OUT}/10b-board-pc.png` });
     await o.click(tvScreen("Rotate"));
@@ -2222,6 +2228,7 @@ try {
       });
     await settles(t3, () => document.querySelector("main section[data-group=office] [aria-label^='Page ']")?.getAttribute("aria-label") === "Page 1 of 2", 5000);
     const page1 = await officeOf();
+    console.log('DBG page1', JSON.stringify(page1)); //E2EDBG
     check(page1.pages === "2" && page1.rows >= 30 && page1.rows < IN_OFFICE && page1.rows % 3 === 0 && page1.columns === 3 && page1.title.startsWith(`In the office ${IN_OFFICE} people · ${officeSellers} sold`) && page1.dots === "Page 1 of 2" && page1.firstPlace === "1" && page1.others === OUTSIDE, `the TV shows the office group a page at a time in three columns (${page1.title}; ${page1.rows} rows, ${page1.columns} columns, ${page1.dots})`);
     check(await fits(t3, "section[data-group], li[data-person]"), `a full page of the office group (${page1.rows} rows) and everyone else fit the TV at 1920x1080`);
     const cut = await t3.evaluate(() => [...document.querySelectorAll("main li[data-person] p")].filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent).slice(0, 5));
@@ -2236,6 +2243,7 @@ try {
       await o.click(tvScreen(label));
       return settles(t3, (s) => document.querySelector("main")?.dataset.screen === s, 12000, screen);
     };
+    { await keep3("Production", "production"); await t3.waitForTimeout(2500); console.log('DBG prod', await t3.evaluate(() => ({ screen: document.querySelector('main')?.dataset.screen, rows: document.querySelectorAll('main li[data-row]').length, trs: document.querySelectorAll('main tr').length, text: document.querySelector('main')?.innerText.slice(0, 1500) }))); } //E2EDBG
     check((await keep3("Production", "production")) && (await settles(t3, (n) => document.querySelectorAll("main li[data-row]").length === n, 3000, Math.min(20, ledger.size))), `Production shows the first ${Math.min(20, ledger.size)} of ${ledger.size} sellers`);
     check((await fits(t3, "li[data-row]")) && (ledger.size <= 20 || (await t3.locator("main [aria-label='Page 1 of 2']").count()) === 1), "the Production screen's page fits the TV, with its page dots");
     await t3.waitForTimeout(900); // the page's fade-in

@@ -1182,6 +1182,9 @@ body {
   .lb-who { display: flex; flex-direction: column; min-width: 0; }
   .lb-name { font-size: 14.5px; font-weight: 500; line-height: 1.35; }
   .lb-sub { font-size: 12.5px; color: var(--t-text-2); }
+  .lb-sub-split { display: flex; flex-wrap: wrap; column-gap: 8px; }
+  .lb-sub-split > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .lb-today { color: var(--t-up); }
   .lb-amt { font-size: 15px; font-weight: 500; text-align: right; white-space: nowrap; }
   .lb-bar { position: absolute; left: 10px; right: 10px; bottom: 6px; height: 3px; pointer-events: none; }
   .lb-bar > i { display: block; height: 100%; border-radius: 2px; background: var(--t-bar-grad); }
@@ -1201,6 +1204,9 @@ body {
     .lb.compact .you, .lb-row.compact .you { display: none; }
     .lb.compact .lb-name, .lb-row.compact .lb-name { font-size: 14px; flex: 0 1 auto; }
     .lb.compact .lb-sub, .lb-row.compact .lb-sub { font-size: 12px; flex: 0 1000 auto; }
+    /* A row with today's delta: the name keeps its width; the policies and the delta share what is left, two lines when they must. */
+    .lb.compact .lb-sub-split, .lb-row.compact .lb-sub-split { flex: 1 1 0; min-width: 0; }
+    .lb.compact .lb-who:has(.lb-sub-split) .lb-name, .lb-row.compact .lb-who:has(.lb-sub-split) .lb-name { flex: 0 0 auto; max-width: 78%; }
     .lb.compact .lb-amt, .lb-row.compact .lb-amt { grid-column: 5; font-size: 14px; }
     .lb.compact .lb-bar, .lb-row.compact .lb-bar { left: 8px; right: 8px; bottom: 5px; height: 2.5px; }
     .lb.compact .lb-row::before { left: 8px; right: 8px; }

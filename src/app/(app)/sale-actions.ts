@@ -160,6 +160,7 @@ export async function logSale(form: FormData): Promise<ActionResult> {
     if (!isDateKey(soldOn)) return { ok: false, error: "That date isn't right." };
     if (soldOn > today) return { ok: false, error: "That date is in the future." };
     if (soldOn < addDays(today, -400)) return { ok: false, error: "That date is over a year ago." };
+    if (viewer.level !== "owner" && viewer.level !== "admin" && soldOn < `${today.slice(0, 7)}-01`) return { ok: false, error: "A sale in a past month needs an admin." };
     const agents = await listAgents();
     const agent = agents.find((a) => a.id === input.agent_id);
     if (!agent) return { ok: false, error: "That person isn't on the team anymore." };

@@ -75,6 +75,8 @@ export interface FeedSale {
   product: string | null;
   carrier: string | null;
   kind: SaleKind;
+  /** Whose own sign-in logged it (null: a shared password, the Shortcut, an import): "Take it back" for whoever logged it. */
+  loggedByAgent: string | null;
   // No note: a sale's free text can hold a client's name or number (the Shortcut takes one), and
   // this feed reaches the TV and the shared team password (/api/board). Nothing on a board shows it.
   soldOn: string;
@@ -181,6 +183,7 @@ function toFeed(s: SaleWithAgent): FeedSale {
     product: s.product,
     carrier: s.carrier,
     kind: s.kind,
+    loggedByAgent: s.logged_by_agent ?? null,
     soldOn: s.sold_on,
     createdAt: s.created_at,
   };

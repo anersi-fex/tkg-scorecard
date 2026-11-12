@@ -368,7 +368,8 @@ function LatestSales({ viewer, ctx, sales, scope, today, pcOn, carriers }: { vie
   const list = [...sales].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0)).slice(0, 6);
   const person = viewer.level !== "team";
   const role = isAdmin(viewer) ? "owner" : "team";
-  const undo = (agentId: string): UndoRight => (!person ? "view-only" : agentId === viewer.agentId ? "ok" : "not-yours");
+  // The seller, or whoever logged it (a manager for a teammate), takes it back in its first 15 minutes (contract decision 4).
+  const undo = (x: { agentId: string; loggedByAgent: string | null }): UndoRight => (!person ? "view-only" : x.agentId === viewer.agentId || (!!viewer.agentId && x.loggedByAgent === viewer.agentId) ? "ok" : "not-yours");
   const agents = ctx.agents.filter((a) => a.active).map((a) => ({ id: a.id, name: a.name }));
   return (
     <Panel title="Latest sales" sub={scope === "team" ? "Newest on the team" : "Newest in the agency"} className={s.latest} data-latest-sales>
@@ -401,7 +402,7 @@ function LatestSales({ viewer, ctx, sales, scope, today, pcOn, carriers }: { vie
                 ) : (
                   <span className={s.saleLink}>{body}</span>
                 )}
-                {person && (isAdmin(viewer) || x.agentId === viewer.agentId) && <SaleRowMenu sale={x} role={role} undo={undo(x.agentId)} agents={agents} carriers={carriers} pcCarriers={[]} pcEnabled={pcOn} />}
+                {person && (open || isAdmin(viewer) || undo(x) === "ok") && <SaleRowMenu sale={x} role={role} undo={undo(x)} canOpen={open} agents={agents} carriers={carriers} pcCarriers={[]} pcEnabled={pcOn} />}
               </div>
             );
           })}
