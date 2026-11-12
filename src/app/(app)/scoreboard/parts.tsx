@@ -44,7 +44,7 @@ export function Segmented({ label, items, scroll = true, className }: { label: s
   );
 }
 
-/** Places gained (green, up) or lost (red, down) since yesterday; a gray dash for none; "new", in green, for someone who was not on the board yesterday (getting on it is a gain: in Crimson the brand's tint would read as the red of a drop). */
+/** Places gained (green, up) or lost (red, down) since yesterday; a gray dash for none; "new", in blue like the TV's chip, for someone who was not on the board yesterday (never the brand's tint: in Crimson it reads as the red of a drop). */
 export function ChangeChip({ change, className }: { change: number | null; className?: string }) {
   const words = change === null ? "new on the board" : change > 0 ? `up ${change}` : change < 0 ? `down ${-change}` : "no change";
   return (
@@ -52,7 +52,7 @@ export function ChangeChip({ change, className }: { change: number | null; class
       title={`Since yesterday: ${words}`}
       className={cn(
         "inline-flex h-[18px] min-w-[26px] shrink-0 items-center justify-center rounded-full px-1.5 font-mono text-[11px] leading-none font-bold whitespace-nowrap",
-        change === null || change > 0 ? "bg-green-100 text-green-800" : change < 0 ? "bg-red-100 text-red-800" : "bg-track text-gray-500",
+        change === null ? "bg-blue-100 text-blue-800" : change > 0 ? "bg-green-100 text-green-800" : change < 0 ? "bg-red-100 text-red-800" : "bg-track text-gray-500",
         className,
       )}
     >
