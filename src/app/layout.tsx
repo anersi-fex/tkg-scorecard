@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { THEME_SCRIPT } from "@/lib/theme-script";
+import { INSTALL_OFFER_SCRIPT } from "@/app/(app)/install/offer";
 import { loadLook } from "@/lib/look-setting";
 import "./globals.css";
 
@@ -41,32 +42,36 @@ function appBase(): URL {
   }
 }
 
-export const metadata: Metadata = {
-  metadataBase: appBase(),
-  title: { default: "Scorecard", template: "%s | Scorecard" },
-  description: "The team's month, live on the office TV. By TKG.",
-  applicationName: "Scorecard",
-  icons: {
-    icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
-      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-    ],
-    apple: "/apple-touch-icon.png",
-  },
-  appleWebApp: { capable: true, title: "Scorecard", statusBarStyle: "default", startupImage },
-  // Next writes only the standard mobile-web-app-capable; iPhones read Apple's own tag before
-  // they use the opening screens above.
-  other: { "apple-mobile-web-app-capable": "yes" },
-  openGraph: {
-    type: "website",
-    siteName: "Scorecard",
-    title: "Scorecard",
-    description: "by The Koka Group",
-    images: [{ url: "/og.jpg", width: 1200, height: 630, alt: "Scorecard by The Koka Group" }],
-  },
-  twitter: { card: "summary_large_image", title: "Scorecard", description: "by The Koka Group", images: ["/og.jpg"] },
-};
+/** The agency's name (Settings) sits beside TKG's in the description and the link preview; the app's name stays "Scorecard". */
+export async function generateMetadata(): Promise<Metadata> {
+  const { agencyName } = await loadLook();
+  return {
+    metadataBase: appBase(),
+    title: { default: "Scorecard", template: "%s | Scorecard" },
+    description: `The team's month, live on the office TV. By TKG × ${agencyName}.`,
+    applicationName: "Scorecard",
+    icons: {
+      icon: [
+        { url: "/icon.svg", type: "image/svg+xml" },
+        { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+        { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      ],
+      apple: "/apple-touch-icon.png",
+    },
+    appleWebApp: { capable: true, title: "Scorecard", statusBarStyle: "default", startupImage },
+    // Next writes only the standard mobile-web-app-capable; iPhones read Apple's own tag before
+    // they use the opening screens above.
+    other: { "apple-mobile-web-app-capable": "yes" },
+    openGraph: {
+      type: "website",
+      siteName: "Scorecard",
+      title: "Scorecard",
+      description: `by The Koka Group × ${agencyName}`,
+      images: [{ url: "/og.jpg", width: 1200, height: 630, alt: `Scorecard by The Koka Group × ${agencyName}` }],
+    },
+    twitter: { card: "summary_large_image", title: "Scorecard", description: `by The Koka Group × ${agencyName}`, images: ["/og.jpg"] },
+  };
+}
 
 // The TV board's viewport: plain 100%. The app's screens and the sign-in page export the phone's
 // 85% viewport (src/lib/phone-viewport.ts) over this one.
@@ -81,14 +86,15 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  // The owner's colorway and P&C color (Settings) color every screen, and the TV look says whether
-  // /board opens dark or light (THEME_SCRIPT reads it before paint); the TV re-applies all three
-  // from its 5-second poll.
+  // The owner's colorway (Settings) colors every screen, and the TV look says whether /board opens
+  // dark or light (THEME_SCRIPT reads it before paint); the TV re-applies them from its 5-second
+  // poll. data-pc-color only matters while the owner has the P&C board on.
   const look = await loadLook();
   return (
     <html lang="en" className="h-full antialiased" data-colorway={look.colorway} data-pc-color={look.pcColor} data-board-theme={look.boardTheme} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: INSTALL_OFFER_SCRIPT }} />
       </head>
       <body className="flex min-h-full flex-col bg-ink text-gray-900">{children}</body>
     </html>

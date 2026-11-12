@@ -716,9 +716,25 @@ body {
   animation: board-timer linear both;
 }
 
+/* A list that pages on the TV (2026-11-12: up to 70 people, nothing scrolls): the next page fades in. */
+@keyframes board-page {
+  from {
+    opacity: 0;
+    transform: translateY(0.35em);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.board-page {
+  animation: board-page 380ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .board-pop,
   .board-flash,
+  .board-page,
   .board-timer {
     animation: none;
   }

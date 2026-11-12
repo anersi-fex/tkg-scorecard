@@ -18,6 +18,8 @@ import { pcBreakdown, rankOrder, type PcCarrierCount, type PcCount } from "./vie
  * (the goal, the pace and the rank), P&C has its own board, and the agency total adds both up.
  */
 
+import type { Scoreboard } from "./scoreboard-types";
+import { DEFAULT_AGENCY_NAME } from "./types";
 export interface AgentLine {
   id: string;
   name: string;
@@ -57,6 +59,11 @@ export interface AgentLine {
   pcLines: { name: string; policies: number }[];
   lastSaleAt: string | null;
   active: boolean;
+  /** 0005_lineage.sql: works in the office (the office group leads every board), and the upline (teams). */
+  inOffice: boolean;
+  uplineId: string | null;
+  /** Rank inside their own group (the office group, or everyone else) by life premium; equals rank while nobody is marked in office. */
+  groupRank: number;
 }
 
 export interface FeedSale {
@@ -155,6 +162,12 @@ export interface MonthSnapshot {
   sound: SoundKey;
   /** Rotate the TV's three screens, or keep it on one (Settings > TV screens). */
   tvScreens: TvScreens;
+  /** The agency's name (Settings); the TV header and the lockup show it. */
+  agencyName: string;
+  /** False: life only. No P&C or life + P&C total anywhere, and P&C sales and goals do not count (the loader drops them). */
+  pcEnabled: boolean;
+  /** The CRM-style analytics for this month (src/lib/scoreboard.ts); null when not loaded. */
+  scoreboard: Scoreboard | null;
 }
 
 function toFeed(s: SaleWithAgent): FeedSale {
@@ -187,8 +200,8 @@ function bestDayOf(rows: SaleWithAgent[]): { date: string; cents: number } | nul
   return best;
 }
 
-/** Pure: the snapshot from loaded rows (tests build it without a database). */
-export function buildSnapshot(input: {
+/** What `buildSnapshot` reads: the month's loaded rows and the settings that ride the snapshot. */
+export interface SnapshotInput {
   month: string;
   today: string;
   agents: Agent[];
@@ -201,8 +214,33 @@ export function buildSnapshot(input: {
   boardTheme?: BoardTheme;
   sound?: SoundKey;
   tvScreens?: TvScreens;
+  agencyName?: string;
+  pcEnabled?: boolean;
+  scoreboard?: Scoreboard | null;
   generatedAt?: string;
-}): MonthSnapshot {
+}
+
+/**
+ * Life only (owner, 2026-11-12: "This is only gonna be life insurance"): the same input with
+ * every P&C sale (the month's and the recent ones), every P&C goal and the P&C licensing taken
+ * out before any math, and a TV kept on the P&C or the total screen sent back to the leaderboard.
+ * The loader runs it while Settings has P&C off; the P&C rows stay in the database.
+ */
+export function lifeOnlyInput<T extends SnapshotInput>(input: T): T {
+  const life = (s: SaleWithAgent) => s.kind !== "pc";
+  return {
+    ...input,
+    agents: input.agents.map((a) => (a.pc_licensed ? { ...a, pc_licensed: false } : a)),
+    sales: input.sales.filter(life),
+    recent: input.recent.filter(life),
+    goals: { teamCents: input.goals.teamCents, byAgent: input.goals.byAgent, pcTeamCents: 0, pcByAgent: {} },
+    tvScreens: input.tvScreens === "pc" || input.tvScreens === "total" ? "life" : input.tvScreens,
+    pcEnabled: false,
+  };
+}
+
+/** Pure: the snapshot from loaded rows (tests build it without a database). */
+export function buildSnapshot(input: SnapshotInput): MonthSnapshot {
   const { month, today, agents, sales, goals, recent, message } = input;
   const clock = monthClock(month, today);
   const tones = teamTones(agents);
@@ -298,6 +336,8 @@ export function buildSnapshot(input: {
         pcLines: [...p.pcLines.entries()].map(([name, n]) => ({ name, policies: n })).sort((x, y) => y.policies - x.policies || x.name.localeCompare(y.name)),
         lastSaleAt: p.last,
         active: a.active,
+        inOffice: a.in_office === true,
+        uplineId: a.upline_id ?? null,
       };
     });
   // Three orders: life (the main board), all of it added up, and P&C for the people who write it.
@@ -313,7 +353,18 @@ export function buildSnapshot(input: {
       (l) => l.pcPolicies,
     ).map((l, i) => [l.id, i + 1]),
   );
-  const agentLines: AgentLine[] = lifeOrder.map((l, i) => ({ ...l, rank: i + 1, totalRank: totalRank.get(l.id) ?? i + 1, pcRank: pcRank.get(l.id) ?? null }));
+  // In the office first (owner, 2026-11-12): the office group is ranked 1..n among themselves, then
+  // everyone else among themselves. While nobody is marked in office, everyone is one group.
+  const anyOffice = lifeOrder.some((l) => l.inOffice);
+  let officeSeen = 0;
+  let restSeen = 0;
+  const agentLines: AgentLine[] = lifeOrder.map((l, i) => ({
+    ...l,
+    rank: i + 1,
+    groupRank: !anyOffice ? i + 1 : l.inOffice ? ++officeSeen : ++restSeen,
+    totalRank: totalRank.get(l.id) ?? i + 1,
+    pcRank: pcRank.get(l.id) ?? null,
+  }));
 
   const pcGoalCents = goals.pcTeamCents ?? 0;
   const pc = pcBreakdown(pcSales.map((s) => ({ kind: s.kind, carrier: s.carrier, product: s.product, policies: s.policies, premiumCents: s.premium_cents })));
@@ -367,5 +418,8 @@ export function buildSnapshot(input: {
     boardTheme: input.boardTheme ?? DEFAULT_BOARD_THEME,
     sound: input.sound ?? DEFAULT_SOUND,
     tvScreens: input.tvScreens ?? DEFAULT_TV_SCREENS,
+    agencyName: input.agencyName ?? DEFAULT_AGENCY_NAME,
+    pcEnabled: input.pcEnabled ?? false,
+    scoreboard: input.scoreboard ?? null,
   };
 }

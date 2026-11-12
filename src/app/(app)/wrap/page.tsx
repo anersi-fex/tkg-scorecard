@@ -3,9 +3,10 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth";
 import { dbConfigured } from "@/lib/supabase";
 import { loadMonthSnapshot } from "@/lib/board";
-import { buildWrap, carrierSummary, isWrapView, periodFor, periodNav, WRAP_VIEWS, type PeriodWrap, type WrapLine, type WrapPeriod, type WrapView } from "@/lib/wrap";
+import { buildWrap, carrierSummary, isWrapView, periodFor, periodNav, wrapRoster, WRAP_VIEWS, type PeriodWrap, type WrapLine, type WrapPeriod, type WrapView } from "@/lib/wrap";
 import { datesOfMonth, dayLabelLong, isDateKey, monthKeyOf, monthName, todayInDetroit, weekday } from "@/lib/month";
 import { formatDollars } from "@/lib/money";
+import { DEFAULT_AGENCY_NAME } from "@/lib/types";
 import { Avatar, firstName } from "@/components/avatar";
 import { KindDot } from "@/components/kind";
 import { Eyebrow, ListCard, ROW_INSET } from "@/components/tide";
@@ -53,23 +54,38 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
   if (!dbConfigured()) return <Header period={period} day={day} today={today} />;
 
   let wrap: PeriodWrap;
+  // Life only (owner, 2026-11-12): with the P&C board off the loader leaves P&C out, and nothing
+  // here names it. The agency's name (Settings) signs the screenshot.
+  let pcOn = false;
+  let agency = DEFAULT_AGENCY_NAME;
   try {
-    wrap = buildWrap(await loadMonthSnapshot(monthKeyOf(day), { today }), day, view);
+    const snap = await loadMonthSnapshot(monthKeyOf(day), { today, scoreboard: false });
+    pcOn = snap.pcEnabled === true;
+    agency = snap.agencyName || DEFAULT_AGENCY_NAME;
+    wrap = buildWrap(snap, day, view);
   } catch (err) {
+    // The class only, for the log: the database's own words are not for a screen everyone opens.
+    console.error("wrap_load_failed", err instanceof Error ? err.name : "error");
     return (
       <>
         <Header period={period} day={day} today={today} />
-        <Notice tone="red">The database answered with an error: {err instanceof Error ? err.message : "unknown"}. Check that the setup SQL ran (SETUP.md, step 3).</Notice>
+        <Notice tone="red">The database didn&apos;t answer. Try again in a moment.</Notice>
       </>
     );
   }
   const words = WORDS[view];
   const verdict = verdictBadge(wrap);
   const best = wrap.bestSale;
-  const sold = wrap.lines.filter((l) => l.premiumCents > 0);
-  const quiet = wrap.lines.filter((l) => l.premiumCents === 0);
-  // Seven people fit one screenshot as rows, every one of them selling; past seven, the no-sale names share one line.
-  const fold = wrap.lines.length > 7;
+  // Up to seven people are rows. Past that the people without a sale share the line under the
+  // rows, and past seven sellers the rows stop at the top six and the rest are on that line too
+  // ("and 19 more sold $48,210"), so an agency's week is still one screenshot.
+  const roster = wrapRoster(wrap.lines);
+  const foldLine = [
+    roster.more ? `and ${roster.more.count} more sold ${formatDollars(roster.more.premiumCents)}` : "",
+    roster.quietNamed ? `No sale: ${roster.quiet.map((l) => firstName(l.name)).join(", ")}` : roster.quiet.length > 0 ? `${roster.quiet.length} with no sale` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const month = monthName(wrap.month.key);
   const monthDates = datesOfMonth(wrap.month.key);
   // The carriers are the month's, as they stood at the period's end.
@@ -79,7 +95,7 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
 
   return (
     <>
-      <Header period={period} day={day} today={today} badge={verdict} total={wrap.teamCents > 0 ? `${wrap.pcCents > 0 ? `${formatDollars(wrap.lifeCents)} life + ${formatDollars(wrap.pcCents)} P&C` : formatDollars(wrap.teamCents)} · ${wrap.policies} ${wrap.policies === 1 ? "policy" : "policies"}` : undefined} />
+      <Header period={period} day={day} today={today} badge={verdict} total={wrap.teamCents > 0 ? `${pcOn && wrap.pcCents > 0 ? `${formatDollars(wrap.lifeCents)} life + ${formatDollars(wrap.pcCents)} P&C` : formatDollars(wrap.teamCents)} · ${wrap.policies} ${wrap.policies === 1 ? "policy" : "policies"}` : undefined} />
 
       {/* Player of the period */}
       {wrap.player ? (
@@ -101,7 +117,7 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
             <p className="mt-2.5 truncate border-t border-on-grad-line pt-2 text-[12px] font-semibold">
               Best deal · {firstName(best.agentName)} · <span className="font-mono text-[13px]">{formatDollars(best.premiumCents)}</span>
               {best.policies > 1 && ` · ${best.policies} policies`}
-              {best.kind === "pc" && " · P&C"}
+              {pcOn && best.kind === "pc" && " · P&C"}
               {best.carrier && ` · ${best.carrier}`}
               {best.product && ` · ${best.product}`}
               {/* A day shows the clock, and only when the sale was logged on its own day (not a past day or an import); a week or month shows the day. */}
@@ -129,21 +145,23 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
             {wrap.month.policies > 0 ? `${wrap.month.policies} ${wrap.month.policies === 1 ? "policy" : "policies"} in ${month}, none with a carrier.` : `No policies in ${month}${wrap.current ? " yet" : ""}.`}
           </div>
         ) : (
-          wrap.topCarriers.map((c, i) => <CarrierSquare key={c.name} name={c.name} count={c.count} top={i === 0} pc={c.pc} />)
+          wrap.topCarriers.map((c, i) => <CarrierSquare key={c.name} name={c.name} count={c.count} top={i === 0} pc={pcOn && c.pc} />)
         )}
       </div>
 
-      {/* Everybody: sold rows ranked; with a long roster the no-sale names fold into one line */}
+      {/* Everybody: sold rows ranked; with a long roster the rest of the sellers and the no-sale people share one line */}
       <ListCard className="mt-3 pt-2.5">
         <li className="px-4 pb-1">
           <Eyebrow>{wrap.current ? words.now : words.then}</Eyebrow>
         </li>
         {wrap.lines.length === 0 && <li className="px-4 py-3 text-[14px] text-gray-600">Nobody is on the board yet.</li>}
-        {(fold ? sold : wrap.lines).map((l) => (
-          <WrapRow key={l.id} line={l} />
+        {roster.rows.map((l) => (
+          <WrapRow key={l.id} line={l} pcOn={pcOn} />
         ))}
-        {fold && quiet.length > 0 && (
-          <li className={cn("px-4 py-2 text-[12px] font-semibold text-gray-500", ROW_INSET.plain)}>No sale: {quiet.map((l) => firstName(l.name)).join(", ")}</li>
+        {foldLine && (
+          <li data-wrap-fold className={cn("px-4 py-2 text-[12px] font-semibold text-gray-500", ROW_INSET.plain)}>
+            {foldLine}
+          </li>
         )}
       </ListCard>
 
@@ -158,7 +176,7 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
         </div>
       )}
 
-      <p data-wrap-foot className="mt-2.5 flex items-center justify-between gap-3 px-1 text-[11px] font-semibold text-gray-500">
+      <p data-wrap-foot className="mt-2.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-1 text-[11px] font-semibold text-gray-500">
         <span>
           {view === "month" ? (
             wrap.month.goalCents > 0 ? `${wrap.month.goalPct}% of the ${formatDollars(wrap.month.goalCents)} goal` : "No goal set"
@@ -169,7 +187,8 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
             </>
           )}
         </span>
-        <span className="shrink-0">Scorecard by TKG</span>
+        {/* The signature stays whole: it drops under the count when the two do not fit on one line. */}
+        <span data-wrap-sign className="ml-auto max-w-full min-w-0 truncate">Scorecard by TKG × {agency}</span>
       </p>
     </>
   );
@@ -205,11 +224,11 @@ function CarrierSquare({ name, count, top, pc }: { name: string; count: number; 
   );
 }
 
-function WrapRow({ line }: { line: WrapLine }) {
+function WrapRow({ line, pcOn }: { line: WrapLine; pcOn: boolean }) {
   const sold = line.premiumCents > 0;
   const medal = line.rank === 1 ? "text-gold" : line.rank === 2 ? "text-silver" : line.rank === 3 ? "text-bronze" : "text-gray-500";
   return (
-    <li className={cn("flex items-center gap-3 px-4 py-1", ROW_INSET.plain, !sold && "opacity-50")}>
+    <li data-wrap-row className={cn("flex items-center gap-3 px-4 py-1", ROW_INSET.plain, !sold && "opacity-50")}>
       <span className={cn("w-4 shrink-0 text-center font-mono text-[14px] font-bold", medal)}>{line.rank ?? "–"}</span>
       <Avatar name={line.name} tone={line.tone} size={sold ? 32 : 28} />
       <div className="min-w-0 flex-1">
@@ -220,7 +239,7 @@ function WrapRow({ line }: { line: WrapLine }) {
         {sold && (
           <p className="truncate text-[11.5px] leading-tight font-semibold text-gray-500">
             {line.policies} {line.policies === 1 ? "policy" : "policies"}
-            {line.pcPolicies > 0 && ` (${line.pcPolicies} P&C)`}
+            {pcOn && line.pcPolicies > 0 && ` (${line.pcPolicies} P&C)`}
             {line.carriers.length > 0 && ` · ${carrierSummary(line.carriers)}`}
           </p>
         )}

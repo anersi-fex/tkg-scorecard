@@ -162,3 +162,76 @@ test("the life board's ranks never skip: someone off the board with only P&C ran
   assert.equal(s.agents.find((a) => a.id === "bo")!.rank, 5);
   assert.deepEqual(s.lifeRecent.map((r) => r.premiumCents / 100), [5_000]);
 });
+
+test("life only: the P&C sales, goals and licensing are taken out before any math", async () => {
+  const { lifeOnlyInput } = await import("../src/lib/snapshot");
+  const sales = [
+    sale(aa, "2026-11-10", 38_420, { policies: 26 }),
+    sale(ak, "2026-11-12", 36_900, { policies: 24 }),
+    sale(ak, "2026-11-17", 9_840, { kind: "pc", carrier: "HOAIC", product: "Home", policies: 14 }),
+    sale(mk, "2026-11-18", 3_960, { kind: "pc", carrier: "Obie", product: "Dwelling", policies: 5 }),
+  ];
+  const goals = { teamCents: 200_000 * 100, byAgent: { ak: 70_000 * 100 }, pcTeamCents: 30_000 * 100, pcByAgent: { ak: 12_000 * 100 } };
+  const input = lifeOnlyInput({ month: "2026-11", today: "2026-11-18", agents, sales, goals, recent: [...sales].reverse(), message: "", tvScreens: "total" as const, pcEnabled: true });
+  const s = buildSnapshot(input);
+  const life = (38_420 + 36_900) * 100;
+  assert.equal(s.pcEnabled, false);
+  assert.equal(s.tvScreens, "life"); // a TV kept on the total goes back to the leaderboard
+  assert.deepEqual([s.team.productionCents, s.team.lifeCents, s.team.pcCents, s.team.pcPolicies], [life, life, 0, 0]);
+  assert.deepEqual([s.team.policies, s.team.lifePolicies], [50, 50]);
+  assert.deepEqual([s.team.goalCents, s.team.pcGoalCents, s.team.totalGoalCents], [200_000 * 100, 0, 200_000 * 100]);
+  assert.equal(s.team.totalGoalPct, s.team.goalPct);
+  assert.deepEqual([s.team.pcByLine, s.team.pcByCarrier, s.pcRecent], [[], [], []]);
+  assert.equal(s.team.pcSharePct, 0);
+  assert.equal(s.team.todayCents, 0); // Moe's P&C sale today no longer counts
+  assert.ok(s.sales.every((x) => x.kind === "life") && s.recent.every((x) => x.kind === "life") && s.lifeRecent.every((x) => x.kind === "life"));
+  assert.equal(s.sales.length, 2);
+  assert.equal(s.recent.length, 2);
+  for (const a of s.agents) {
+    assert.deepEqual([a.pcCents, a.pcPolicies, a.pcGoalCents, a.pcRank, a.pcLicensed, a.pcLines.length], [0, 0, 0, null, false, 0], a.name);
+    assert.equal(a.premiumCents, a.lifeCents);
+    assert.equal(a.totalRank, a.rank);
+  }
+  // Moe, with only P&C this month, is still on the board with a zero.
+  assert.deepEqual(s.agents.map((a) => [a.name, a.lifeCents / 100]), [["Alex Alekseyev", 38_420], ["Anersi Koka", 36_900], ["Moe Karim", 0], ["Tina Kehrig", 0]]);
+  // The stored rows are untouched: the same list with P&C on still counts it.
+  assert.equal(sales.length, 4);
+  assert.equal(snap(sales, goals).team.pcCents, (9_840 + 3_960) * 100);
+  // "rotate" and the other screens pass through as they are.
+  assert.equal(lifeOnlyInput({ ...input, tvScreens: "rotate" as const }).tvScreens, "rotate");
+  assert.equal(lifeOnlyInput({ ...input, tvScreens: "pc" as const }).tvScreens, "life");
+  assert.equal(lifeOnlyInput({ ...input, tvScreens: "teams" as const }).tvScreens, "teams");
+});
+
+test("in the office first: each group is ranked 1..n among themselves", () => {
+  const office = (a: Agent, on: boolean): Agent => ({ ...a, in_office: on });
+  const people = [office(ak, true), office(aa, false), office(mk, true), office(tk, false)];
+  const sales = [sale(aa, "2026-11-10", 9_000), sale(ak, "2026-11-11", 7_000), sale(tk, "2026-11-12", 5_000), sale(mk, "2026-11-13", 3_000)];
+  const s = buildSnapshot({ month: "2026-11", today: "2026-11-18", agents: people, sales, goals: { teamCents: 0, byAgent: {} }, recent: [], message: "" });
+  assert.deepEqual(
+    s.agents.map((a) => [a.name, a.rank, a.inOffice, a.groupRank]),
+    [
+      ["Alex Alekseyev", 1, false, 1],
+      ["Anersi Koka", 2, true, 1],
+      ["Tina Kehrig", 3, false, 2],
+      ["Moe Karim", 4, true, 2],
+    ],
+  );
+  // Nobody marked in office yet: everyone is one group, and the group rank is the rank.
+  const flat = buildSnapshot({ month: "2026-11", today: "2026-11-18", agents, sales, goals: { teamCents: 0, byAgent: {} }, recent: [], message: "" });
+  assert.deepEqual(flat.agents.map((a) => a.groupRank), flat.agents.map((a) => a.rank));
+  assert.ok(flat.agents.every((a) => a.inOffice === false && a.uplineId === null));
+  // Everyone in the office: one group again.
+  const all = buildSnapshot({ month: "2026-11", today: "2026-11-18", agents: agents.map((a) => office(a, true)), sales, goals: { teamCents: 0, byAgent: {} }, recent: [], message: "" });
+  assert.deepEqual(all.agents.map((a) => a.groupRank), [1, 2, 3, 4]);
+});
+
+test("the snapshot carries the agency's name, the upline and the Scoreboard, and nothing private", () => {
+  const people = agents.map((a, i) => ({ ...a, upline_id: i === 0 ? null : "ak", phone: "+15550001111", pass_hash: "scrypt$secret" }) as Agent);
+  const s = buildSnapshot({ month: "2026-11", today: "2026-11-18", agents: people, sales: [sale(aa, "2026-11-10", 100)], goals: { teamCents: 0, byAgent: {} }, recent: [], message: "", agencyName: "Lineage Financial" });
+  assert.equal(s.agencyName, "Lineage Financial");
+  assert.equal(s.scoreboard, null);
+  assert.equal(s.agents.find((a) => a.id === "aa")?.uplineId, "ak");
+  const text = JSON.stringify(s);
+  assert.ok(!text.includes("5550001111") && !text.includes("scrypt") && !text.includes("pass_hash") && !text.includes("phone"));
+});

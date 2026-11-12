@@ -1,42 +1,112 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { cache } from "react";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { timingSafeEqual, createHash } from "crypto";
-import { verifySessionToken, SESSION_COOKIE, passwordFor, type Role } from "./session";
+import { createPersonToken, readSessionToken, SESSION_COOKIE, SESSION_TTL_SECONDS, passwordFor, type Role } from "./session";
+import { ownerPerson, personForSession } from "./people";
+import { isManager, isOwner, type Viewer } from "./viewer";
 import { db } from "./supabase";
+import { Said } from "./data";
 
 /**
- * Session checks. proxy.ts is only an optimistic gate (Next 16): every page calls requirePage()
- * and every server action and route handler calls requireRole() before touching data.
- * Two roles: the owner (full control) and the team (log sales, see everything).
+ * Session checks. proxy.ts is only an optimistic gate (Next 16): every page calls pageViewer()
+ * and every server action and route handler calls requireViewer() before touching data.
+ *
+ * Who is looking (src/lib/viewer.ts): the owner, an admin, a member (a person's own sign-in) or
+ * the team (the shared team password: the TV, and phones that have not joined yet). The two
+ * shared passwords work as they always did; the owner password signs in as the owner person.
  */
 export const OWNER_NAME = "Anersi Koka";
 /** The Shortcut token must be at least this long (the route refuses shorter ones; Settings says so). */
 export const LOG_TOKEN_MIN = 12;
 
-export async function currentRole(): Promise<Role | null> {
+export type Need = "any" | "manager" | "owner";
+
+async function readViewer(): Promise<Viewer | null> {
+  let claim: Awaited<ReturnType<typeof readSessionToken>> = null;
   try {
     const store = await cookies();
-    return await verifySessionToken(store.get(SESSION_COOKIE)?.value);
+    claim = await readSessionToken(store.get(SESSION_COOKIE)?.value);
+  } catch {
+    return null;
+  }
+  if (!claim) return null;
+  if (claim.kind === "shared") {
+    if (claim.role === "team") return { level: "team", agentId: null, name: null, via: "team-password" };
+    // The owner password is the owner person (their row, when there is one). It still signs in
+    // when the database does not answer, so the owner is never locked out of their own app.
+    try {
+      const owner = await ownerPerson();
+      return { level: "owner", agentId: owner?.id ?? null, name: owner?.name ?? OWNER_NAME, via: "owner-password" };
+    } catch {
+      return { level: "owner", agentId: null, name: OWNER_NAME, via: "owner-password" };
+    }
+  }
+  // A person's own sign-in counts only while their row is on the board and the session version
+  // is the one the token was made under (Sign out everywhere and a new password raise it).
+  // When the row cannot be read, nobody is signed in.
+  try {
+    const person = await personForSession(claim.agentId);
+    if (!person || !person.active || person.sessionVersion !== claim.sessionVersion) return null;
+    return { level: person.role, agentId: person.id, name: person.name, via: "person" };
   } catch {
     return null;
   }
 }
 
-/** Pages and layouts: bounce to /login without a valid session; the role for what to show. */
-export async function requirePage(need: Role | "any" = "any"): Promise<Role> {
-  const role = await currentRole();
-  if (!role) redirect("/login");
-  if (need === "owner" && role !== "owner") redirect("/");
-  return role;
+/** Who is signed in on this request, or null. Read once per request. */
+export const currentViewer: () => Promise<Viewer | null> = cache(readViewer);
+
+function allowed(viewer: Viewer, need: Need): boolean {
+  return need === "any" || (need === "manager" ? isManager(viewer) : isOwner(viewer));
+}
+
+/** Pages and layouts: to /login without a session, home without the level; the viewer for what to show. */
+export async function pageViewer(need: Need = "any"): Promise<Viewer> {
+  const viewer = await currentViewer();
+  if (!viewer) redirect("/login");
+  if (!allowed(viewer, need)) redirect("/");
+  return viewer;
 }
 
 /** Server actions and route handlers: throw instead of redirecting. */
+export async function requireViewer(need: Need = "any"): Promise<Viewer> {
+  const viewer = await currentViewer();
+  // Said: lines written for the screen (an action shows them as they are; data.ts lineFor).
+  if (!viewer) throw new Said("Not signed in");
+  if (!allowed(viewer, need)) throw new Said(need === "owner" ? "Only the owner can do that" : "Only an admin can do that");
+  return viewer;
+}
+
+// The two-role view, for files that have not moved to the viewer yet: the owner and an admin
+// read as "owner", a member and the team password as "team".
+const roleOf = (viewer: Viewer): Role => (isManager(viewer) ? "owner" : "team");
+
+export async function currentRole(): Promise<Role | null> {
+  const viewer = await currentViewer();
+  return viewer ? roleOf(viewer) : null;
+}
+
+export async function requirePage(need: Role | "any" = "any"): Promise<Role> {
+  return roleOf(await pageViewer(need === "owner" ? "manager" : "any"));
+}
+
 export async function requireRole(need: Role | "any" = "any"): Promise<Role> {
-  const role = await currentRole();
-  if (!role) throw new Error("Not signed in");
-  if (need === "owner" && role !== "owner") throw new Error("Only the owner can do that");
-  return role;
+  return roleOf(await requireViewer(need === "owner" ? "manager" : "any"));
+}
+
+const cookieFlags = () => ({ httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/", maxAge: SESSION_TTL_SECONDS });
+
+/** Signs this device in as a person (after a right phone number and password, or a join): the same cookie and flags as the shared passwords. */
+export async function startPersonSession(agentId: string, sessionVersion: number): Promise<void> {
+  const token = await createPersonToken(agentId, sessionVersion, SESSION_TTL_SECONDS);
+  (await cookies()).set(SESSION_COOKIE, token, cookieFlags());
+}
+
+/** Signs this device out. */
+export async function endSession(): Promise<void> {
+  (await cookies()).delete(SESSION_COOKIE);
 }
 
 /**
@@ -57,23 +127,76 @@ export function roleForPassword(supplied: string): Role | null {
   return found;
 }
 
-// Login throttle: a per-instance map plus a shared per-address count in login_attempts (holds
-// across serverless instances), and a high flood cap across every address, so one stranger
-// typing wrong passwords locks only themselves out, never the owner or the TV.
+// Login throttle, in login_attempts (15 minutes; holds across serverless instances) with a
+// per-instance map in front. Each sign-in form keeps its own count for an address, so an office
+// behind one address never locks itself out of the other form:
+//   the shared-password form (owner / team password)   "<address>"          10
+//   a person's own sign-in                              "signin:<address>"   60 (an office is one address)
+//   a join link's wrong tries                           "join:<address>"     30
+//   people who joined through the agency link           "joined:<address>"   60
+// plus a high flood cap across every address, and a count per account ("acct:<id>", 20, in
+// people.ts). The "acct:" and "joined:" rows stay out of the flood cap, so a locked account never
+// closes sign-in for all.
+// A try is counted BEFORE it is looked at (beginTry: record, then count, then check), so tries
+// sent at the same moment cannot all get under the limit; a right password takes its own row
+// back. A wrong try stays counted for 15 minutes: a right team password or a person's own
+// sign-in never clears the address's count (anyone on the team has those, and could guess at the
+// owner password without limit otherwise); only the owner password does.
 const WINDOW_MS = 15 * 60 * 1000;
-const MAX_PER_IP = 10;
+export const MAX_PER_IP = 10;
 const MAX_GLOBAL = 500;
 const failures = new Map<string, { count: number; resetAt: number }>();
 
-export async function loginThrottled(ip: string): Promise<boolean> {
-  const entry = failures.get(ip);
-  if (entry && entry.resetAt >= Date.now() && entry.count >= MAX_PER_IP) return true;
+/** The address a request came from, for the throttle (never logged; "unknown" when the host does not say). */
+export async function clientAddress(): Promise<string> {
+  const h = await headers();
+  return (h.get("x-forwarded-for")?.split(",")[0] || h.get("x-real-ip") || "unknown").trim().slice(0, 64);
+}
+
+/**
+ * The key a person's own sign-in is counted under: beside the shared-password form, never in it.
+ * An office is one address, so its typos must not close the owner's or the TV's sign-in (and ten
+ * wrong shared passwords must not close the office's own sign-ins). Each account still closes to
+ * a guesser at 20 (people.ts), so the address gets room for a whole office.
+ */
+export const signInKey = (ip: string): string => `signin:${ip}`.slice(0, 64);
+export const SIGNIN_MAX_PER_IP = 60;
+/**
+ * The key a join link's wrong tries are counted under: beside the sign-in count, never in it, so
+ * a bad link opened in the office cannot lock the office's sign-ins (and the other way round).
+ */
+export const joinKey = (ip: string): string => `join:${ip}`.slice(0, 64);
+/** A whole office joins from one address on the first day, so the join count allows more wrong tries. */
+export const JOIN_MAX_PER_IP = 30;
+/**
+ * People who joined through the agency link from one address, counted under their own key, so a
+ * link that got out cannot fill the board with made-up people at full speed. The limit sits well
+ * above one office's first day.
+ */
+export const joinedKey = (ip: string): string => `joined:${ip}`.slice(0, 64);
+export const JOINED_MAX_PER_IP = 60;
+
+/** Rows in the window under one key (null when the table cannot be read). */
+async function rowsUnder(key: string): Promise<number | null> {
   try {
     const since = new Date(Date.now() - WINDOW_MS).toISOString();
-    const recent = () => db().from("login_attempts").select("id", { count: "exact", head: true }).gte("at", since);
-    const mine = await recent().eq("ip", ip.slice(0, 64));
-    if (!mine.error && mine.count != null && mine.count >= MAX_PER_IP) return true;
-    const all = await recent();
+    const { count, error } = await db().from("login_attempts").select("id", { count: "exact", head: true }).eq("ip", key.slice(0, 64)).gte("at", since);
+    return !error && count != null ? count : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Is this key at its limit (or sign-in flooded from everywhere)? Reads only: nothing is counted. */
+export async function loginThrottled(ip: string, max: number = MAX_PER_IP): Promise<boolean> {
+  const entry = failures.get(ip);
+  if (entry && entry.resetAt >= Date.now() && entry.count >= max) return true;
+  const mine = await rowsUnder(ip);
+  if (mine != null && mine >= max) return true;
+  try {
+    // The flood cap counts tries by address only: not the per-account rows, not the joins.
+    const since = new Date(Date.now() - WINDOW_MS).toISOString();
+    const all = await db().from("login_attempts").select("id", { count: "exact", head: true }).gte("at", since).not("ip", "like", "acct:%").not("ip", "like", "joined:%");
     if (all.error || all.count == null) return false;
     return all.count >= MAX_GLOBAL;
   } catch {
@@ -81,23 +204,86 @@ export async function loginThrottled(ip: string): Promise<boolean> {
   }
 }
 
-export async function recordLoginFailure(ip: string): Promise<void> {
+/** This instance's own count for a key, raised by one. Returns the count as it stands with this try in it. */
+function bump(key: string): number {
   const now = Date.now();
-  const entry = failures.get(ip);
-  if (!entry || entry.resetAt < now) failures.set(ip, { count: 1, resetAt: now + WINDOW_MS });
-  else {
-    entry.count += 1;
-    entry.resetAt = now + WINDOW_MS;
-  }
+  const entry = failures.get(key);
   if (failures.size > 5000) for (const [k, v] of failures) if (v.resetAt < now) failures.delete(k);
+  // The window runs from the first try and is never pushed forward: 15 minutes, like the table's.
+  if (!entry || entry.resetAt < now) {
+    failures.set(key, { count: 1, resetAt: now + WINDOW_MS });
+    return 1;
+  }
+  entry.count += 1;
+  return entry.count;
+}
+
+/** Writes one row under a key. Returns its id, to take it back (null when the table did not answer). */
+async function writeTry(key: string): Promise<number | null> {
   try {
-    await db().from("login_attempts").insert({ ip: ip.slice(0, 64) });
+    const { data, error } = await db().from("login_attempts").insert({ ip: key.slice(0, 64) }).select("id").single();
+    const id = Number(data?.id);
+    return !error && Number.isSafeInteger(id) ? id : null;
+  } catch {
+    return null; // best effort
+  }
+}
+
+/** Counts one try under a key (here and in the table). Returns the row's id (null when the table did not answer). */
+export async function recordLoginFailure(ip: string): Promise<number | null> {
+  bump(ip);
+  return writeTry(ip);
+}
+
+/** Takes one counted try back (here and in the table): it was not a wrong try. */
+async function takeBackTry(ip: string, id: number | null): Promise<void> {
+  const entry = failures.get(ip);
+  if (entry && entry.count > 0) entry.count -= 1;
+  if (id == null) return;
+  try {
+    await db().from("login_attempts").delete().eq("id", id);
   } catch {
     /* best effort */
   }
 }
 
-/** A right password clears that address's count (here and in the table), so an earlier typo never counts. */
+/** One try at a form that is limited per address. */
+export interface Try {
+  /** Past the limit: say "too many" and do not look at what was typed. */
+  closed: boolean;
+  /** A right password (or a try that says nothing about anyone) takes its own row back. Safe to call twice. */
+  takeBack: () => Promise<void>;
+}
+const CLOSED: Try = { closed: true, takeBack: async () => {} };
+
+/**
+ * Counts a try BEFORE it is looked at: record, then count, then check. Tries sent at the same
+ * moment each see the others' rows, so only `max` of them find room, whether a guess among them
+ * was right or wrong (counting after the check let all of them through). A key already at its
+ * limit is refused without being counted, and a try that finds no room takes its row back, so
+ * the wait really is 15 minutes however often the button is tapped. The caller calls takeBack()
+ * for a right password; a wrong one leaves its row.
+ */
+export async function beginTry(key: string, max: number = MAX_PER_IP): Promise<Try> {
+  if (await loginThrottled(key, max)) return CLOSED;
+  // This instance's own order first (no waiting in between), then the table's.
+  const place = bump(key);
+  const id = await writeTry(key);
+  let taken = false;
+  const takeBack = async () => {
+    if (taken) return;
+    taken = true;
+    await takeBackTry(key, id);
+  };
+  const standing = await rowsUnder(key);
+  if (place > max || (standing != null && standing > max)) {
+    await takeBack();
+    return CLOSED;
+  }
+  return { closed: false, takeBack };
+}
+
+/** Clears an address's count (here and in the table). Only a right owner password does this. */
 export async function clearLoginFailures(ip: string): Promise<void> {
   failures.delete(ip);
   try {

@@ -9,15 +9,17 @@ import { ScoreLockup } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { initials } from "@/components/avatar";
 import { logout } from "@/app/login/actions";
+import { pendingApprovalCount } from "@/app/(app)/approvals/actions";
 
 /**
  * Tide app shell (the same as Sales Coach). The header (logo, and on a computer the main links)
  * stays at the top and publishes its height as --nav-h. On a phone the main links move to a
- * strip of their own at the bottom (TabBar, sticky, never over a row), which publishes --tabbar-h. Everything else (theme, the
- * TV board, Settings, Sign out) sits behind the initials at the top right.
+ * strip of their own at the bottom (TabBar, sticky, never over a row), which publishes --tabbar-h. Everything else (the
+ * person's profile, theme, the TV board, the phone guide, Settings for the owner and the admins,
+ * the owner's Approvals, Sign out) sits behind the viewer's own initials at the top right.
  */
 
-type IconName = "home" | "log" | "wrap" | "team";
+type IconName = "home" | "score" | "log" | "wrap" | "team";
 
 interface MainLink {
   href: string;
@@ -27,9 +29,10 @@ interface MainLink {
 
 const LINKS: MainLink[] = [
   { href: "/", label: "This month", icon: "home" },
+  { href: "/scoreboard", label: "Scoreboard", icon: "score" },
   { href: "/log", label: "Log a sale", icon: "log" },
   { href: "/wrap", label: "Wrap", icon: "wrap" },
-  { href: "/team", label: "Team", icon: "team" },
+  { href: "/team", label: "People", icon: "team" },
 ];
 
 function isActive(pathname: string, link: MainLink): boolean {
@@ -55,6 +58,15 @@ function NavIcon({ name, active, size = 22 }: { name: IconName; active: boolean;
     return (
       <svg {...common} fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={active ? 0 : 1.9} strokeLinejoin="round">
         <path d="M3 20V13a1 1 0 0 1 1-1h4v8H3zM9 20V6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v14H9zM16 20v-5h4a1 1 0 0 1 1 1v4h-5z" />
+      </svg>
+    );
+  }
+  if (name === "score") {
+    // A table: the Scoreboard's rows and columns.
+    return (
+      <svg {...common} fill="none" stroke="currentColor" strokeWidth={active ? 2.3 : 1.9} strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+        <path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10" />
       </svg>
     );
   }
@@ -92,7 +104,46 @@ function subscribeScroll(fn: () => void) {
 const readScrolled = () => window.scrollY > 2;
 const serverScrolled = () => false;
 
-export function NavBar({ role }: { role: Role }) {
+export interface NavBarProps {
+  role: Role;
+  /** The agency's name under "Scorecard" (Settings > agency name). */
+  agency?: string;
+  /** The signed-in person's name, when the sign-in names a person; the shared sign-ins show "Owner" or "Team". */
+  name?: string | null;
+  /** owner, admin, member or team once the sign-in carries a level; without it the role decides. */
+  level?: "owner" | "admin" | "member" | "team" | null;
+  /** How many requests wait for the owner's yes, when the layout already knows; the bar asks for itself otherwise. */
+  approvals?: number;
+}
+
+/** Sent on `window` when the owner answers a request (the Approvals page), so the badge counts again. */
+export const APPROVALS_CHANGED = "sc-approvals-changed";
+
+/** The owner's waiting requests (the badge on the initials): asked once the bar shows and again on each page change. Nobody else asks. */
+function useApprovalCount(isOwner: boolean, pathname: string, initial: number): number {
+  const [count, setCount] = useState(initial);
+  useEffect(() => {
+    if (!isOwner) return;
+    let live = true;
+    const ask = () => {
+      pendingApprovalCount()
+        .then((n) => {
+          if (live) setCount(n);
+        })
+        .catch(() => {});
+    };
+    ask();
+    // The Approvals page says so when the owner answers one, so the badge follows at once.
+    window.addEventListener(APPROVALS_CHANGED, ask);
+    return () => {
+      live = false;
+      window.removeEventListener(APPROVALS_CHANGED, ask);
+    };
+  }, [isOwner, pathname]);
+  return isOwner ? count : 0;
+}
+
+export function NavBar({ role, agency, name, level, approvals = 0 }: NavBarProps) {
   const pathname = usePathname();
   const ref = useRef<HTMLElement | null>(null);
   const scrolled = useSyncExternalStore(subscribeScroll, readScrolled, serverScrolled);
@@ -113,11 +164,12 @@ export function NavBar({ role }: { role: Role }) {
       ref={ref}
       className={cn("sticky top-0 z-30 border-b bg-ink transition-colors has-[[aria-expanded=true]]:z-50", scrolled ? "border-line" : "border-transparent")}
     >
-      <div className="mx-auto flex h-[60px] max-w-5xl items-center gap-3 pr-[11px] pl-4 sm:gap-6">
-        <Link href="/" aria-label="Scorecard, home" className="-my-1 flex min-h-11 shrink-0 items-center rounded-xl">
-          <ScoreLockup size={32} />
+      <div className="mx-auto flex h-[60px] max-w-5xl items-center gap-3 pr-[11px] pl-4 sm:gap-2 md:gap-6">
+        {/* On a narrow window the agency's name gives way before a link is cut: the lockup shrinks first, down to the icon and "Scorecard". */}
+        <Link href="/" aria-label="Scorecard, home" className="-my-1 flex min-h-11 min-w-[8.25rem] shrink-[9999] items-center rounded-xl">
+          <ScoreLockup size={32} agency={agency} />
         </Link>
-        <nav aria-label="Main" className="hidden min-w-0 flex-1 items-center gap-1 sm:flex">
+        <nav aria-label="Main" className="hidden min-w-0 flex-auto items-center gap-0.5 overflow-hidden sm:flex lg:gap-1">
           {LINKS.map((l) => {
             const active = isOn(l);
             return (
@@ -127,7 +179,8 @@ export function NavBar({ role }: { role: Role }) {
                 aria-current={isActive(pathname, l) ? "page" : undefined}
                 onClick={() => pick(l.href)}
                 className={cn(
-                  "inline-flex h-11 items-center gap-2 rounded-full px-4 text-[14px] whitespace-nowrap transition-colors",
+                  // Five links: tighter, and without the icons, on a narrow window.
+                  "inline-flex h-11 items-center gap-2 rounded-full px-2.5 text-[14px] whitespace-nowrap transition-colors lg:px-4 [&>svg]:hidden lg:[&>svg]:block",
                   active ? "bg-tint font-bold text-accent-text" : "font-semibold text-gray-600 hover:bg-gray-100 hover:text-gray-900",
                 )}
               >
@@ -137,7 +190,7 @@ export function NavBar({ role }: { role: Role }) {
             );
           })}
         </nav>
-        <AccountMenu role={role} />
+        <AccountMenu role={role} person={name ?? null} level={level ?? (role === "owner" ? "owner" : "team")} approvals={approvals} />
       </div>
     </header>
   );
@@ -168,9 +221,17 @@ function MenuRow({ href, children, icon, external }: { href: string; children: R
   );
 }
 
-/** The initials button and its small sheet: who is signed in, Light / Dark / Auto, the TV board, Settings, Sign out. */
-function AccountMenu({ role }: { role: Role }) {
+/**
+ * The initials button (the viewer's own initials) and its small sheet: who is signed in and their
+ * profile, Light / Dark / Auto, the TV board, the phone guide, Settings (the owner and the
+ * admins), Approvals with how many wait (the owner), Sign out.
+ */
+const LEVEL_LABEL = { owner: "Owner", admin: "Admin", member: "Signed in", team: "Team sign-in" } as const;
+
+function AccountMenu({ role, person, level, approvals }: { role: Role; person: string | null; level: keyof typeof LEVEL_LABEL; approvals: number }) {
   const pathname = usePathname();
+  const manager = level === "owner" || level === "admin";
+  const waiting = useApprovalCount(level === "owner", pathname, approvals);
   const [open, setOpen] = useState(false);
   const [shownPath, setShownPath] = useState(pathname);
   if (shownPath !== pathname) {
@@ -179,8 +240,9 @@ function AccountMenu({ role }: { role: Role }) {
   }
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const name = role === "owner" ? "Anersi Koka" : "Team";
-  const roleLabel = role === "owner" ? "Owner" : "Team sign-in";
+  const name = person?.trim() || (role === "owner" ? "Owner" : "Team");
+  const roleLabel = LEVEL_LABEL[level] ?? LEVEL_LABEL.team;
+  const badge = person?.trim() ? initials(name) : role === "owner" ? "O" : "T";
 
   useEffect(() => {
     if (!open) return;
@@ -205,11 +267,11 @@ function AccountMenu({ role }: { role: Role }) {
       <button
         ref={buttonRef}
         type="button"
-        aria-label={`Account: ${name}`}
+        aria-label={waiting > 0 ? `Account: ${name}. ${waiting} waiting for your OK` : `Account: ${name}`}
         aria-expanded={open}
         aria-controls="account-menu"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-11 w-11 items-center justify-center rounded-full"
+        className="relative flex h-11 w-11 items-center justify-center rounded-full"
       >
         <span
           className={cn(
@@ -217,26 +279,46 @@ function AccountMenu({ role }: { role: Role }) {
             open && "ring-2 ring-accent ring-offset-2 ring-offset-ink",
           )}
         >
-          {role === "owner" ? initials(name) : "T"}
+          {badge}
         </span>
+        {waiting > 0 && (
+          <span data-approvals-badge aria-hidden className="absolute -top-0.5 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 font-mono text-[11px] leading-none font-bold text-white ring-2 ring-ink">
+            {waiting > 9 ? "9+" : waiting}
+          </span>
+        )}
       </button>
 
       <div
         id="account-menu"
         className={cn(
-          "absolute top-[calc(100%+6px)] right-0 z-40 w-[min(18.5rem,calc(100vw-1.5rem))] origin-top-right rounded-[22px] bg-surface p-2 shadow-float transition-[opacity,transform,visibility] duration-150",
+          "absolute top-[calc(100%+6px)] right-0 z-40 w-[min(19.75rem,calc(100vw-1.5rem))] origin-top-right rounded-[22px] bg-surface p-2 shadow-float transition-[opacity,transform,visibility] duration-150",
           open ? "visible scale-100 opacity-100" : "invisible scale-95 opacity-0",
         )}
       >
-        <div className="flex items-center gap-3 px-2.5 pt-2 pb-3">
+        <div className="flex items-center gap-3 px-2.5 pt-2 pb-2">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-tint text-[15px] font-bold text-accent-text">
-            {role === "owner" ? initials(name) : "T"}
+            {badge}
           </span>
           <div className="min-w-0">
             <p className="truncate text-[15px] font-bold tracking-[-0.01em] text-gray-900">{name}</p>
             <p className="text-[13px] font-medium text-gray-500">{roleLabel}</p>
           </div>
         </div>
+        {level !== "team" && (
+          <div className="pb-1.5">
+            <MenuRow
+              href="/me"
+              icon={
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <circle cx="12" cy="8.2" r="3.7" />
+                  <path d="M4.5 20c1-3.6 4-5.4 7.5-5.4s6.5 1.8 7.5 5.4" />
+                </svg>
+              }
+            >
+              Your profile
+            </MenuRow>
+          </div>
+        )}
 
         <div className="border-t border-line px-2.5 pt-3 pb-2.5">
           <p className="mb-2 text-[11px] font-bold tracking-[0.09em] text-gray-500 uppercase">Appearance</p>
@@ -256,7 +338,18 @@ function AccountMenu({ role }: { role: Role }) {
           >
             Open the TV board
           </MenuRow>
-          {role === "owner" && (
+          <MenuRow
+            href="/install"
+            icon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="6.5" y="2.5" width="11" height="19" rx="2.6" />
+                <path d="M12 8v6M9.5 11.5 12 14l2.5-2.5" />
+              </svg>
+            }
+          >
+            Put Scorecard on your phone
+          </MenuRow>
+          {manager && (
             <MenuRow
               href="/settings"
               icon={
@@ -267,6 +360,26 @@ function AccountMenu({ role }: { role: Role }) {
               }
             >
               Settings
+            </MenuRow>
+          )}
+          {level === "owner" && (
+            <MenuRow
+              href="/approvals"
+              icon={
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M12 3l7 3v5.5c0 4.3-2.9 7.4-7 9-4.1-1.6-7-4.7-7-9V6l7-3z" />
+                  <path d="M8.8 12.2l2.3 2.3 4.2-4.6" />
+                </svg>
+              }
+            >
+              <span className="flex items-center gap-2">
+                Approvals
+                {waiting > 0 && (
+                  <span data-approvals-count className="flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 font-mono text-[11.5px] leading-none font-bold text-white">
+                    {waiting > 99 ? "99+" : waiting}
+                  </span>
+                )}
+              </span>
             </MenuRow>
           )}
           <form action={logout}>
@@ -315,12 +428,15 @@ function useKeyboardUp(): boolean {
       window.clearTimeout(timer);
       timer = window.setTimeout(compute, 60);
     };
-    document.addEventListener("focusin", compute);
+    // Hide at once, show late: a tap on a button moves the focus off the text field in the middle of the tap, and a
+    // bar that came back that instant would slide under the finger and take the tap meant for the row.
+    const onFocusIn = () => (takesTyping(document.activeElement) ? compute() : later());
+    document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", later);
     vv?.addEventListener("resize", compute);
     return () => {
       window.clearTimeout(timer);
-      document.removeEventListener("focusin", compute);
+      document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", later);
       vv?.removeEventListener("resize", compute);
     };
@@ -366,7 +482,7 @@ export function TabBarView({ pathname, navRef, hidden = false }: { pathname: str
       className={cn("sticky bottom-0 z-30 mt-auto border-t border-line bg-surface sm:hidden", hidden && "!hidden")}
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
-      <div className="mx-auto flex w-full max-w-3xl items-center justify-around px-2" style={{ height: TAB_HEIGHT }}>
+      <div className="mx-auto flex w-full max-w-xl items-center justify-around gap-1 px-2" style={{ height: TAB_HEIGHT }}>
         {LINKS.map((l) => {
           const active = isOn(l);
           return (
@@ -376,8 +492,8 @@ export function TabBarView({ pathname, navRef, hidden = false }: { pathname: str
               aria-current={isActive(pathname, l) ? "page" : undefined}
               onClick={() => pick(l.href)}
               className={cn(
-                // Four named tabs fit a 390px phone with the label under the icon (iOS style).
-                "flex h-[50px] w-[76px] flex-col items-center justify-center gap-0.5 rounded-2xl text-[10.5px] leading-none whitespace-nowrap transition-colors max-[359px]:w-[66px]",
+                // Five named tabs fit a 390px phone (459px of layout at 85%) with the label under the icon (iOS style).
+                "flex h-[50px] min-w-0 flex-1 basis-0 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10.5px] leading-none whitespace-nowrap transition-colors",
                 active ? "bg-tint font-bold text-accent-text" : "font-semibold text-gray-600 active:bg-gray-100",
               )}
             >

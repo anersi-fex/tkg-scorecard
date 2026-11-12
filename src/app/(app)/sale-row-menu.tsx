@@ -11,17 +11,43 @@ import { Button, Input, Label, Select, cn } from "@/components/ui";
 const UNDO_WINDOW_MS = 15 * 60 * 1000;
 
 /**
- * The "…" at the end of a sale row: the owner can fix or remove any sale; the team can take back
- * one logged in the last 15 minutes.
+ * Whether this viewer may take this sale back while it is fresh (the server decides again on the
+ * tap): "ok" for a member on their own sale and for the team password while it can log; "not-yours"
+ * for a member on someone else's sale; "view-only" for a team password that only looks.
  */
-export function SaleRowMenu({ sale, role, agents, carriers, pcCarriers }: { sale: FeedSale; role: Role; agents: Array<{ id: string; name: string }>; carriers: string[]; pcCarriers: string[] }) {
+export type UndoRight = "ok" | "not-yours" | "view-only";
+
+/**
+ * The "…" at the end of a sale row: the owner or an admin can fix or remove any sale; a member can
+ * take back their own, and the team password any, logged in the last 15 minutes. "Undo (just
+ * logged)" is offered only where the tap would work.
+ */
+export function SaleRowMenu({
+  sale,
+  role,
+  undo = "ok",
+  agents,
+  carriers,
+  pcCarriers,
+  pcEnabled = false,
+}: {
+  sale: FeedSale;
+  role: Role;
+  /** Home knows the viewer; a manager's menu ignores it. */
+  undo?: UndoRight;
+  agents: Array<{ id: string; name: string }>;
+  carriers: string[];
+  pcCarriers: string[];
+  /** Whether the owner has the P&C board on; off (the default), the sheet is life only and never names P&C. */
+  pcEnabled?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
   const wrap = useRef<HTMLDivElement | null>(null);
   // Whether the team can still take this one back, checked when the menu opens (a clock in render is impure).
   const [fresh, setFresh] = useState(true);
-  const canRemove = role === "owner" || fresh;
+  const canRemove = role === "owner" || (fresh && undo === "ok");
 
   useEffect(() => {
     if (!open) return;
@@ -78,16 +104,32 @@ export function SaleRowMenu({ sale, role, agents, carriers, pcCarriers }: { sale
               {pending ? "Removing..." : role === "owner" ? "Remove" : "Undo (just logged)"}
             </button>
           ) : (
-            <p className="px-3 py-2 text-[13px] leading-snug text-gray-500">Only Anersi can remove a sale after 15 minutes.</p>
+            <p data-undo={undo} className="px-3 py-2 text-[13px] leading-snug text-gray-500">
+              {undo === "view-only" ? "The team password only looks now." : undo === "not-yours" ? "You can take back your own sales only. Ask an admin about this one." : "Only an admin can remove a sale after 15 minutes."}
+            </p>
           )}
         </div>
       )}
-      {editing && <EditSheet sale={sale} agents={agents} carriers={carriers} pcCarriers={pcCarriers} onClose={() => setEditing(false)} />}
+      {editing && <EditSheet sale={sale} agents={agents} carriers={carriers} pcCarriers={pcEnabled ? pcCarriers : []} pcEnabled={pcEnabled} onClose={() => setEditing(false)} />}
     </div>
   );
 }
 
-function EditSheet({ sale, agents, carriers, pcCarriers, onClose }: { sale: FeedSale; agents: Array<{ id: string; name: string }>; carriers: string[]; pcCarriers: string[]; onClose: () => void }) {
+function EditSheet({
+  sale,
+  agents,
+  carriers,
+  pcCarriers,
+  pcEnabled,
+  onClose,
+}: {
+  sale: FeedSale;
+  agents: Array<{ id: string; name: string }>;
+  carriers: string[];
+  pcCarriers: string[];
+  pcEnabled: boolean;
+  onClose: () => void;
+}) {
   // The row's carrier stays pickable even if it left the Settings lists.
   const known = sale.carrier && !carriers.includes(sale.carrier) && !pcCarriers.includes(sale.carrier) ? [sale.carrier] : [];
   const [pending, start] = useTransition();
@@ -130,14 +172,19 @@ function EditSheet({ sale, agents, carriers, pcCarriers, onClose }: { sale: Feed
             <Label htmlFor="e-policies">Policies</Label>
             <Input id="e-policies" name="policies" type="number" min={1} max={50} defaultValue={sale.policies} className="font-mono" required />
           </div>
-          <div>
-            <Label htmlFor="e-kind">Kind</Label>
-            <Select id="e-kind" name="kind" defaultValue={sale.kind}>
-              <option value="life">Life</option>
-              <option value="pc">P&amp;C</option>
-            </Select>
-          </div>
-          <div>
+          {pcEnabled ? (
+            <div>
+              <Label htmlFor="e-kind">Kind</Label>
+              <Select id="e-kind" name="kind" defaultValue={sale.kind}>
+                <option value="life">Life</option>
+                <option value="pc">P&amp;C</option>
+              </Select>
+            </div>
+          ) : (
+            // Life only: the sale keeps the kind it has, and nothing on the sheet asks.
+            <input type="hidden" name="kind" value={sale.kind} />
+          )}
+          <div className={pcEnabled ? undefined : "col-span-2"}>
             <Label htmlFor="e-carrier">Carrier</Label>
             <Select id="e-carrier" name="carrier" defaultValue={sale.carrier ?? ""}>
               <option value="">Not set</option>
@@ -146,24 +193,34 @@ function EditSheet({ sale, agents, carriers, pcCarriers, onClose }: { sale: Feed
                   {c}
                 </option>
               ))}
-              <optgroup label="Life">
-                {carriers.map((c) => (
+              {pcEnabled ? (
+                <>
+                  <optgroup label="Life">
+                    {carriers.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="P&amp;C">
+                    {pcCarriers.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </optgroup>
+                </>
+              ) : (
+                carriers.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
-                ))}
-              </optgroup>
-              <optgroup label="P&amp;C">
-                {pcCarriers.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </optgroup>
+                ))
+              )}
             </Select>
           </div>
           <div className="col-span-2">
-            <Label htmlFor="e-product">Product (a P&amp;C sale: the line, like Auto or Home)</Label>
+            <Label htmlFor="e-product">{pcEnabled ? "Product (a P&C sale: the line, like Auto or Home)" : "Product"}</Label>
             <Input id="e-product" name="product" defaultValue={sale.product ?? ""} maxLength={40} />
           </div>
           <div className="col-span-2">

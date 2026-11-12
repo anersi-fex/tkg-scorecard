@@ -4,7 +4,7 @@ import { getSettings } from "./data";
 import { dbConfigured } from "./supabase";
 import { DEFAULT_COLORWAY, type ColorwayKey } from "./colorways";
 import { DEFAULT_PC_COLOR, type PcColorKey } from "./pc-colors";
-import { DEFAULT_BOARD_THEME, type BoardTheme } from "./types";
+import { DEFAULT_AGENCY_NAME, DEFAULT_BOARD_THEME, type BoardTheme } from "./types";
 
 export interface Look {
   /** For <html data-colorway>: the setting when the database answers, else Crimson. */
@@ -13,16 +13,26 @@ export interface Look {
   pcColor: PcColorKey;
   /** For <html data-board-theme>: what the TV opens in (theme-script.ts reads it before paint). */
   boardTheme: BoardTheme;
+  /** The agency's name under "Scorecard" on every screen (Settings; "Lineage Financial" when the database does not answer). */
+  agencyName: string;
+  /** Whether P&C is on (off since 2026-11-12: life only; no screen mentions P&C while it is off). */
+  pcEnabled: boolean;
 }
 
-const FALLBACK: Look = { colorway: DEFAULT_COLORWAY, pcColor: DEFAULT_PC_COLOR, boardTheme: DEFAULT_BOARD_THEME };
+const FALLBACK: Look = {
+  colorway: DEFAULT_COLORWAY,
+  pcColor: DEFAULT_PC_COLOR,
+  boardTheme: DEFAULT_BOARD_THEME,
+  agencyName: DEFAULT_AGENCY_NAME,
+  pcEnabled: false,
+};
 
 /** The owner's look settings for the root layout, once per request; the defaults when the database does not answer. */
 export const loadLook = cache(async (): Promise<Look> => {
   if (!dbConfigured()) return FALLBACK;
   try {
     const s = await getSettings();
-    return { colorway: s.colorway, pcColor: s.pcColor, boardTheme: s.boardTheme };
+    return { colorway: s.colorway, pcColor: s.pcColor, boardTheme: s.boardTheme, agencyName: s.agencyName || DEFAULT_AGENCY_NAME, pcEnabled: s.pcEnabled === true };
   } catch {
     return FALLBACK;
   }
