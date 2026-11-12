@@ -1,10 +1,11 @@
 import { cn } from "@/components/ui";
+import { DEFAULT_AGENCY_NAME } from "@/lib/types";
 
 /**
  * Scorecard brand, a sibling of Sales Coach (Tide): a white podium (three steps, the tallest in
- * the middle, a star over it) on the cobalt-to-violet gradient squircle; the lockup puts "by TKG"
- * (the real TKG letters) under the name. The icons in public/ are drawn from the same geometry by
- * scripts/gen-icons.mjs (keep the two in sync).
+ * the middle, a star over it) on the colorway's gradient squircle; the lockup puts the agency's
+ * name (Settings; "Lineage Financial" to start) under "Scorecard". The icons in public/ are drawn
+ * from the same geometry by scripts/gen-icons.mjs (keep the two in sync).
  */
 // Podium steps on a 1024 canvas: [x, width, top, bottom] with rounded top corners.
 // Big marks (48px and up) carry the star; small ones drop it and grow the steps.
@@ -63,18 +64,24 @@ export function TkgMark({ height = 12, className, title = "TKG" }: { height?: nu
   );
 }
 
-/** Icon + "Scorecard" + "by TKG". `size` is the icon size; the type scales with it. */
-export function ScoreLockup({ size = 28, className }: { size?: number; className?: string }) {
+/**
+ * Icon + "Scorecard" + the agency's name under it (owner, 2026-11-12: the agency's name in place
+ * of "by TKG"). `size` is the icon size; the type scales with it. Pass `agency` from
+ * `loadLook().agencyName` (or the snapshot's `agencyName`); without it the default name shows.
+ */
+export function ScoreLockup({ size = 28, className, agency }: { size?: number; className?: string; agency?: string }) {
   const name = Math.round(size * 0.56);
+  const sub = Math.max(10, Math.round(size * 0.3));
+  const label = agency?.trim() || DEFAULT_AGENCY_NAME;
   return (
-    <span className={cn("inline-flex items-center gap-2", className)}>
+    <span className={cn("inline-flex min-w-0 items-center gap-2", className)}>
       <ScoreMark size={size} />
-      <span className="flex flex-col leading-none">
+      <span className="flex min-w-0 flex-col text-left leading-none">
         <span className="font-extrabold tracking-[-0.03em] text-gray-900" style={{ fontSize: name }}>
           Scorecard
         </span>
-        <span className="mt-[3px] flex items-center gap-1 text-[10px] font-medium text-gray-500">
-          by <TkgMark height={Math.max(8, Math.round(size * 0.3))} className="text-gray-700" />
+        <span data-agency className="mt-[3px] max-w-[14em] truncate font-semibold tracking-[0.01em] text-gray-500" style={{ fontSize: sub, lineHeight: 1.15 }}>
+          {label}
         </span>
       </span>
     </span>

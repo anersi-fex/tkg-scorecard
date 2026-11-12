@@ -36,3 +36,13 @@ A sibling of Sales Coach (`anersi-fex/tkg-sales-coach`) with the same Tide look:
 - Migrations live in `supabase/migrations/`; the owner pastes each new file into the Supabase SQL editor. Anything that needs a new migration merges only after the owner ran it. Applied on the live project: `0001` (2026-10-27), `0002` (2026-10-28), `0003_pc.sql` (2026-11-04, the sale kind and P&C licensing). `0004_pc_goals.sql` (`goals.pc_cents`, `agent_goals.pc_cents`: the P&C goals) is pasted by the owner before the life-first screens update merges.
 
 **Update `HANDOFF.md` at every milestone.**
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

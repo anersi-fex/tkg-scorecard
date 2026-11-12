@@ -92,7 +92,17 @@ function subscribeScroll(fn: () => void) {
 const readScrolled = () => window.scrollY > 2;
 const serverScrolled = () => false;
 
-export function NavBar({ role }: { role: Role }) {
+export interface NavBarProps {
+  role: Role;
+  /** The agency's name under "Scorecard" (Settings > agency name). */
+  agency?: string;
+  /** The signed-in person's name, when the sign-in names a person; the shared sign-ins show "Owner" or "Team". */
+  name?: string | null;
+  /** owner, admin, member or team once the sign-in carries a level; without it the role decides. */
+  level?: "owner" | "admin" | "member" | "team" | null;
+}
+
+export function NavBar({ role, agency, name, level }: NavBarProps) {
   const pathname = usePathname();
   const ref = useRef<HTMLElement | null>(null);
   const scrolled = useSyncExternalStore(subscribeScroll, readScrolled, serverScrolled);
@@ -115,7 +125,7 @@ export function NavBar({ role }: { role: Role }) {
     >
       <div className="mx-auto flex h-[60px] max-w-5xl items-center gap-3 pr-[11px] pl-4 sm:gap-6">
         <Link href="/" aria-label="Scorecard, home" className="-my-1 flex min-h-11 shrink-0 items-center rounded-xl">
-          <ScoreLockup size={32} />
+          <ScoreLockup size={32} agency={agency} />
         </Link>
         <nav aria-label="Main" className="hidden min-w-0 flex-1 items-center gap-1 sm:flex">
           {LINKS.map((l) => {
@@ -137,7 +147,7 @@ export function NavBar({ role }: { role: Role }) {
             );
           })}
         </nav>
-        <AccountMenu role={role} />
+        <AccountMenu role={role} person={name ?? null} level={level ?? (role === "owner" ? "owner" : "team")} />
       </div>
     </header>
   );
@@ -168,8 +178,10 @@ function MenuRow({ href, children, icon, external }: { href: string; children: R
   );
 }
 
-/** The initials button and its small sheet: who is signed in, Light / Dark / Auto, the TV board, Settings, Sign out. */
-function AccountMenu({ role }: { role: Role }) {
+/** The initials button and its small sheet: who is signed in, Light / Dark / Auto, the TV board, the phone guide, Settings, Sign out. */
+const LEVEL_LABEL = { owner: "Owner", admin: "Admin", member: "Signed in", team: "Team sign-in" } as const;
+
+function AccountMenu({ role, person, level }: { role: Role; person: string | null; level: keyof typeof LEVEL_LABEL }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [shownPath, setShownPath] = useState(pathname);
@@ -179,8 +191,9 @@ function AccountMenu({ role }: { role: Role }) {
   }
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const name = role === "owner" ? "Anersi Koka" : "Team";
-  const roleLabel = role === "owner" ? "Owner" : "Team sign-in";
+  const name = person?.trim() || (role === "owner" ? "Owner" : "Team");
+  const roleLabel = LEVEL_LABEL[level] ?? LEVEL_LABEL.team;
+  const badge = person?.trim() ? initials(name) : role === "owner" ? "O" : "T";
 
   useEffect(() => {
     if (!open) return;
@@ -217,7 +230,7 @@ function AccountMenu({ role }: { role: Role }) {
             open && "ring-2 ring-accent ring-offset-2 ring-offset-ink",
           )}
         >
-          {role === "owner" ? initials(name) : "T"}
+          {badge}
         </span>
       </button>
 
@@ -230,7 +243,7 @@ function AccountMenu({ role }: { role: Role }) {
       >
         <div className="flex items-center gap-3 px-2.5 pt-2 pb-3">
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-tint text-[15px] font-bold text-accent-text">
-            {role === "owner" ? initials(name) : "T"}
+            {badge}
           </span>
           <div className="min-w-0">
             <p className="truncate text-[15px] font-bold tracking-[-0.01em] text-gray-900">{name}</p>
@@ -255,6 +268,17 @@ function AccountMenu({ role }: { role: Role }) {
             }
           >
             Open the TV board
+          </MenuRow>
+          <MenuRow
+            href="/install"
+            icon={
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="6.5" y="2.5" width="11" height="19" rx="2.6" />
+                <path d="M12 8v6M9.5 11.5 12 14l2.5-2.5" />
+              </svg>
+            }
+          >
+            Put Scorecard on your phone
           </MenuRow>
           {role === "owner" && (
             <MenuRow

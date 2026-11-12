@@ -18,6 +18,8 @@ import { pcBreakdown, rankOrder, type PcCarrierCount, type PcCount } from "./vie
  * (the goal, the pace and the rank), P&C has its own board, and the agency total adds both up.
  */
 
+import type { Scoreboard } from "./scoreboard-types";
+import { DEFAULT_AGENCY_NAME } from "./types";
 export interface AgentLine {
   id: string;
   name: string;
@@ -57,6 +59,11 @@ export interface AgentLine {
   pcLines: { name: string; policies: number }[];
   lastSaleAt: string | null;
   active: boolean;
+  /** 0005_lineage.sql: works in the office (the office group leads every board), and the upline (teams). */
+  inOffice: boolean;
+  uplineId: string | null;
+  /** Rank inside their own group (the office group, or everyone else) by life premium; equals rank while nobody is marked in office. */
+  groupRank: number;
 }
 
 export interface FeedSale {
@@ -155,6 +162,12 @@ export interface MonthSnapshot {
   sound: SoundKey;
   /** Rotate the TV's three screens, or keep it on one (Settings > TV screens). */
   tvScreens: TvScreens;
+  /** The agency's name (Settings); the TV header and the lockup show it. */
+  agencyName: string;
+  /** False: life only. No P&C or life + P&C total anywhere, and P&C sales and goals do not count (the loader drops them). */
+  pcEnabled: boolean;
+  /** The CRM-style analytics for this month (src/lib/scoreboard.ts); null when not loaded. */
+  scoreboard: Scoreboard | null;
 }
 
 function toFeed(s: SaleWithAgent): FeedSale {
@@ -201,6 +214,9 @@ export function buildSnapshot(input: {
   boardTheme?: BoardTheme;
   sound?: SoundKey;
   tvScreens?: TvScreens;
+  agencyName?: string;
+  pcEnabled?: boolean;
+  scoreboard?: Scoreboard | null;
   generatedAt?: string;
 }): MonthSnapshot {
   const { month, today, agents, sales, goals, recent, message } = input;
@@ -298,6 +314,9 @@ export function buildSnapshot(input: {
         pcLines: [...p.pcLines.entries()].map(([name, n]) => ({ name, policies: n })).sort((x, y) => y.policies - x.policies || x.name.localeCompare(y.name)),
         lastSaleAt: p.last,
         active: a.active,
+        inOffice: a.in_office === true,
+        uplineId: a.upline_id ?? null,
+        groupRank: 0,
       };
     });
   // Three orders: life (the main board), all of it added up, and P&C for the people who write it.
@@ -367,5 +386,8 @@ export function buildSnapshot(input: {
     boardTheme: input.boardTheme ?? DEFAULT_BOARD_THEME,
     sound: input.sound ?? DEFAULT_SOUND,
     tvScreens: input.tvScreens ?? DEFAULT_TV_SCREENS,
+    agencyName: input.agencyName ?? DEFAULT_AGENCY_NAME,
+    pcEnabled: input.pcEnabled ?? false,
+    scoreboard: input.scoreboard ?? null,
   };
 }

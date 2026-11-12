@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "./supabase";
 import { DEFAULT_SETTINGS, isBoardTheme, isSaleKind, isTvScreens, type Agent, type AppSettings, type LoggedBy, type PcCarrier, type Sale } from "./types";
-import { datesOfMonth, isMonthKey } from "./month";
+import { addMonths, datesOfMonth, isMonthKey } from "./month";
 import { DEFAULT_COLORWAY, isColorwayKey } from "./colorways";
 import { DEFAULT_PC_COLOR, isPcColorKey } from "./pc-colors";
 import { isSoundKey } from "./sounds";
@@ -20,7 +20,7 @@ export interface SaleWithAgent extends Sale {
   agent_name: string;
 }
 
-type SaleRow = Omit<Sale, "premium_cents" | "kind"> & { premium_cents: number | string; kind: string | null; agents: { name: string } | { name: string }[] | null };
+type SaleRow = Omit<Sale, "premium_cents" | "kind" | "logged_by_agent"> & { logged_by_agent?: string | null } & { premium_cents: number | string; kind: string | null; agents: { name: string } | { name: string }[] | null };
 
 function toSale(r: SaleRow): SaleWithAgent {
   const agent = Array.isArray(r.agents) ? r.agents[0] : r.agents;
@@ -36,13 +36,17 @@ function toSale(r: SaleRow): SaleWithAgent {
     note: r.note,
     sold_on: r.sold_on,
     logged_by: r.logged_by,
+    logged_by_agent: r.logged_by_agent ?? null,
     created_at: r.created_at,
     agent_name: agent?.name ?? "Someone",
   };
 }
 
-const SALE_COLUMNS = "id, agent_id, premium_cents, policies, product, carrier, kind, client, note, sold_on, logged_by, created_at, agents(name)";
-const AGENT_COLUMNS = "id, name, active, sort, pc_licensed";
+// sales points at agents twice since 0005 (agent_id: who sold it; logged_by_agent: who typed it),
+// so the join names its column: a bare agents(name) is refused as ambiguous.
+const SALE_COLUMNS = "id, agent_id, premium_cents, policies, product, carrier, kind, client, note, sold_on, logged_by, logged_by_agent, created_at, agents!agent_id(name)";
+// pass_hash and phone are never selected here: only src/lib/people.ts reads them, for sign-in.
+const AGENT_COLUMNS = "id, name, active, sort, pc_licensed, upline_id, in_office, role, joined_at";
 
 export async function listAgents(opts: { includeInactive?: boolean } = {}): Promise<Agent[]> {
   let q = db().from("agents").select(AGENT_COLUMNS).order("sort").order("name");
@@ -74,20 +78,39 @@ export async function updateAgent(id: string, patch: Partial<Pick<Agent, "name" 
   if (error) fail("agents.update", error);
 }
 
-/** Sales counted in a month (not deleted), oldest first, with the agent's name. */
+/** The API hands back at most 1000 rows a request: longer lists are read a page at a time. */
+const PAGE = 1000;
+/** A stop for the paging loops (200,000 rows): far past any month, so a bug can never loop forever. */
+const MAX_PAGES = 200;
+
+/** Sales counted in a month (not deleted), oldest first, with the agent's name. Every row, however many. */
 export async function salesForMonth(month: string): Promise<SaleWithAgent[]> {
   if (!isMonthKey(month)) return [];
   const dates = datesOfMonth(month);
-  const { data, error } = await db()
-    .from("sales")
-    .select(SALE_COLUMNS)
-    .is("deleted_at", null)
-    .gte("sold_on", dates[0])
-    .lte("sold_on", dates[dates.length - 1])
-    .order("sold_on")
-    .order("created_at");
-  if (error) fail("sales.month", error);
-  return ((data ?? []) as SaleRow[]).map(toSale);
+  return salesBetween(dates[0], dates[dates.length - 1]);
+}
+
+/** Sales counted from one day through another (both included, not deleted), oldest first. Every row, however many. */
+export async function salesBetween(from: string, to: string): Promise<SaleWithAgent[]> {
+  const out: SaleWithAgent[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data, error } = await db()
+      .from("sales")
+      .select(SALE_COLUMNS)
+      .is("deleted_at", null)
+      .gte("sold_on", from)
+      .lte("sold_on", to)
+      .order("sold_on")
+      .order("created_at")
+      // id last: two rows with the same instant keep one order across pages.
+      .order("id")
+      .range(page * PAGE, page * PAGE + PAGE - 1);
+    if (error) fail("sales.month", error);
+    const rows = (data ?? []) as unknown as SaleRow[];
+    for (const r of rows) out.push(toSale(r));
+    if (rows.length < PAGE) break;
+  }
+  return out;
 }
 
 /** The newest sales (not deleted), newest first. */
@@ -114,6 +137,8 @@ export interface NewSale {
   note: string | null;
   sold_on: string;
   logged_by: LoggedBy;
+  /** The person whose own sign-in logged it (0005); null for the shared passwords and the Shortcut. */
+  logged_by_agent?: string | null;
 }
 
 export async function insertSale(sale: NewSale): Promise<SaleWithAgent> {
@@ -123,7 +148,7 @@ export async function insertSale(sale: NewSale): Promise<SaleWithAgent> {
 }
 
 /** Returns false when the sale is gone (deleted meanwhile), so the screen can say so. */
-export async function updateSale(id: string, patch: Partial<Omit<NewSale, "logged_by">>): Promise<boolean> {
+export async function updateSale(id: string, patch: Partial<Omit<NewSale, "logged_by" | "logged_by_agent">>): Promise<boolean> {
   const { data, error } = await db().from("sales").update(patch).eq("id", id).is("deleted_at", null).select("id");
   if (error) fail("sales.update", error);
   return (data?.length ?? 0) > 0;
@@ -136,13 +161,38 @@ export async function deleteSale(id: string): Promise<boolean> {
   return (data?.length ?? 0) > 0;
 }
 
-/** Months that have sales (not deleted), newest first, as "YYYY-MM". */
+/**
+ * Months that have sales (not deleted), newest first, as "YYYY-MM". Never reads the sales
+ * themselves: the oldest and the newest day, then one "is there a sale" question per month between.
+ */
 export async function monthsWithSales(): Promise<string[]> {
-  const { data, error } = await db().from("sales").select("sold_on").is("deleted_at", null).order("sold_on", { ascending: false });
-  if (error) fail("sales.months", error);
-  const seen = new Set<string>();
-  for (const r of data ?? []) seen.add(String(r.sold_on).slice(0, 7));
-  return [...seen];
+  const edge = (ascending: boolean) => db().from("sales").select("sold_on").is("deleted_at", null).order("sold_on", { ascending }).limit(1).maybeSingle();
+  const [oldest, newest] = await Promise.all([edge(true), edge(false)]);
+  if (oldest.error) fail("sales.months", oldest.error);
+  if (newest.error) fail("sales.months", newest.error);
+  if (!oldest.data || !newest.data) return [];
+  const first = String(oldest.data.sold_on).slice(0, 7);
+  const last = String(newest.data.sold_on).slice(0, 7);
+  if (!isMonthKey(first) || !isMonthKey(last)) return [];
+  // Newest first; at most 20 years, so an odd old row never asks hundreds of questions.
+  const months: string[] = [];
+  for (let m = last; m >= first && months.length < 240; m = addMonths(m, -1)) months.push(m);
+  const has = await Promise.all(
+    months.map(async (m) => {
+      if (m === first || m === last) return true;
+      const dates = datesOfMonth(m);
+      const { data, error } = await db()
+        .from("sales")
+        .select("id")
+        .is("deleted_at", null)
+        .gte("sold_on", dates[0])
+        .lte("sold_on", dates[dates.length - 1])
+        .limit(1);
+      if (error) fail("sales.months", error);
+      return (data?.length ?? 0) > 0;
+    }),
+  );
+  return months.filter((_, i) => has[i]);
 }
 
 export interface MonthGoals {
@@ -219,6 +269,9 @@ export async function getSettings(): Promise<AppSettings> {
     boardTheme: isBoardTheme(v.boardTheme) ? v.boardTheme : DEFAULT_SETTINGS.boardTheme,
     sound: isSoundKey(v.sound) ? v.sound : DEFAULT_SETTINGS.sound,
     tvScreens: isTvScreens(v.tvScreens) ? v.tvScreens : DEFAULT_SETTINGS.tvScreens,
+    agencyName: typeof v.agencyName === "string" && v.agencyName.trim() ? v.agencyName.trim().slice(0, 40) : DEFAULT_SETTINGS.agencyName,
+    pcEnabled: v.pcEnabled === true,
+    teamPasswordLogs: v.teamPasswordLogs !== false,
   };
 }
 

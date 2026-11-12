@@ -1,12 +1,17 @@
 import type { MetadataRoute } from "next";
+import { loadLook } from "@/lib/look-setting";
+
+// The description carries the agency's name from Settings, so it is read on each request.
+export const dynamic = "force-dynamic";
 
 /** Makes "Add to Home Screen" open Scorecard as its own app (and the TV's browser can install it too). */
-export default function manifest(): MetadataRoute.Manifest {
+export default async function manifest(): Promise<MetadataRoute.Manifest> {
+  const { agencyName } = await loadLook();
   return {
     id: "/",
-    name: "Scorecard by TKG",
+    name: "Scorecard",
     short_name: "Scorecard",
-    description: "The team's month, live on the office TV.",
+    description: `The team's month, live on the office TV. ${agencyName}.`,
     start_url: "/",
     scope: "/",
     display: "standalone",

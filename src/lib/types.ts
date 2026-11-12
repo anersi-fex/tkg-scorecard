@@ -7,6 +7,20 @@ export interface Agent {
   sort: number;
   /** P&C licensed (the owner, Moe, Maira): Log a sale offers the Life / P&C switch for them. */
   pc_licensed: boolean;
+  /** 0005_lineage.sql. Whose team they are on: their upline's id (null at the top of the tree). */
+  upline_id?: string | null;
+  /** Works in the office: the office group leads every board. */
+  in_office?: boolean;
+  /** owner (Anersi, everything), admin (runs the agency), member (everyone else). */
+  role?: AgentRole;
+  /** They made their own sign-in (the phone number and the hash never leave the server). */
+  has_login?: boolean;
+  joined_at?: string | null;
+}
+
+export type AgentRole = "owner" | "admin" | "member";
+export function isAgentRole(v: unknown): v is AgentRole {
+  return v === "owner" || v === "admin" || v === "member";
 }
 
 export type LoggedBy = "owner" | "team" | "shortcut";
@@ -33,6 +47,8 @@ export interface Sale {
   note: string | null;
   sold_on: string;
   logged_by: LoggedBy;
+  /** 0005: the person whose own sign-in logged it (null for the shared passwords and the Shortcut). */
+  logged_by_agent?: string | null;
   created_at: string;
 }
 
@@ -49,12 +65,17 @@ export function isBoardTheme(v: unknown): v is BoardTheme {
   return v === "dark" || v === "light";
 }
 
-/** What the office TV shows (owner, 2026-11-04, Settings > TV screens): the three in rotation, or one kept on. */
-export type TvScreens = "rotate" | "life" | "pc" | "total";
-export const TV_SCREENS: TvScreens[] = ["rotate", "life", "pc", "total"];
+/**
+ * What the office TV shows (Settings > TV screens): the screens in rotation, or one kept on.
+ * "life" is the leaderboard (the main board). Since 2026-11-12 (Lineage): "scoreboard" (the top
+ * numbers, where agents stand, moved most), "production" (the day-by-day table), "teams".
+ * "pc" and "total" exist only while P&C is on (settings.app.pcEnabled).
+ */
+export type TvScreens = "rotate" | "life" | "pc" | "total" | "scoreboard" | "production" | "teams";
+export const TV_SCREENS: TvScreens[] = ["rotate", "life", "scoreboard", "production", "teams", "pc", "total"];
 export const DEFAULT_TV_SCREENS: TvScreens = "rotate";
 export function isTvScreens(v: unknown): v is TvScreens {
-  return v === "rotate" || v === "life" || v === "pc" || v === "total";
+  return typeof v === "string" && (TV_SCREENS as string[]).includes(v);
 }
 
 export interface AppSettings {
@@ -76,6 +97,12 @@ export interface AppSettings {
   sound: SoundKey;
   /** Rotate the TV's three screens, or keep it on one (Settings > TV screens). */
   tvScreens: TvScreens;
+  /** The agency's name on every screen (owner, 2026-11-12: Lineage Financial). */
+  agencyName: string;
+  /** P&C and the life + P&C total: off (owner, 2026-11-12: "only gonna be life insurance"). Off hides every mention and stops P&C counting. */
+  pcEnabled: boolean;
+  /** The shared team password may still log sales (on while people move to their own sign-ins). */
+  teamPasswordLogs: boolean;
 }
 
 export interface PcCarrier {
@@ -83,6 +110,8 @@ export interface PcCarrier {
   /** The lines this carrier writes (Auto, Home, Renters, Dwelling, Umbrella, ATV …). */
   lines: string[];
 }
+
+export const DEFAULT_AGENCY_NAME = "Lineage Financial";
 
 export const DEFAULT_PRODUCTS = ["Term", "Whole life", "Final expense", "IUL", "Other"];
 /** The owner's P&C carriers and lines (2026-11-04). */
@@ -106,4 +135,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   boardTheme: DEFAULT_BOARD_THEME,
   sound: DEFAULT_SOUND,
   tvScreens: DEFAULT_TV_SCREENS,
+  agencyName: DEFAULT_AGENCY_NAME,
+  pcEnabled: false,
+  teamPasswordLogs: true,
 };
