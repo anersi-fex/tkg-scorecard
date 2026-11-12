@@ -4,106 +4,121 @@ import type { MonthSnapshot } from "@/lib/board";
 import type { ScoreRow } from "@/lib/scoreboard-types";
 import { formatDollars } from "@/lib/money";
 import { cn } from "@/components/ui";
-import { pageCount, pageOf, recentDays, shortDay } from "@/lib/views";
-import { EmptyScreen, PageDots, PlaceMedal, useBoxEm, usePager, useReportPages } from "./parts";
+import { Icon } from "@/components/ui/icon";
+import { Medal, RankChip } from "@/components/ui/kit";
+import { pageCount, pageOf, shareOf, shortDay, tableDays } from "@/lib/views";
+import { EmptyScreen, PageDots, useBoxEm, usePager, useReportPages } from "./parts";
 
 /**
- * The Production screen: the CRM's "Production leaderboard" as a table (owner, 2026-11-12:
- * "matched exactly ... compact ... it's going to be on a big TV"). One row per agent who sold: the
- * rank, the places gained or lost since yesterday, a medal for the top three, the name over a
- * tinted bar as long as their total against the leader's, Policies, one column per day (the most
- * recent days that fit, a dash for a day without production) and the Total. About twenty rows a
- * page on a 16:9 screen; more rows page, they never scroll.
+ * The Production screen: the CRM's "Production leaderboard" as a table, in the calmer CRM look (the
+ * approved demo, 2026-11-12). One row per agent who sold: the rank and the places gained or lost
+ * since yesterday in a quiet block, a medal for the top three, the name over a thin bar against the
+ * leader, Policies, the last five days that count (business days through yesterday, and today or a
+ * Saturday once someone sold on it; a dash for a day without production) and the Total. Up to
+ * fifteen rows a page; more rows page, they never scroll.
  */
-/** The smallest row and the fixed columns, in the board's em. */
-const ROW = 2.05;
-const NAME_COL = 20;
-const POLICIES_COL = 5.5;
-const TOTAL_COL = 8;
-const DAY_COL = 5;
+/** A row's least height in the board's em (1em = 16 of the demo's pixels), and the demo's rows a page. */
+const ROW = 48 / 16;
+const MAX_ROWS = 15;
+const DAYS = 5;
 
 export function ProductionScreen({ snap, onPages }: { snap: MonthSnapshot; onPages?: (pages: number) => void }) {
   const sb = snap.scoreboard;
   const all = sb?.rows ?? [];
   const [ref, box] = useBoxEm();
-  const fit = box ? Math.max(1, Math.floor(box.h / ROW + 0.02)) : 20;
+  const fit = Math.min(MAX_ROWS, box ? Math.max(1, Math.floor(box.h / ROW + 0.02)) : MAX_ROWS);
   const pages = pageCount(all.length, fit);
   const page = usePager(pages);
   useReportPages(pages, onPages);
   if (!sb || all.length === 0) return <EmptyScreen title="Production leaderboard" line={sb ? "The first sale of the month lights this up." : "The numbers are on their way."} />;
-  const days = recentDays(sb.range.days, box ? Math.floor((box.w - NAME_COL - POLICIES_COL - TOTAL_COL) / DAY_COL) : 12);
-  const columns = `${NAME_COL}em ${POLICIES_COL}em repeat(${days.length}, minmax(0, 1fr)) ${TOTAL_COL}em`;
-  const lead = Math.max(1, all[0]?.totalCents ?? 1, ...all.map((r) => r.totalCents));
+  const today = snap.clock.today;
+  const days = tableDays(sb.range.days, (d) => all.some((r) => (r.byDay[d] ?? 0) > 0), today, DAYS);
+  const lead = Math.max(1, ...all.map((r) => r.totalCents));
   const shown = pageOf(all, page, fit);
+  const moves = all.some((r) => r.rankChange !== 0);
   return (
-    <section className="mt-[0.9em] flex min-h-0 flex-1 flex-col rounded-[1.4em] bg-surface px-[1.2em] pt-[0.85em] pb-[0.7em] shadow-card">
-      <div className="flex shrink-0 items-baseline justify-between gap-[1em]">
-        <h2 className="flex items-baseline gap-[0.7em] text-[1.35em] font-extrabold tracking-[-0.02em]">
-          Production leaderboard
-          <span className="text-[0.66em] font-semibold tracking-normal text-gray-500">Arrows show places gained or lost since yesterday</span>
-        </h2>
-        <p className="flex items-center gap-[0.8em] text-[0.9em] font-semibold text-gray-500">
-          {sb.range.label} · {all.length} {all.length === 1 ? "agent" : "agents"}
-          {days.length < sb.range.days.length && ` · last ${days.length} days`}
-          <PageDots pages={pages} page={page} />
-        </p>
-      </div>
-      <div className="mt-[0.5em] grid shrink-0 items-end border-b border-line pb-[0.3em] font-bold tracking-[0.04em] text-gray-500 uppercase [&>p]:text-[0.8em]" style={{ gridTemplateColumns: columns }}>
-        <p className="pl-[8.8em]">Name</p>
-        <p className="text-center">Policies</p>
-        {days.map((d) => (
-          <p key={d} className={cn("text-right whitespace-nowrap", d === snap.clock.today && "text-accent-text")}>
-            {shortDay(d)}
-          </p>
-        ))}
-        <p className="text-right">Total</p>
-      </div>
-      <div ref={ref} className="min-h-0 flex-1">
-        <ol key={page} className={cn("grid h-full", pages > 1 && "board-page")} style={{ gridTemplateRows: `repeat(${Math.min(fit, Math.max(all.length, 1))}, minmax(0, 1fr))` }}>
-          {shown.map((r) => (
-            <Row key={r.agentId} row={r} days={days} columns={columns} lead={lead} />
-          ))}
-        </ol>
-      </div>
-    </section>
+    <div className="tvb-main tvb-prodmain">
+      <section className="tvb-card tvb-tbl" aria-label="Production leaderboard" data-card="production">
+        <div className="tvb-tbl-head">
+          <div className="tvb-lhs">
+            <h2 className="tvb-title">Production leaderboard</h2>
+            <div className="tvb-sub">{moves ? "Arrows show places gained or lost since yesterday" : <ArrowsKey />}</div>
+          </div>
+          <div className="tvb-rhs">
+            <span className="num">
+              {sb.range.label} · {all.length} {all.length === 1 ? "agent" : "agents"}
+            </span>
+            <PageDots pages={pages} page={page} />
+          </div>
+        </div>
+        <div className="tvb-grid" style={{ ["--ndays" as string]: days.length }}>
+          <div className="tvb-thead">
+            <span className="tvb-th-name">Name</span>
+            <span className="tvb-n">Policies</span>
+            {days.map((d) => (
+              <span key={d} className={cn("tvb-n num", d === today && "tvb-th-today")}>
+                {shortDay(d)}
+              </span>
+            ))}
+            <span className="tvb-n tvb-sorted">
+              Total
+              <Icon name="arrow-down" size={15} stroke={1.8} className="h-[calc(15*var(--u))] w-[calc(15*var(--u))]" />
+            </span>
+          </div>
+          <div ref={ref} className="min-h-0 flex-1">
+            <ol key={page} className={cn("tvb-tbody h-full", pages > 1 && "board-page")} style={{ gridTemplateRows: `repeat(${fit}, minmax(0, 1fr))` }}>
+              {shown.map((r) => (
+                <Row key={r.agentId} row={r} days={days} lead={lead} />
+              ))}
+            </ol>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 
-/** Places gained (green, up) or lost (red, down) since yesterday; a gray dash for none; "new" for someone not on the board yesterday. */
-export function ChangeChip({ change, className }: { change: number | null; className?: string }) {
+/** "Arrows show places gained ↑ or lost ↓ since yesterday": while nobody has moved, the two colors are the key. */
+export function ArrowsKey() {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center justify-center rounded-full px-[0.45em] font-mono text-[0.78em] leading-[1.55] font-bold whitespace-nowrap",
-        change === null ? "bg-blue-100 text-blue-800" : change > 0 ? "bg-green-100 text-green-800" : change < 0 ? "bg-red-100 text-red-800" : "bg-track text-gray-500",
-        className,
-      )}
-    >
-      {change === null ? "new" : change > 0 ? `↑ ${change}` : change < 0 ? `↓ ${-change}` : "–"}
-    </span>
+    <>
+      Arrows show places gained <span className="chip up tvb-key">↑</span> or lost <span className="chip down tvb-key">↓</span> since yesterday
+    </>
   );
 }
 
-function Row({ row, days, columns, lead }: { row: ScoreRow; days: string[]; columns: string; lead: number }) {
+function Row({ row, days, lead }: { row: ScoreRow; days: string[]; lead: number }) {
   return (
-    <li data-row={row.rank} className="grid min-h-0 items-center border-b border-line/60 last:border-b-0" style={{ gridTemplateColumns: columns }}>
-      <div className="relative flex h-full min-w-0 items-center gap-[0.5em] pr-[0.8em]">
-        <span aria-hidden className="absolute inset-y-[0.16em] left-0 rounded-[0.5em] bg-tint" style={{ width: `${Math.max(2, Math.round((row.totalCents / lead) * 100))}%` }} />
-        <span className="relative w-[1.7em] shrink-0 text-right font-mono text-[1.05em] font-bold text-gray-600">{row.rank}</span>
-        <ChangeChip change={row.rankChange} className="relative w-[3.1em] shrink-0" />
-        <PlaceMedal place={row.rank} className="relative w-[1.2em] shrink-0 text-[1.05em]" />
-        <span className="relative min-w-0 truncate text-[1.08em] font-extrabold tracking-[-0.02em]">{row.name}</span>
+    <li data-row={row.rank} data-agent={row.agentId} className="tvb-tr">
+      <div className="tvb-namecell">
+        <span className="tvb-rankblock">
+          <span className="tvb-rk num">{row.rank}</span>
+          <span className="tvb-rchg">
+            <RankChip change={row.rankChange} />
+          </span>
+        </span>
+        <span className="tvb-pmedal">
+          <Medal rank={row.rank} size={28} />
+        </span>
+        <span className="tvb-who">
+          <span className="tvb-nm ell">{row.name}</span>
+          <span className="tvb-share" style={{ width: `${shareOf(row.totalCents, lead).toFixed(1)}%` }} />
+        </span>
       </div>
-      <p className="text-center font-mono text-[1.15em] font-bold">{row.policies}</p>
+      <span className="tvb-n num">{row.policies}</span>
       {days.map((d) => {
         const cents = row.byDay[d] ?? 0;
-        return (
-          <p key={d} className={cn("text-right font-mono text-[1.15em] tracking-[-0.02em] whitespace-nowrap", cents > 0 ? "font-semibold text-gray-800" : "text-gray-400")}>
-            {cents > 0 ? formatDollars(cents) : "—"}
-          </p>
+        return cents > 0 ? (
+          <span key={d} className="tvb-n num">
+            {formatDollars(cents)}
+          </span>
+        ) : (
+          <span key={d} className="tvb-n nil">
+            —
+          </span>
         );
       })}
-      <p className="text-right font-mono text-[1.15em] font-bold tracking-[-0.02em]">{formatDollars(row.totalCents)}</p>
+      <span className="tvb-n tvb-total num">{formatDollars(row.totalCents)}</span>
     </li>
   );
 }

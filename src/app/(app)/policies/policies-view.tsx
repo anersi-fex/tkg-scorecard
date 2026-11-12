@@ -756,9 +756,9 @@ function Table({ p, cols, words, onSort }: { p: PoliciesViewProps; cols: typeof 
               <Link href={`/policies/${r.id}`} className="pol-cl-name">
                 {hl(r.client || "No client yet", words)}
               </Link>
-              {r.fresh && <span className="pill pill-accent sm pol-new">Just logged</span>}
             </div>
             {r.isImport && <div className="pol-cl-sub">{policiesWord(r.policies)}</div>}
+            {r.fresh && <span className="pill pill-accent sm pol-new">Just logged</span>}
           </>
         );
       case "agent":
