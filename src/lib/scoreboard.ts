@@ -118,6 +118,16 @@ const add = (into: Record<string, number>, key: string, cents: number) => {
   into[key] = (into[key] ?? 0) + cents;
 };
 
+/**
+ * A product's or a carrier's column name: "Other" when blank, and also for a name every object
+ * already has a member under ("constructor", "toString", "__proto__"), which as a column key
+ * would add the money to that member in place of a number.
+ */
+const columnName = (value: string | null): string => {
+  const name = value?.trim();
+  return name && !(name in Object.prototype) ? name : "Other";
+};
+
 /** Most production, then most policies, then the name: every leaderboard's order. */
 function ranked<T extends { name: string }>(items: T[], cents: (t: T) => number, policies: (t: T) => number): T[] {
   return [...items].sort((a, b) => cents(b) - cents(a) || policies(b) - policies(a) || a.name.localeCompare(b.name));
@@ -187,8 +197,8 @@ export function buildScoreboard(input: {
       if (counts) t.sold = true;
       if (s.premium_cents !== 0) {
         add(t.byDay, d, s.premium_cents);
-        const product = s.product?.trim() || "Other";
-        const carrier = s.carrier?.trim() || "Other";
+        const product = columnName(s.product);
+        const carrier = columnName(s.carrier);
         add(t.byProduct, product, s.premium_cents);
         add(t.byCarrier, carrier, s.premium_cents);
         add(productTotals, product, s.premium_cents);
@@ -288,6 +298,9 @@ export function buildScoreboard(input: {
       }
       if (!t.sold) continue;
       team.activeAgents++;
+      // Someone off the board who sold in the range is one of the team's people for it (as on the
+      // leaderboard), so a team never reads "2 people · 3 sold".
+      if (byId.get(m)?.active === false) team.members++;
       team.cents += t.cents;
       team.policies += t.policies;
       team.memberIds.push(m);

@@ -88,7 +88,7 @@ export interface ScoreTeam {
   leaderId: string;
   /** The leader's name ("Anersi Koka"); screens say "Anersi Koka's team". */
   name: string;
-  /** People on the team (leader included) and how many of them sold. */
+  /** People on the team (leader included; someone off the board only while they sold in the range) and how many of them sold. */
   members: number;
   activeAgents: number;
   rank: number;

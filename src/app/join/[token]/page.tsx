@@ -11,8 +11,24 @@ import { PHONE_VIEWPORT } from "@/lib/phone-viewport";
 import { dbConfigured } from "@/lib/supabase";
 import { JoinForm, type JoinFormProps } from "./join-form";
 
-// The link is the key: no search engine keeps it and no other site is told it.
-export const metadata: Metadata = { title: "Join", robots: { index: false, follow: false }, referrer: "no-referrer" };
+/**
+ * The card a text or chat shows for the link: the same for every link, good or not (it never
+ * says whose link it is). The link is the key, so no search engine keeps it and no other site is
+ * told it.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const { agencyName } = await loadLook();
+  const title = `Join ${agencyName} on Scorecard`;
+  const description = "Tap to set up your sign-in. It takes a minute.";
+  return {
+    title: { absolute: title },
+    description,
+    robots: { index: false, follow: false },
+    referrer: "no-referrer",
+    openGraph: { type: "website", siteName: "Scorecard", title, description, images: [{ url: "/og.jpg", width: 1200, height: 630, alt: "Scorecard" }] },
+    twitter: { card: "summary_large_image", title, description, images: ["/og.jpg"] },
+  };
+}
 /** Drawn at the app's 85% on a phone, like the sign-in screen. */
 export const viewport = PHONE_VIEWPORT;
 

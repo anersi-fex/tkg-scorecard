@@ -321,14 +321,48 @@ test("a team scope narrows everything to the leader and all levels below", () =>
   assert.equal(nobody.kpis.productionCents, 0);
 });
 
-test("someone off the board: not one of the team's people, but their sales still count for it", () => {
+test("someone off the board: one of the team's people while they sold in the range, and their sales count for it", () => {
   const people = agents.map((a) => (a.name === "Tyler Goddard" ? { ...a, active: false } : a));
   const sb = nov11({ agents: people, leaderId: idOf("Mara Holt") });
   const team = sb.teams[0];
-  assert.equal(team.members, 2); // Mara and Vito
+  assert.equal(team.members, 3); // Mara, Vito, and Tyler because he sold: never "2 people · 3 sold"
   assert.equal(team.activeAgents, 3); // all three sold
   assert.equal(team.totalCents, (5_596 + 1_698 + 1_156) * 100);
   assert.ok(sb.rows.some((r) => r.name === "Tyler Goddard"));
+  assert.match(scoreboardCsv(sb, "teams", "dates").split("\r\n")[1], /^1,"Mara Holt's team",3,3,/);
+  // Nov 8 – 11: Tyler sold nothing in it, so he is not one of the team's people.
+  const late = nov11({ agents: people, leaderId: idOf("Mara Holt"), from: "2026-11-08" }).teams[0];
+  assert.equal(late.members, 2);
+  assert.equal(late.activeAgents, 2);
+  // Every team, whoever is off the board: the people are never fewer than those who sold.
+  for (const off of ["Tyler Goddard", "Mara Holt", "Mila Serrano"]) {
+    const all = nov11({ agents: agents.map((a) => (a.name === off ? { ...a, active: false } : a)) });
+    for (const t of all.teams) assert.ok(t.members >= t.activeAgents, `${off} off: ${t.name}`);
+  }
+});
+
+test("a product or a carrier named like a built-in object member lands under Other", () => {
+  for (const name of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__", " constructor "]) {
+    const sb = nov11({ sales: [...salesOf(), sale("Tyler Goddard", "2026-11-04", 500, { product: name, carrier: name })], leaderId: idOf("Mara Holt") });
+    const row = sb.rows.find((r) => r.name === "Tyler Goddard")!;
+    assert.equal(row.totalCents, (1_156 + 500) * 100);
+    for (const r of [...sb.rows, ...sb.teams]) {
+      for (const by of [r.byProduct, r.byCarrier]) {
+        const values = Object.values(by);
+        assert.ok(values.every((v) => typeof v === "number"), name);
+        // Every dollar is in a column.
+        assert.equal(values.reduce((n, v) => n + v, 0), r.totalCents, name);
+      }
+    }
+    assert.equal(row.byProduct.Other, 500 * 100);
+    assert.equal(row.byCarrier.Other, 500 * 100);
+    assert.ok(sb.products.includes("Other") && !sb.products.includes(name.trim()));
+    assert.ok(sb.carriers.includes("Other") && !sb.carriers.includes(name.trim()));
+    for (const who of ["agents", "teams"] as const) for (const view of ["product", "carrier"] as const) assert.ok(!scoreboardCsv(sb, who, view).includes("NaN"), name);
+  }
+  // An ordinary name keeps its own column.
+  const plain = nov11({ sales: [...salesOf(), sale("Tyler Goddard", "2026-11-04", 500, { product: "Final Expense" })] });
+  assert.equal(plain.rows.find((r) => r.name === "Tyler Goddard")!.byProduct["Final Expense"], 500 * 100);
 });
 
 test("nothing private rides along: only the fields the screens need", () => {
