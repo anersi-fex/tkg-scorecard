@@ -33,7 +33,7 @@ export function Segmented({ label, items, scroll = true, className }: { label: s
           scroll={scroll}
           aria-current={it.on ? "true" : undefined}
           className={cn(
-            "flex h-10 flex-1 items-center justify-center rounded-[10px] px-3.5 text-[13px] font-bold whitespace-nowrap transition md:h-8 md:px-3",
+            "flex h-11 flex-1 items-center justify-center rounded-[10px] px-3.5 text-[13px] font-bold whitespace-nowrap transition md:h-8 md:px-3",
             it.on ? "bg-segment text-gray-900 shadow-card" : "text-gray-600 hover:text-gray-900",
           )}
         >
@@ -44,7 +44,7 @@ export function Segmented({ label, items, scroll = true, className }: { label: s
   );
 }
 
-/** Places gained (green, up) or lost (red, down) since yesterday; a gray dash for none; "new" for someone who was not on the board yesterday. */
+/** Places gained (green, up) or lost (red, down) since yesterday; a gray dash for none; "new", in green, for someone who was not on the board yesterday (getting on it is a gain: in Crimson the brand's tint would read as the red of a drop). */
 export function ChangeChip({ change, className }: { change: number | null; className?: string }) {
   const words = change === null ? "new on the board" : change > 0 ? `up ${change}` : change < 0 ? `down ${-change}` : "no change";
   return (
@@ -52,7 +52,7 @@ export function ChangeChip({ change, className }: { change: number | null; class
       title={`Since yesterday: ${words}`}
       className={cn(
         "inline-flex h-[18px] min-w-[26px] shrink-0 items-center justify-center rounded-full px-1.5 font-mono text-[11px] leading-none font-bold whitespace-nowrap",
-        change === null ? "bg-tint text-accent-text" : change > 0 ? "bg-green-100 text-green-800" : change < 0 ? "bg-red-100 text-red-800" : "bg-track text-gray-500",
+        change === null || change > 0 ? "bg-green-100 text-green-800" : change < 0 ? "bg-red-100 text-red-800" : "bg-track text-gray-500",
         className,
       )}
     >

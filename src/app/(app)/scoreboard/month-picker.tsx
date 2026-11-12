@@ -21,7 +21,7 @@ export function MonthPicker({ value, options }: { value: string; options: Array<
           const next = options.find((o) => o.value === e.target.value);
           if (next) startTransition(() => router.push(next.href));
         }}
-        className="h-10 appearance-none rounded-xl border border-line bg-surface pr-8 pl-9 text-[14px] font-bold text-gray-900 focus:border-accent focus:ring-2 focus:ring-tint focus:outline-none md:h-9 md:text-[13px]"
+        className="h-11 appearance-none rounded-xl border border-line bg-surface pr-8 pl-9 text-[14px] font-bold text-gray-900 focus:border-accent focus:ring-2 focus:ring-tint focus:outline-none md:h-9 md:text-[13px]"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>

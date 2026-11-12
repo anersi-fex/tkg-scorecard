@@ -69,12 +69,17 @@ function toApproval(r: Row): Approval | null {
   };
 }
 
+/** Added to a waiting request's line when a newer request for the same thing takes its place. */
+const REPLACED = " (replaced by a newer request)";
+
 /** What the request is about: the person for an admin change, the sale for a sale change. */
 const targetKey = (kind: ApprovalKind) => (kind === "make_admin" || kind === "remove_admin" ? "agent_id" : "sale_id");
 
 /**
- * Files a request for the owner. Asking twice for the same thing keeps one row: the waiting
- * request is brought up to date instead (the newest values of a sale fix win).
+ * Files a request for the owner. Asking twice for the same thing keeps one waiting request: the
+ * earlier one is closed (it reads "replaced by a newer request") and a NEW row is made, so a
+ * request the owner has on screen never changes under his finger: his yes to the old one finds
+ * it already answered, and he reads the new one before he approves it.
  */
 export async function requestApproval(input: { kind: ApprovalKind; payload: Record<string, unknown>; summary: string; requestedBy: string | null }): Promise<void> {
   if (!isKind(input.kind)) throw new Error("That isn't something to ask for.");
@@ -82,16 +87,15 @@ export async function requestApproval(input: { kind: ApprovalKind; payload: Reco
   const target = input.payload[key];
   if (!isUuid(target)) throw new Error("That request is missing what it is about.");
   const summary = input.summary.replace(/\s+/g, " ").trim().slice(0, 200);
-  const waiting = await db().from("approvals").select("id").eq("status", "pending").eq("kind", input.kind).eq(`payload->>${key}`, target).limit(1);
+  const waiting = await db().from("approvals").select("id, summary").eq("status", "pending").eq("kind", input.kind).eq(`payload->>${key}`, target);
   if (waiting.error) fail("approvals.find", waiting.error);
-  if (waiting.data?.length) {
+  for (const old of waiting.data ?? []) {
     const { error } = await db()
       .from("approvals")
-      .update({ payload: input.payload, summary, requested_by: input.requestedBy, requested_at: new Date().toISOString() })
-      .eq("id", waiting.data[0].id)
+      .update({ status: "declined", decided_at: new Date().toISOString(), summary: `${String(old.summary).slice(0, 200 - REPLACED.length)}${REPLACED}` })
+      .eq("id", old.id)
       .eq("status", "pending");
-    if (error) fail("approvals.update", error);
-    return;
+    if (error) fail("approvals.replace", error);
   }
   const { error } = await db().from("approvals").insert({ kind: input.kind, payload: input.payload, summary, requested_by: input.requestedBy });
   if (error) fail("approvals.request", error);

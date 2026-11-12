@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { endSession, requireViewer, startPersonSession } from "@/lib/auth";
 import { getAgent, getSettings, listAgents, saveSettings } from "@/lib/data";
-import { bumpSession, checkOwnPassword, cleanName, getPerson, setInOffice, setName, setPersonPassword, setPhone, setRole, setUpline, type Person } from "@/lib/people";
+import { bumpSession, checkOwnPassword, cleanName, getPerson, sameName, setInOffice, setName, setPersonPassword, setPhone, setRole, setUpline, type Person } from "@/lib/people";
 import { agencyToken, createInvite, joinUrl, revokeAgencyInvites, revokePersonInvites } from "@/lib/invites";
 import { decideApproval as decide, listApprovals, requestApproval, type Approval } from "@/lib/approvals";
 import { passwordProblem } from "@/lib/passwords";
@@ -20,7 +20,8 @@ import type { ActionResult } from "./actions";
  */
 export type LinkResult = { ok: true; url: string } | { ok: false; error: string };
 
-const Id = z.string().uuid();
+// Any id Postgres holds (the shape only: zod's uuid() also wants an RFC version, which refuses ids typed by hand).
+const Id = z.guid();
 const SENT_FOR_OK = "Sent to Anersi for a quick OK.";
 
 function message(err: unknown): string {
@@ -243,13 +244,16 @@ export async function updateMyProfile(form: FormData): Promise<ActionResult> {
     if (!viewer.agentId) return { ok: false, error: "You're on the team password. Ask for a join link to get your own sign-in." };
     const me = await getPerson(viewer.agentId);
     if (!me) return { ok: false, error: "Sign in again." };
+    // Everything is checked first and the one write that can be refused (the number) goes first,
+    // so a save the screen calls refused has changed nothing.
+    let rename: string | null = null;
     if (form.has("name")) {
       const name = cleanName(form.get("name"));
       if (!name) return { ok: false, error: "Type your first and last name." };
       if (name !== me.name) {
         const others = await listAgents();
-        if (others.some((a) => a.id !== me.id && a.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: `Someone else on the board is ${name}. Add a middle initial.` };
-        await setName(me.id, name);
+        if (others.some((a) => a.id !== me.id && sameName(a.name, name))) return { ok: false, error: `Someone else on the board is ${name}. Add a middle initial.` };
+        rename = name;
       }
     }
     if (form.has("phone")) {
@@ -259,6 +263,7 @@ export async function updateMyProfile(form: FormData): Promise<ActionResult> {
       if (!phone && (typed || me.has_login)) return { ok: false, error: "Type your cell number with the area code, like 248 555 0100." };
       if (phone !== me.phone) await setPhone(me.id, phone);
     }
+    if (rename) await setName(me.id, rename);
     if (form.has("in_office")) {
       const v = String(form.get("in_office"));
       await setInOffice(me.id, v === "1" || v === "on" || v === "true");
@@ -294,6 +299,8 @@ export async function changeMyPassword(form: FormData): Promise<ActionResult> {
     const version = await setPersonPassword(me.id, next);
     // This device keeps going on the new session; a shared-password session (the owner password) is left as it is.
     if (viewer.via === "person") await startPersonSession(me.id, version);
+    // The page reads again: on the owner password the card now asks for the current password.
+    refresh();
     return { ok: true, message: "Password changed. Your other devices are signed out." };
   } catch (err) {
     return { ok: false, error: message(err) };

@@ -216,8 +216,8 @@ function LeaderRow({ line, view, max, count, today, goalLine }: { line: AgentLin
   const done = hasGoal && pct >= 100;
   const first = rank === 1 && amount > 0;
   const medal = amount > 0 ? (rank === 1 ? "text-gold" : rank === 2 ? "text-silver" : rank === 3 ? "text-bronze" : "text-gray-500") : "text-gray-500";
-  // Fewer people, taller rows: the type grows a little when there is room. The P&C rows keep one size.
-  const scale = pc ? (count <= 3 ? 1.05 : count <= 5 ? 0.95 : count <= 7 ? 0.82 : 0.68) : count <= 5 ? 1.15 : count <= 7 ? 1 : count <= 8 ? 0.86 : 0.7;
+  // Fewer people, taller rows: the type grows a little when there is room (a full page of ten keeps the name at 20px on a 1080p TV). The P&C rows keep one size.
+  const scale = pc ? (count <= 3 ? 1.05 : count <= 5 ? 0.95 : count <= 7 ? 0.82 : 0.68) : count <= 5 ? 1.15 : count <= 7 ? 1 : count <= 8 ? 0.86 : 0.78;
   const policies = life ? line.lifePolicies : pc ? line.pcPolicies : line.policies;
   return (
     <li

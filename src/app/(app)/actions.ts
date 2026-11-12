@@ -34,6 +34,8 @@ function refresh() {
  *           while Settings allows it, view only otherwise
  */
 const SENT_FOR_OK = "Sent to Anersi for a quick OK.";
+// Any id Postgres holds (the shape only: zod's uuid() also wants an RFC version, which refuses ids typed by hand).
+const Id = z.guid();
 const KIND_OFF = "That kind of sale is turned off.";
 const TEAM_VIEW_ONLY = "The team password only looks now. Sign in with your own number to log a sale.";
 
@@ -48,7 +50,7 @@ const text = (max: number) =>
     .transform((s) => (s.length ? s : null));
 
 const SaleInput = z.object({
-  agent_id: z.string().uuid(),
+  agent_id: z.guid(),
   premium: z.string().trim().min(1),
   policies: z.coerce.number().int().min(1).max(50).default(1),
   product: text(40).nullable().default(null),
@@ -128,7 +130,7 @@ const UNDO_WINDOW_MS = 15 * 60 * 1000;
 export async function removeSale(id: string): Promise<ActionResult> {
   try {
     const viewer = await requireViewer();
-    if (!z.string().uuid().safeParse(id).success) return { ok: false, error: "That sale isn't here." };
+    if (!Id.safeParse(id).success) return { ok: false, error: "That sale isn't here." };
     if (viewer.level === "team" && !(await getSettings()).teamPasswordLogs) return { ok: false, error: TEAM_VIEW_ONLY };
     const sale = await getSale(id);
     if (!sale) return { ok: false, error: "That sale is already gone." };
@@ -161,7 +163,7 @@ const EditInput = z.object({
   kind: z.enum(["life", "pc"]).default("life"),
   note: text(200).nullable().default(null),
   sold_on: z.string().trim(),
-  agent_id: z.string().uuid(),
+  agent_id: z.guid(),
 });
 
 /**
@@ -172,7 +174,7 @@ const EditInput = z.object({
 export async function editSale(id: string, form: FormData): Promise<ActionResult> {
   try {
     const viewer = await requireViewer("manager");
-    if (!z.string().uuid().safeParse(id).success) return { ok: false, error: "That sale isn't here." };
+    if (!Id.safeParse(id).success) return { ok: false, error: "That sale isn't here." };
     const parsed = EditInput.safeParse(Object.fromEntries(form));
     if (!parsed.success) return { ok: false, error: "Check the amount, the person and the date." };
     const input = parsed.data;
@@ -218,13 +220,15 @@ const Name = z.string().trim().min(1).max(60);
 
 export async function addPerson(form: FormData): Promise<ActionResult> {
   try {
-    await requireViewer("manager");
+    const viewer = await requireViewer("manager");
     const name = Name.safeParse(form.get("name"));
     if (!name.success) return { ok: false, error: "Type the person's name." };
     const existing = await listAgents({ includeInactive: true });
     const dup = existing.find((a) => a.name.toLowerCase() === name.data.toLowerCase());
     if (dup) {
       if (dup.active) return { ok: false, error: `${dup.name} is already on the team.` };
+      // Back on the board brings an old sign-in back with it: for someone who was an admin that is the owner's call.
+      if (!isOwner(viewer) && (dup.role === "admin" || dup.role === "owner")) return { ok: false, error: `${dup.name} was an admin. Only the owner can put them back.` };
       await updateAgent(dup.id, { active: true });
       refresh();
       return { ok: true, message: `${dup.name} is back on the board.` };
@@ -241,7 +245,7 @@ export async function renamePerson(id: string, form: FormData): Promise<ActionRe
   try {
     const viewer = await requireViewer("manager");
     const name = Name.safeParse(form.get("name"));
-    if (!name.success || !z.string().uuid().safeParse(id).success) return { ok: false, error: "Type the person's name." };
+    if (!name.success || !Id.safeParse(id).success) return { ok: false, error: "Type the person's name." };
     const person = await getAgent(id);
     if (!person) return { ok: false, error: "That person isn't here." };
     // The owner's row is the owner's to change (an admin runs everyone else's).
@@ -258,11 +262,12 @@ export async function renamePerson(id: string, form: FormData): Promise<ActionRe
 export async function setPersonActive(id: string, active: boolean): Promise<ActionResult> {
   try {
     const viewer = await requireViewer("manager");
-    if (!z.string().uuid().safeParse(id).success) return { ok: false, error: "That person isn't here." };
+    if (!Id.safeParse(id).success) return { ok: false, error: "That person isn't here." };
     const person = await getAgent(id);
     if (!person) return { ok: false, error: "That person isn't here." };
-    // Off the board ends a person's sign-in, so for the owner or an admin it is the owner's call.
-    if (!active && !isOwner(viewer) && (person.role === "owner" || person.role === "admin")) return { ok: false, error: "Only the owner can take an admin off the board." };
+    // Off the board ends a person's sign-in and back on the board returns it, so for the owner's
+    // row or an admin's both ways are the owner's call (making an admin always waits for the owner).
+    if (!isOwner(viewer) && (person.role === "owner" || person.role === "admin")) return { ok: false, error: "Only the owner can take an admin off the board or bring one back." };
     await updateAgent(id, { active });
     refresh();
     return { ok: true, message: active ? "Back on the board." : "Off the board. Their sales stay in the history." };
@@ -275,7 +280,7 @@ export async function setPersonActive(id: string, active: boolean): Promise<Acti
 export async function setPersonPc(id: string, licensed: boolean): Promise<ActionResult> {
   try {
     await requireViewer("owner");
-    if (!z.string().uuid().safeParse(id).success) return { ok: false, error: "That person isn't here." };
+    if (!Id.safeParse(id).success) return { ok: false, error: "That person isn't here." };
     await updateAgent(id, { pc_licensed: licensed });
     refresh();
     return { ok: true, message: licensed ? "P&C licensed. Log a sale offers Life or P&C for them." : "Life only on Log a sale for them." };
@@ -305,7 +310,7 @@ export async function saveTeamGoal(month: string, form: FormData): Promise<Actio
 export async function savePersonGoal(month: string, agentId: string, form: FormData): Promise<ActionResult> {
   try {
     await requireViewer("manager");
-    if (!Month.safeParse(month).success || !z.string().uuid().safeParse(agentId).success) return { ok: false, error: "That person or month isn't right." };
+    if (!Month.safeParse(month).success || !Id.safeParse(agentId).success) return { ok: false, error: "That person or month isn't right." };
     const raw = String(form.get("goal") ?? "").trim();
     const cents = raw === "" ? 0 : parseDollars(raw);
     if (cents == null) return { ok: false, error: "The goal needs to be an amount, like 25000." };
@@ -337,7 +342,7 @@ export async function saveTeamPcGoal(month: string, form: FormData): Promise<Act
 export async function savePersonPcGoal(month: string, agentId: string, form: FormData): Promise<ActionResult> {
   try {
     await requireViewer("owner");
-    if (!Month.safeParse(month).success || !z.string().uuid().safeParse(agentId).success) return { ok: false, error: "That person or month isn't right." };
+    if (!Month.safeParse(month).success || !Id.safeParse(agentId).success) return { ok: false, error: "That person or month isn't right." };
     const raw = String(form.get("pc_goal") ?? "").trim();
     const cents = raw === "" ? 0 : parseDollars(raw);
     if (cents == null) return { ok: false, error: "The goal needs to be an amount, like 8000." };

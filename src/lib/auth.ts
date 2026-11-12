@@ -128,9 +128,12 @@ export function roleForPassword(supplied: string): Role | null {
 // Login throttle: a per-instance map plus a shared per-address count in login_attempts (holds
 // across serverless instances), and a high flood cap across every address, so one stranger
 // typing wrong passwords locks only themselves out, never the owner or the TV. The same count
-// guards the personal sign-in and the join links. A personal sign-in also counts wrong passwords
-// per account, in the same table under "acct:<id>" (verifyPersonLogin in people.ts: 20 in 15
-// minutes, twice the per-address limit, so one address can never lock a person out).
+// guards the personal sign-in and the join links. A wrong try stays counted for 15 minutes: a
+// right team password or a person's own sign-in never clears it (anyone on the team has those,
+// and could guess at the owner password without limit otherwise); only the owner password does.
+// A personal sign-in also counts wrong passwords per account, in the same table under
+// "acct:<id>" (verifyPersonLogin in people.ts); those rows, and the "joined:" rows that count
+// people who joined, stay out of the flood cap, so a locked account never closes sign-in for all.
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_PER_IP = 10;
 const MAX_GLOBAL = 500;
@@ -149,6 +152,13 @@ export async function clientAddress(): Promise<string> {
 export const joinKey = (ip: string): string => `join:${ip}`.slice(0, 64);
 /** A whole office joins from one address on the first day, so the join count allows more wrong tries. */
 export const JOIN_MAX_PER_IP = 30;
+/**
+ * People who joined through the agency link from one address, counted under their own key, so a
+ * link that got out cannot fill the board with made-up people at full speed. The limit sits well
+ * above one office's first day.
+ */
+export const joinedKey = (ip: string): string => `joined:${ip}`.slice(0, 64);
+export const JOINED_MAX_PER_IP = 60;
 
 export async function loginThrottled(ip: string, max: number = MAX_PER_IP): Promise<boolean> {
   const entry = failures.get(ip);
@@ -158,7 +168,8 @@ export async function loginThrottled(ip: string, max: number = MAX_PER_IP): Prom
     const recent = () => db().from("login_attempts").select("id", { count: "exact", head: true }).gte("at", since);
     const mine = await recent().eq("ip", ip.slice(0, 64));
     if (!mine.error && mine.count != null && mine.count >= max) return true;
-    const all = await recent();
+    // The flood cap counts wrong tries by address only: not the per-account rows, not the joins.
+    const all = await recent().not("ip", "like", "acct:%").not("ip", "like", "joined:%");
     if (all.error || all.count == null) return false;
     return all.count >= MAX_GLOBAL;
   } catch {
@@ -169,11 +180,9 @@ export async function loginThrottled(ip: string, max: number = MAX_PER_IP): Prom
 export async function recordLoginFailure(ip: string): Promise<void> {
   const now = Date.now();
   const entry = failures.get(ip);
+  // The window runs from the first wrong try and is never pushed forward: 15 minutes, like the table's.
   if (!entry || entry.resetAt < now) failures.set(ip, { count: 1, resetAt: now + WINDOW_MS });
-  else {
-    entry.count += 1;
-    entry.resetAt = now + WINDOW_MS;
-  }
+  else entry.count += 1;
   if (failures.size > 5000) for (const [k, v] of failures) if (v.resetAt < now) failures.delete(k);
   try {
     await db().from("login_attempts").insert({ ip: ip.slice(0, 64) });
@@ -182,7 +191,7 @@ export async function recordLoginFailure(ip: string): Promise<void> {
   }
 }
 
-/** A right password clears that address's count (here and in the table), so an earlier typo never counts. */
+/** Clears an address's count (here and in the table). Only a right owner password does this. */
 export async function clearLoginFailures(ip: string): Promise<void> {
   failures.delete(ip);
   try {

@@ -27,13 +27,32 @@ function fail(where: string, error: { message: string } | null): never {
 
 const isUuid = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
-/** A name as it is stored: trimmed, single spaces. Null when it is empty or over 60 characters. */
+// Every apostrophe a keyboard makes (an iPhone types the curly one) is the plain one in a name.
+const APOSTROPHES = /[\u2018\u2019\u201B\u02BC\u02B9\u2032\u0060\u00B4\uFF07]/g;
+/**
+ * One written form of a name: a plain apostrophe, compatibility forms folded (NFKC), no invisible
+ * or control characters (a zero-width space makes a second "Jack Gariglio"), single spaces.
+ */
+function tidyName(input: string): string {
+  return input
+    .replace(APOSTROPHES, "'")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .replace(/[\p{Cf}\p{Cc}]/gu, "")
+    .replace(/ +/g, " ")
+    .trim();
+}
+/** Latin letters beside letters of another alphabet (a Cyrillic "A" in "Admin"): a look-alike, not a name. */
+const mixesAlphabets = (name: string) => /\p{Script=Latin}/u.test(name) && /[^\p{Script=Latin}\P{L}]/u.test(name);
+
+/** A name as it is stored (tidyName). Null when it is empty, over 60 characters or mixes alphabets. */
 export function cleanName(input: unknown): string | null {
   if (typeof input !== "string") return null;
-  const name = input.replace(/\s+/g, " ").trim();
-  return name.length >= 1 && name.length <= 60 ? name : null;
+  const name = tidyName(input);
+  return name.length >= 1 && name.length <= 60 && !mixesAlphabets(name) ? name : null;
 }
-const sameName = (a: string, b: string) => a.replace(/\s+/g, " ").trim().toLowerCase() === b.replace(/\s+/g, " ").trim().toLowerCase();
+/** The same person's name, however it was typed (case, spaces, the kind of apostrophe, invisible characters). */
+export const sameName = (a: string, b: string) => tidyName(a).toLowerCase() === tidyName(b).toLowerCase();
 
 /** The ids of everyone who made a sign-in (the hash itself is never read for a list). */
 async function loginIds(): Promise<Set<string>> {
@@ -174,26 +193,36 @@ export async function setPhone(id: string, phone: string | null): Promise<void> 
 }
 
 // Wrong passwords for one account, counted in login_attempts under "acct:<id>" (the same table and
-// 15-minute window as the per-address count in auth.ts). The limit is twice the per-address one,
-// so one stranger at one address can never lock a person out, and many strangers lock them out
-// for 15 minutes at most.
+// 15-minute window as the per-address count in auth.ts). Past 20, the account is closed to every
+// address that has a wrong try of its own in the window, and to nobody else: whoever is guessing
+// is stopped, and the person's own phone still gets in with the right password, so nobody can
+// keep someone else from signing in. (These rows stay out of the flood cap in auth.ts.)
 const ACCOUNT_WINDOW_MS = 15 * 60 * 1000;
 const ACCOUNT_MAX = 20;
 const acctKey = (id: string) => `acct:${id}`;
+/** The key an unknown number's wrong try is counted under, so it costs what a known one costs. */
+const NO_ACCOUNT = "acct:none";
 
-async function accountLocked(id: string): Promise<boolean> {
+/** Rows in the window under one key (0 when the table cannot be read). */
+async function recentTries(key: string): Promise<number> {
   try {
     const since = new Date(Date.now() - ACCOUNT_WINDOW_MS).toISOString();
-    const { count, error } = await db().from("login_attempts").select("id", { count: "exact", head: true }).eq("ip", acctKey(id)).gte("at", since);
-    return !error && count != null && count >= ACCOUNT_MAX;
+    const { count, error } = await db().from("login_attempts").select("id", { count: "exact", head: true }).eq("ip", key.slice(0, 64)).gte("at", since);
+    return !error && count != null ? count : 0;
   } catch {
-    return false;
+    return 0;
   }
 }
 
-async function recordAccountFailure(id: string): Promise<void> {
+/** Closed to this address? With no address (a signed-in person checking their own password): closed past the limit. */
+async function accountLocked(key: string, address?: string): Promise<boolean> {
+  const [onAccount, fromAddress] = await Promise.all([recentTries(key), address ? recentTries(address) : Promise.resolve(1)]);
+  return onAccount >= ACCOUNT_MAX && fromAddress > 0;
+}
+
+async function recordAccountFailure(key: string): Promise<void> {
   try {
-    await db().from("login_attempts").insert({ ip: acctKey(id) });
+    await db().from("login_attempts").insert({ ip: key });
   } catch {
     /* best effort */
   }
@@ -209,11 +238,13 @@ async function clearAccountFailures(id: string): Promise<void> {
 
 /**
  * A personal sign-in: the person's id and session version for a right phone number and password,
- * null for anything else (unknown number, wrong password, off the board, no sign-in yet, too many
- * wrong tries on that account). An unknown number does the same password work as a known one, so
- * the time it takes never says which numbers exist. The caller keeps the per-address throttle.
+ * null for anything else (unknown number, wrong password, off the board, no sign-in yet, an
+ * account closed to this address by too many wrong tries). A wrong try does the same work in the
+ * same order whether the number has a sign-in or not (the row, the two counts, the password
+ * check, one row written), so the time it takes never says which numbers exist. `address` is
+ * where the request came from (the caller keeps the per-address throttle with it).
  */
-export async function verifyPersonLogin(phone: string, password: string): Promise<{ id: string; sessionVersion: number } | null> {
+export async function verifyPersonLogin(phone: string, password: string, address?: string): Promise<{ id: string; sessionVersion: number } | null> {
   const e164 = normalizePhone(phone);
   if (!e164 || typeof password !== "string" || !password) {
     await burnPasswordCheck(typeof password === "string" ? password : "");
@@ -221,19 +252,22 @@ export async function verifyPersonLogin(phone: string, password: string): Promis
   }
   const { data, error } = await db().from("agents").select("id, pass_hash, session_version, active").eq("phone", e164).maybeSingle();
   if (error) fail("people.signin", error);
-  if (!data || data.active !== true || typeof data.pass_hash !== "string" || (await accountLocked(String(data.id)))) {
+  const row = data && data.active === true && typeof data.pass_hash === "string" ? { id: String(data.id), hash: data.pass_hash, sessionVersion: Number(data.session_version) } : null;
+  const locked = await accountLocked(row ? acctKey(row.id) : NO_ACCOUNT, address);
+  if (!row || locked) {
     await burnPasswordCheck(password);
+    await recordAccountFailure(NO_ACCOUNT);
     return null;
   }
-  const id = String(data.id);
-  if (!(await verifyPassword(password, data.pass_hash))) {
-    await recordAccountFailure(id);
+  const id = row.id;
+  if (!(await verifyPassword(password, row.hash))) {
+    await recordAccountFailure(acctKey(id));
     return null;
   }
   await clearAccountFailures(id);
   // Best effort: when they were last here (the People list shows it).
   await db().from("agents").update({ last_seen_at: new Date().toISOString() }).eq("id", id);
-  return { id, sessionVersion: Number(data.session_version) };
+  return { id, sessionVersion: row.sessionVersion };
 }
 
 /** Is this the person's own current password? (Change password asks for it first.) False when they have none. */
@@ -245,9 +279,9 @@ export async function checkOwnPassword(id: string, password: string): Promise<bo
     await burnPasswordCheck(password);
     return false;
   }
-  if (await accountLocked(id)) return false;
+  if (await accountLocked(acctKey(id))) return false;
   const ok = await verifyPassword(password, data.pass_hash);
-  if (!ok) await recordAccountFailure(id);
+  if (!ok) await recordAccountFailure(acctKey(id));
   return ok;
 }
 
@@ -264,6 +298,15 @@ export async function setPersonPassword(id: string, password: string): Promise<n
   await patchPerson(id, { pass_hash: await hashPassword(password), session_version: next }, "people.password");
   await clearAccountFailures(id);
   return next;
+}
+
+/**
+ * A number held by someone who is off the board is given up to the person joining with it (their
+ * own number, parked on a row that can no longer sign in); a person on the board keeps theirs.
+ */
+async function releaseParkedPhone(id: string, phone: string): Promise<void> {
+  const { error } = await db().from("agents").update({ phone: null, updated_at: new Date().toISOString() }).eq("id", id).eq("phone", phone).eq("active", false);
+  if (error) fail("people.phone", error);
 }
 
 export interface JoinInput {
@@ -311,15 +354,19 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
     if (!person || !person.active) return { ok: false, error: BAD_LINK, counts: true };
     // A reset keeps the number they have; a person link (and a reset for someone with no number) asks for it.
     let phone = person.phone;
+    let parked: string | null = null;
     if (invite.kind === "person" || !phone) {
       if (!typedPhone) return { ok: false, error: PHONE_HELP };
-      if (people.some((p) => p.id !== person.id && p.phone === typedPhone)) return { ok: false, error: PHONE_TAKEN, counts: true };
+      const holder = people.find((p) => p.id !== person.id && p.phone === typedPhone);
+      if (holder?.active) return { ok: false, error: PHONE_TAKEN, counts: true };
+      parked = holder?.id ?? null;
       phone = typedPhone;
     } else if (phoneTyped && typedPhone && typedPhone !== phone) {
       // Typed a different number on a reset: the link is for one person, so their number stays.
       return { ok: false, error: "That isn't the number this link is for.", counts: true };
     }
     if (!(await consumeInvite(invite))) return { ok: false, error: BAD_LINK, counts: true };
+    if (parked && phone) await releaseParkedPhone(parked, phone);
     const next = person.session_version + 1;
     const patch: Record<string, unknown> = { phone, pass_hash: await hashPassword(input.password), session_version: next, updated_at: new Date().toISOString() };
     if (invite.kind === "person") patch.in_office = input.inOffice === true;
@@ -337,7 +384,8 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
   const name = cleanName(input.name);
   if (!name) return { ok: false, error: "Type your first and last name." };
   if (!typedPhone) return { ok: false, error: PHONE_HELP };
-  if (people.some((p) => p.phone === typedPhone)) return { ok: false, error: PHONE_TAKEN, counts: true };
+  const holder = people.find((p) => p.phone === typedPhone);
+  if (holder?.active) return { ok: false, error: PHONE_TAKEN, counts: true };
   // The upline they picked, when it is a real person on the board; else the leader this link belongs to.
   const picked = isUuid(input.uplineId) ? people.find((p) => p.id === input.uplineId && p.active) : undefined;
   const linkLeader = invite.upline_id ? people.find((p) => p.id === invite.upline_id && p.active) : undefined;
@@ -350,11 +398,18 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
   if (match) {
     if (!match.active) return { ok: false, error: `${match.name} was taken off the board. Ask an admin to bring you back, then open this link again.`, counts: true };
     if (logins.has(match.id) || match.role !== "member") return { ok: false, error: `${match.name} is already on Scorecard. Sign in, or ask an admin for your own link.`, counts: true };
+    if (holder) await releaseParkedPhone(holder.id, typedPhone);
     // The claim: only while the row still has no sign-in (two phones at once: one wins).
     const next = match.session_version + 1;
-    const patch: Record<string, unknown> = { phone: typedPhone, pass_hash, session_version: next, in_office: input.inOffice === true, joined_at: now, updated_at: now };
+    const patch: Record<string, unknown> = { phone: typedPhone, pass_hash, session_version: next, joined_at: now, updated_at: now };
+    // The office mark an admin set stays: the switch on this card starts off for everyone (the card
+    // cannot know who is typing), so it only ever turns the mark on. /me turns it off.
+    if (input.inOffice === true) patch.in_office = true;
     // Their pick replaces the upline an admin set only when they made one, and never into a loop.
-    if (picked && picked.id !== match.id && !(await wouldLoop(match.id, picked.id))) patch.upline_id = picked.id;
+    // A leader's link opens with that leader already picked: that is the link's default, not a
+    // pick, so it never moves someone an admin already placed (it fills an empty upline, below).
+    const chose = picked && picked.id !== invite.upline_id ? picked : undefined;
+    if (chose && chose.id !== match.id && !(await wouldLoop(match.id, chose.id))) patch.upline_id = chose.id;
     else if (!match.upline_id && upline && upline.id !== match.id && !(await wouldLoop(match.id, upline.id))) patch.upline_id = upline.id;
     const { data, error } = await db().from("agents").update(patch).eq("id", match.id).is("pass_hash", null).eq("role", "member").eq("active", true).select("id");
     if (error) {
@@ -366,6 +421,7 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
     return { ok: true, agentId: match.id, sessionVersion: next };
   }
 
+  if (holder) await releaseParkedPhone(holder.id, typedPhone);
   const { data: last } = await db().from("agents").select("sort").order("sort", { ascending: false }).limit(1).maybeSingle();
   const sort = ((last?.sort as number | undefined) ?? 0) + 1;
   const { data, error } = await db()

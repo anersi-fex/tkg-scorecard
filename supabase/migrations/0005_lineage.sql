@@ -1,7 +1,7 @@
 -- Scorecard, migration 0005 (2026-11-12): Lineage Financial. People get their own sign-in, an
 -- upline (teams), an "in the office" mark and a role; join links; approvals; who logged a sale.
--- Run once BEFORE the app update that uses it. Safe to run twice. It only adds: no row and no
--- column is removed or changed.
+-- Run once BEFORE the app update that uses it. Safe to run twice (a second run changes no role).
+-- It only adds: no row and no column is removed or changed.
 --
 -- Owner, 2026-11-12: "I would like everyone to be able to join ... send everyone something, and
 -- it automatically makes them sign up for the first time and edit their information"; "the ones
@@ -12,6 +12,18 @@
 -- People: the upline (whose team they are on), in the office or not, the role, and a sign-in.
 alter table agents add column if not exists upline_id uuid references agents(id) on delete set null;
 alter table agents add column if not exists in_office boolean not null default false;
+-- The role. The FIRST run (the column is new) also names the app's one owner (Anersi) and the
+-- admin who runs the agency (Jack), only when those rows are there. A later run changes nobody's
+-- role: by then people have joined under names they typed themselves and the owner may have
+-- changed who is an admin, so a name never hands out a level a second time.
+do $$
+begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'agents' and column_name = 'role') then
+    alter table agents add column role text not null default 'member';
+    update agents set role = 'owner' where id = (select id from agents where name = 'Anersi Koka' order by sort, id limit 1);
+    update agents set role = 'admin' where name = 'Jack Gariglio' and role = 'member';
+  end if;
+end $$;
 alter table agents add column if not exists role text not null default 'member';
 alter table agents drop constraint if exists agents_role_check;
 alter table agents add constraint agents_role_check check (role in ('owner', 'admin', 'member'));
@@ -29,9 +41,7 @@ alter table agents add column if not exists joined_at timestamptz;
 alter table agents add column if not exists last_seen_at timestamptz;
 create index if not exists agents_upline_idx on agents (upline_id);
 
--- Exactly one owner of the app (Anersi); Jack runs the agency. Only when the rows are there.
-update agents set role = 'owner' where name = 'Anersi Koka' and not exists (select 1 from agents where role = 'owner');
-update agents set role = 'admin' where name = 'Jack Gariglio' and role = 'member';
+-- Exactly one owner of the app (the first run above set it, by name; after that only by hand).
 create unique index if not exists agents_one_owner on agents ((true)) where role = 'owner';
 
 -- Join links. The link holds a random token; only its SHA-256 is stored.

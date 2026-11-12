@@ -18,7 +18,7 @@ export function useSearch() {
   return useContext(SearchContext);
 }
 
-/** "Agent or team name": filters the leaderboard as you type. */
+/** "Agent or team name": filters the leaderboard as you type; Enter goes to it. */
 export function SearchBox({ className }: { className?: string }) {
   const { q, setQ } = useSearch();
   return (
@@ -32,10 +32,18 @@ export function SearchBox({ className }: { className?: string }) {
         type="search"
         value={q}
         onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          // The list this filters is a screen or more further down: Enter (the phone keyboard's
+          // Search key) puts the keyboard away and brings the list up.
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          e.currentTarget.blur();
+          document.querySelector('[data-section="leaderboard"]')?.scrollIntoView({ block: "start", behavior: "smooth" });
+        }}
         placeholder="Agent or team name"
         autoComplete="off"
         enterKeyHint="search"
-        className="h-10 w-full rounded-xl border border-line bg-surface pr-3 pl-9 text-base text-gray-900 placeholder:text-gray-500 focus:border-accent focus:ring-2 focus:ring-tint focus:outline-none md:h-9 md:text-[14px]"
+        className="h-11 w-full rounded-xl border border-line bg-surface pr-3 pl-9 text-base text-gray-900 placeholder:text-gray-500 focus:border-accent focus:ring-2 focus:ring-tint focus:outline-none md:h-9 md:text-[14px]"
       />
     </label>
   );

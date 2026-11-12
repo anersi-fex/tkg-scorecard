@@ -130,7 +130,8 @@ export default async function ScoreboardPage({ searchParams }: PageProps<"/score
   return (
     // Wider than the app's column on a computer: the table needs the room.
     <div className="lg:ml-[calc(50%_-_min(660px,_50vw_-_32px))] lg:w-[min(1320px,_100vw_-_64px)]" data-scoreboard={sb.scope}>
-      <SearchProvider>
+      {/* The key empties the search box when the page narrows to a team or widens again: text left from the last list would quietly hide part of the new one. */}
+      <SearchProvider key={leaderId ?? "agency"}>
         <Title sub={`${sb.scopeName} · ${sb.range.label}`} exportHref={`/api/scoreboard/export?${exportQuery.toString()}`} />
 
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -150,7 +151,7 @@ export default async function ScoreboardPage({ searchParams }: PageProps<"/score
         {choice.team && (
           <p className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-2xl bg-tint px-3.5 py-2 text-[14px] font-semibold text-gray-900">
             <span>Showing {leaderName ? `${leaderName}'s team` : "one team"}</span>
-            <Link href={go({ scope: "agency", team: null })} className="flex min-h-9 items-center gap-1 font-bold text-accent-text">
+            <Link href={go({ scope: "agency", team: null })} className="flex min-h-11 items-center gap-1 font-bold text-accent-text md:min-h-9">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M15 6l-6 6 6 6" />
               </svg>
@@ -160,9 +161,9 @@ export default async function ScoreboardPage({ searchParams }: PageProps<"/score
         )}
 
         {!onBoard && (
-          <p className="mb-3 px-1 text-[14px] font-medium text-gray-600">
-            You&apos;re not on the board yet this month{" "}
-            <Link href="/log" className="ml-1 font-bold text-accent-text">
+          <p className="mb-3 flex flex-wrap items-center gap-x-2 px-1 text-[14px] font-medium text-gray-600">
+            You&apos;re not on the board yet this month
+            <Link href="/log" className="flex min-h-11 items-center font-bold text-accent-text md:min-h-0">
               Log a sale
             </Link>
           </p>
@@ -175,7 +176,7 @@ export default async function ScoreboardPage({ searchParams }: PageProps<"/score
           <Kpi title="Active agents" value={String(sb.kpis.activeAgents)} delta={sb.kpis.activeAgents - sb.kpis.prevActiveAgents} deltaText={String(Math.abs(sb.kpis.activeAgents - sb.kpis.prevActiveAgents))} compare={sb.compare.label} caption="Agents who sold" spark={sb.kpis.dailyActiveAgents} />
         </div>
 
-        <div className="mt-3 grid gap-3 xl:grid-cols-[2fr_3fr]">
+        <div className="mt-3 grid gap-3 min-[1360px]:grid-cols-[2fr_3fr]">
           {/* 2. Where agents stand */}
           <section className={cn(CARD, "p-4")} data-section="stand">
             <h2 className={H2}>Where agents stand</h2>
@@ -197,7 +198,7 @@ export default async function ScoreboardPage({ searchParams }: PageProps<"/score
 
           {/* 3. Moved most this week */}
           <section className={cn(CARD, "p-4")} data-section="movers">
-            <h2 className={H2}>Moved most this week</h2>
+            <h2 className={H2}>{whole ? "Moved most in the last week" : "Moved most this week"}</h2>
             <p className={SUB}>
               {sb.movers.label} · {sb.scope === "agency" ? "Agency" : sb.scopeName}
             </p>
@@ -209,12 +210,12 @@ export default async function ScoreboardPage({ searchParams }: PageProps<"/score
         </div>
 
         {/* 4. The production leaderboard */}
-        <section className={cn(CARD, "mt-3 overflow-hidden")} data-section="leaderboard">
+        <section className={cn(CARD, "mt-3 scroll-mt-[calc(var(--nav-h,_61px)_+_8px)] overflow-hidden")} data-section="leaderboard">
           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3 p-4">
             <div className="min-w-0">
               <h2 className={H2}>Production leaderboard</h2>
               <p className={cn(SUB, "flex flex-wrap items-center gap-x-3")}>
-                <span>Arrows show places gained or lost since yesterday</span>
+                <span>{whole ? "Final places for the month" : "Arrows show places gained or lost since yesterday"}</span>
                 {anyOffice && (
                   <span className="inline-flex items-center gap-1.5">
                     <OfficeDot /> in the office
@@ -267,7 +268,7 @@ function Title({ sub, exportHref }: { sub: string | null; exportHref: string | n
         {sub && <p className="mt-0.5 truncate text-[14px] font-medium text-gray-500">{sub}</p>}
       </div>
       {exportHref && (
-        <a href={exportHref} download className="flex h-10 shrink-0 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-[13px] font-bold text-gray-900 shadow-card hover:bg-gray-50 md:h-9">
+        <a href={exportHref} download className="flex h-11 shrink-0 items-center gap-2 rounded-xl border border-line bg-surface px-3.5 text-[13px] font-bold text-gray-900 shadow-card hover:bg-gray-50 md:h-9">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M12 4v10M8 10.5l4 4 4-4M4.5 15.5v2a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-2" />
           </svg>
@@ -293,8 +294,8 @@ function Kpi({ title, value, delta, deltaText, compare, caption, spark, classNam
         <span className="text-[12px] font-medium whitespace-nowrap text-gray-500">vs {compare}</span>
       </p>
       <div className="mt-2 flex items-end justify-between gap-3">
-        <p className="text-[12px] font-medium text-gray-500">{caption}</p>
-        {spark && <Spark values={spark} className="h-7 w-24 shrink-0" />}
+        <p className="text-[12px] font-medium whitespace-nowrap text-gray-500">{caption}</p>
+        {spark && <Spark values={spark} className="h-7 max-w-24 min-w-0 flex-1" />}
       </div>
     </section>
   );

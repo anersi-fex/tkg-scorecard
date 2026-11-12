@@ -83,18 +83,24 @@ const TD = "border-b border-line px-2.5 py-1 text-right font-mono text-[13px] wh
 
 export function Leaderboard({ who, field, columns, rows, teams, agencyName, scopeLeaderId, linkTail, emptyLine }: Props) {
   const { q } = useSearch();
-  const [sort, setSort] = useState<Sort>({ key: "total", desc: true });
+  const [picked, setSort] = useState<Sort>({ key: "total", desc: true });
   const [opened, setOpened] = useState<string[]>([]);
+  // The sort in use. A sort by a day, a product or a carrier is left behind when the columns or
+  // the month change (this stays mounted): a column that is gone means Total, highest first.
+  const sort: Sort = picked.key.startsWith("c:") && !columns.some((c) => `c:${c.key}` === picked.key) ? { key: "total", desc: true } : picked;
 
-  const needle = q.trim().toLowerCase();
-  const hit = (text: string | null | undefined) => !!text && text.toLowerCase().includes(needle);
+  // What a row shows is what finds it: a name, "<leader>'s team", the agency's name. An iPhone
+  // types a curly apostrophe, the rows are compared with a straight one.
+  const norm = (text: string) => text.toLowerCase().replace(/[‘’ʼ`´]/g, "'");
+  const needle = norm(q.trim());
+  const hit = (text: string | null | undefined) => !!text && norm(text).includes(needle);
   const rowById = new Map(rows.map((r) => [r.agentId, r]));
   const leaderIds = new Set(teams.map((t) => t.leaderId));
   const leadCents = Math.max(1, ...rows.map((r) => r.totalCents));
   const leadTeamCents = Math.max(1, ...teams.map((t) => t.totalCents));
   const share = (cents: number, lead: number) => Math.max(2, Math.min(100, Math.round((cents / lead) * 100)));
 
-  const onSort = (key: string) => setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== "name" }));
+  const onSort = (key: string) => setSort(sort.key === key ? { key, desc: !sort.desc } : { key, desc: key !== "name" });
   const toggle = (id: string) => setOpened((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
   const teamHref = (id: string) => `/scoreboard?team=${id}${linkTail}`;
   /** The team a tap on this person narrows to: their own when they lead one, else their upline's. */
@@ -103,12 +109,13 @@ export function Leaderboard({ who, field, columns, rows, teams, agencyName, scop
     return id && id !== scopeLeaderId ? id : null;
   };
 
-  const shownRows = sorted(needle ? rows.filter((r) => hit(r.name) || hit(r.uplineName)) : rows, sort, (r) => r[field]);
-  const shownTeams = sorted(needle ? teams.filter((t) => hit(t.name) || t.memberIds.some((id) => hit(rowById.get(id)?.name))) : teams, sort, (t) => t[field]);
+  const shownRows = sorted(needle ? rows.filter((r) => hit(r.name) || hit(r.uplineName ? `${r.uplineName}'s team` : agencyName)) : rows, sort, (r) => r[field]);
+  const shownTeams = sorted(needle ? teams.filter((t) => hit(`${t.name}'s team`) || t.memberIds.some((id) => hit(rowById.get(id)?.name))) : teams, sort, (t) => t[field]);
   const count = who === "teams" ? teams.length : rows.length;
   const shown = who === "teams" ? shownTeams.length : shownRows.length;
 
-  if (count === 0) return <p className="border-t border-line px-4 py-6 text-[14px] text-gray-600">{who === "teams" ? "No team has a sale in these days yet." : emptyLine}</p>;
+  // Nobody sold: the page's own line for the month. People sold but no team did: say only that.
+  if (count === 0) return <p className="border-t border-line px-4 py-6 text-[14px] text-gray-600">{who === "teams" && rows.length > 0 ? "No teams here." : emptyLine}</p>;
 
   const nameLink = (r: ScoreRow, className: string) => {
     const id = teamOf(r);
@@ -120,8 +127,9 @@ export function Leaderboard({ who, field, columns, rows, teams, agencyName, scop
       <span className={className}>{r.name}</span>
     );
   };
-  const uplineLine = (r: ScoreRow) =>
-    r.uplineName && r.uplineId && r.uplineId !== scopeLeaderId ? (
+  /** The small line under a name. On the table it links to that team; a phone block keeps one link, the name (two links 5px apart, to different teams, were too easy to miss). */
+  const uplineLine = (r: ScoreRow, link = true) =>
+    link && r.uplineName && r.uplineId && r.uplineId !== scopeLeaderId ? (
       <Link href={teamHref(r.uplineId)} className="hover:underline">
         {r.uplineName}&rsquo;s team
       </Link>
@@ -173,13 +181,13 @@ export function Leaderboard({ who, field, columns, rows, teams, agencyName, scop
             <div className="flex items-baseline justify-between gap-3">
               <p className="flex min-w-0 items-center gap-1.5">
                 {r.rank <= 3 && <PlaceIcon place={r.rank} className="self-center" />}
-                {nameLink(r, "truncate text-[15px] leading-tight font-bold text-gray-900")}
+                {nameLink(r, "-my-3 truncate py-3 text-[15px] leading-tight font-bold text-gray-900")}
                 {r.inOffice && <OfficeDot />}
               </p>
               <p className="shrink-0 font-mono text-[16px] leading-tight font-bold text-gray-900">{formatDollars(r.totalCents)}</p>
             </div>
             <p className="truncate text-[12px] font-medium text-gray-500">
-              {policiesWord(r.policies)} · {uplineLine(r)}
+              {policiesWord(r.policies)} · {uplineLine(r, false)}
             </p>
             {pairs.length > 0 && (
               <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-gray-500">
@@ -248,6 +256,7 @@ export function Leaderboard({ who, field, columns, rows, teams, agencyName, scop
                           </button>
                           <span className="relative w-5 shrink-0 text-right font-mono text-[13px] font-bold text-gray-600">{t.rank}</span>
                           <ChangeChip change={t.rankChange} className="relative w-10" />
+                          <PlaceIcon place={t.rank} className="relative" />
                           <div className="relative min-w-0 flex-1 leading-tight">
                             <p className="flex">{teamName(t, "truncate text-[13px] font-bold text-gray-900")}</p>
                             <p className="truncate text-[11px] font-medium text-gray-500">{teamSmall(t)}</p>
@@ -281,7 +290,7 @@ export function Leaderboard({ who, field, columns, rows, teams, agencyName, scop
               id="scoreboard-sort"
               value={sort.key}
               onChange={(e) => setSort({ key: e.target.value, desc: e.target.value !== "name" })}
-              className="h-10 min-w-0 flex-1 rounded-xl border border-line bg-surface-2 px-3 text-[14px] font-bold text-gray-900 focus:border-accent focus:outline-none"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-surface-2 px-3 text-[14px] font-bold text-gray-900 focus:border-accent focus:outline-none"
             >
               <option value="total">Total</option>
               <option value="policies">Policies</option>
@@ -292,7 +301,7 @@ export function Leaderboard({ who, field, columns, rows, teams, agencyName, scop
                 </option>
               ))}
             </select>
-            <button type="button" onClick={() => setSort((s) => ({ ...s, desc: !s.desc }))} aria-label={sort.desc ? "Highest first. Tap for lowest first" : "Lowest first. Tap for highest first"} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-line bg-surface-2 text-gray-700">
+            <button type="button" onClick={() => setSort({ ...sort, desc: !sort.desc })} aria-label={sort.desc ? "Highest first. Tap for lowest first" : "Lowest first. Tap for highest first"} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line bg-surface-2 text-gray-700">
               <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 {sort.desc ? <path d="M8 3v10M4 9l4 4 4-4" /> : <path d="M8 13V3M4 7l4-4 4 4" />}
               </svg>
@@ -313,7 +322,10 @@ export function Leaderboard({ who, field, columns, rows, teams, agencyName, scop
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline justify-between gap-3">
-                            <p className="flex min-w-0">{teamName(t, "truncate text-[15px] leading-tight font-bold text-gray-900")}</p>
+                            <p className="flex min-w-0 items-center gap-1.5">
+                              {t.rank <= 3 && <PlaceIcon place={t.rank} className="self-center" />}
+                              {teamName(t, "-my-3 truncate py-3 text-[15px] leading-tight font-bold text-gray-900")}
+                            </p>
                             <p className="shrink-0 font-mono text-[16px] leading-tight font-bold text-gray-900">{formatDollars(t.totalCents)}</p>
                           </div>
                           <p className="truncate text-[12px] font-medium text-gray-500">
@@ -334,7 +346,7 @@ export function Leaderboard({ who, field, columns, rows, teams, agencyName, scop
                         <div aria-hidden className="h-1 min-w-0 flex-1">
                           <div className="h-1 rounded-full bg-bar" style={{ width: `${share(t.totalCents, leadTeamCents)}%` }} />
                         </div>
-                        <button type="button" onClick={() => toggle(t.leaderId)} aria-expanded={isOpen(t)} className="-my-2 flex h-10 shrink-0 items-center gap-1 rounded-lg pl-2 text-[13px] font-bold text-accent-text">
+                        <button type="button" onClick={() => toggle(t.leaderId)} aria-expanded={isOpen(t)} className="-my-2.5 flex h-11 shrink-0 items-center gap-1 rounded-lg pl-2 text-[13px] font-bold text-accent-text">
                           {isOpen(t) ? "Hide people" : "Show people"}
                           <Chevron open={isOpen(t)} />
                         </button>

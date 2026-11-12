@@ -45,6 +45,9 @@ function paceLine(clock: MonthClock, pace: Pace, productionCents: number, goalCe
 const toneClass = (tone: ReturnType<typeof paceLine>["tone"]) =>
   tone === "green" ? "text-green-700" : tone === "amber" ? "text-amber-800" : tone === "red" ? "text-red-700" : tone === "blue" ? "text-accent-text" : "text-gray-600";
 
+/** How many sales Home lists before "Show all N sales" (a busy month has hundreds). */
+const SALES_SHOWN = 30;
+
 /** "/?view=pc&month=2026-10&team=mine": the switch, the month arrows and the My team filter keep each other. Life, this month and everyone are the defaults. */
 function homeHref(view: View, month: string, current: string, mine = false): string {
   const q = new URLSearchParams();
@@ -98,6 +101,17 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   const listed = view === "pc" ? s.sales.filter((r) => r.kind === "pc") : s.sales;
   const top = s.agents[0];
   const mine = askedMine && myTeam !== null && view === "life";
+  // One list for every row's menu: the page sends it once however many sales there are (a list
+  // built per row is sent again with each row, megabytes by mid-month at 70 people).
+  const agentOptions = s.agents.map((a) => ({ id: a.id, name: a.name }));
+  const toneOf = new Map(s.agents.map((a) => [a.id, a.tone]));
+  const pcCarrierNames = pcOn ? pcCarriers.map((c) => c.name) : [];
+  // The newest sales first; the rest of a busy month behind one link (?sales=all).
+  const allSales = params.sales === "all";
+  const listedShown = allSales ? listed : listed.slice(0, SALES_SHOWN);
+  const moreSales = listed.length - listedShown.length;
+  const homeNow = homeHref(view, month, current, mine);
+  const allSalesHref = `${homeNow}${homeNow.includes("?") ? "&" : "?"}sales=all`;
 
   return (
     <>
@@ -125,9 +139,9 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
               {view === "pc" ? (s.clock.position === "current" ? "No P&C sales yet this month." : "No P&C sales that month.") : s.clock.position === "current" ? "No sales logged yet this month. The first one lights up the board." : "No sales this month."}
             </li>
           )}
-          {listed.map((r) => (
+          {listedShown.map((r) => (
             <li key={r.id} className={cn("flex items-center gap-3 px-4 py-3", ROW_INSET.avatar)}>
-              <Avatar name={r.agentName} tone={s.agents.find((a) => a.id === r.agentId)?.tone} size={40} />
+              <Avatar name={r.agentName} tone={toneOf.get(r.agentId)} size={40} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[15px] font-bold text-gray-900">
                   {r.agentName}
@@ -140,9 +154,19 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
                 </p>
               </div>
               <p className="shrink-0 font-mono text-[16px] font-bold text-gray-900">{formatMoney(r.premiumCents)}</p>
-              <SaleRowMenu sale={r} role={role} agents={s.agents.map((a) => ({ id: a.id, name: a.name }))} carriers={carriers} pcCarriers={pcOn ? pcCarriers.map((c) => c.name) : []} pcEnabled={pcOn} />
+              <SaleRowMenu sale={r} role={role} agents={agentOptions} carriers={carriers} pcCarriers={pcCarrierNames} pcEnabled={pcOn} />
             </li>
           ))}
+          {moreSales > 0 && (
+            <li>
+              <Link href={allSalesHref} scroll={false} data-sales="all" className="flex min-h-12 items-center justify-center gap-1.5 px-4 text-[14px] font-bold text-accent-text hover:bg-gray-50">
+                Show all {listed.length} sales
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </Link>
+            </li>
+          )}
         </ListCard>
       </div>
 
@@ -285,7 +309,7 @@ function LifeView({
                 href={chip.href}
                 scroll={false}
                 aria-current={chip.on ? "true" : undefined}
-                className={cn("flex h-10 items-center rounded-full px-4 text-[13px] font-bold transition", chip.on ? "bg-chip text-chip-text" : "bg-surface text-gray-600 shadow-card hover:text-gray-900")}
+                className={cn("flex h-11 items-center rounded-full px-4 text-[13px] font-bold transition", chip.on ? "bg-chip text-chip-text" : "bg-surface text-gray-600 shadow-card hover:text-gray-900")}
               >
                 {chip.label}
               </Link>

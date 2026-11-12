@@ -42,7 +42,9 @@ export function LifeScreen({ snap, tones, flash, onPages }: { snap: MonthSnapsho
   // Never a fourth column: it is the width, not the height, that cuts a name beside a five-figure amount.
   const smallCols = Math.min(3, mainCols + 1);
   const mainRows = Math.max(1, Math.min(10, Math.ceil(office.length / mainCols)));
-  const smallRows = Math.max(1, Math.min(Math.max(3, Math.floor((ROOM - mainRows * MAIN_ROW) / SMALL_ROW)), Math.ceil(others.length / smallCols)));
+  // The rows "Everyone else" has room for under the office block (also its first paint, before it measures itself).
+  const smallFit = Math.max(3, Math.floor((ROOM - mainRows * MAIN_ROW) / SMALL_ROW));
+  const smallRows = Math.max(1, Math.min(smallFit, Math.ceil(others.length / smallCols)));
   // The screen stays until the block with the most pages has shown each of them.
   const [pages, setPages] = useState({ main: 1, small: 1 });
   const onMain = useCallback((n: number) => setPages((p) => (p.main === n ? p : { ...p, main: n })), []);
@@ -68,11 +70,12 @@ export function LifeScreen({ snap, tones, flash, onPages }: { snap: MonthSnapsho
               max={max}
               today={current}
               goalLine={goalLine}
+              guess={10}
               legend
               onPages={onMain}
             />
             {others.length > 0 && (
-              <Group name="others" title="Everyone else" people={others} cols={smallCols} rowEm={SMALL_ROW} weight={smallRows * SMALL_ROW + 3.2} maxScale={1.08} small max={max} today={current} goalLine={goalLine} onPages={onSmall} />
+              <Group name="others" title="Everyone else" people={others} cols={smallCols} rowEm={SMALL_ROW} weight={smallRows * SMALL_ROW + 3.2} maxScale={1.08} guess={smallFit} small max={max} today={current} goalLine={goalLine} onPages={onSmall} />
             )}
           </>
         )}
@@ -91,6 +94,7 @@ function Group({
   rowEm,
   weight,
   maxScale,
+  guess,
   small = false,
   max,
   today,
@@ -107,6 +111,8 @@ function Group({
   /** This block's share of the height against the other block. */
   weight: number;
   maxScale: number;
+  /** The rows to show before the first measure: what a 16:9 screen holds. */
+  guess: number;
   small?: boolean;
   max: number;
   today: boolean;
@@ -117,7 +123,7 @@ function Group({
   const [ref, box] = useBoxEm();
   const need = Math.ceil(people.length / cols);
   // Before the first measure: what a 16:9 screen holds, so the first paint is already right there.
-  const fit = box ? Math.max(1, Math.floor(box.h / rowEm + 0.02)) : small ? 4 : 10;
+  const fit = box ? Math.max(1, Math.floor(box.h / rowEm + 0.02)) : guess;
   const rows = Math.max(1, Math.min(need, fit));
   const per = rows * cols;
   const pages = pageCount(people.length, per);

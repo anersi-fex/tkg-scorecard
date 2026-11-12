@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { clientAddress, JOIN_MAX_PER_IP, joinKey, loginThrottled, recordLoginFailure, startPersonSession } from "@/lib/auth";
+import { clientAddress, JOIN_MAX_PER_IP, JOINED_MAX_PER_IP, joinKey, joinedKey, loginThrottled, recordLoginFailure, startPersonSession } from "@/lib/auth";
 import { readInvite, type Invite } from "@/lib/invites";
 import { BAD_LINK, joinWithInvite, type JoinResult } from "@/lib/people";
 
@@ -9,6 +9,7 @@ export type JoinState = { error: string | null };
 
 const TOO_MANY = "Too many tries. Wait 15 minutes and try again.";
 const DOWN = "Scorecard couldn't save that. Try again in a minute.";
+const TOO_MANY_JOINED = "A lot of people just joined from this Wi-Fi. Wait 15 minutes and try again.";
 
 /**
  * Joining through a link (form fields "token", "name", "phone", "password", "upline_id",
@@ -17,7 +18,8 @@ const DOWN = "Scorecard couldn't save that. Try again in a minute.";
  */
 export async function join(form: FormData): Promise<JoinState> {
   const token = String(form.get("token") ?? "");
-  const key = joinKey(await clientAddress());
+  const address = await clientAddress();
+  const key = joinKey(address);
   if (await loginThrottled(key, JOIN_MAX_PER_IP)) return { error: TOO_MANY };
   let invite: Invite | null;
   try {
@@ -29,6 +31,10 @@ export async function join(form: FormData): Promise<JoinState> {
     await recordLoginFailure(key);
     return { error: BAD_LINK };
   }
+  // The agency link makes people: each one made from this address is counted, and past the limit
+  // (well above one office's first day) the link waits, so a link that got out cannot flood the board.
+  const joined = joinedKey(address);
+  if (invite.kind === "agency" && (await loginThrottled(joined, JOINED_MAX_PER_IP))) return { error: TOO_MANY_JOINED };
   const upline = String(form.get("upline_id") ?? "");
   let result: JoinResult;
   try {
@@ -47,6 +53,7 @@ export async function join(form: FormData): Promise<JoinState> {
     if (result.counts) await recordLoginFailure(key);
     return { error: result.error };
   }
+  if (invite.kind === "agency") await recordLoginFailure(joined);
   await startPersonSession(result.agentId, result.sessionVersion);
   // A new sign-in goes to the phone guide; a new password for an old one goes straight in.
   redirect(invite.kind === "reset" ? "/" : "/install?welcome=1");

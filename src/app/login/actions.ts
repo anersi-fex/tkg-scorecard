@@ -23,7 +23,9 @@ export async function login(_prev: LoginState, form: FormData): Promise<LoginSta
     await recordLoginFailure(ip);
     return { error: "That password isn't right." };
   }
-  await clearLoginFailures(ip);
+  // Only the owner password clears the address's wrong tries. The team password must not: the
+  // whole agency has it, and could guess at the owner password without limit by typing it in between.
+  if (role === "owner") await clearLoginFailures(ip);
   const token = await createSessionToken(role, SESSION_TTL_SECONDS);
   const store = await cookies();
   store.set(SESSION_COOKIE, token, {
@@ -49,7 +51,7 @@ export async function signIn(_prev: LoginState, form: FormData): Promise<LoginSt
   if (await loginThrottled(ip)) return { error: TOO_MANY };
   let person: Awaited<ReturnType<typeof verifyPersonLogin>> = null;
   try {
-    person = await verifyPersonLogin(phone, password);
+    person = await verifyPersonLogin(phone, password, ip);
   } catch {
     return { error: "Scorecard can't check that right now. Try again in a minute." };
   }
@@ -57,7 +59,7 @@ export async function signIn(_prev: LoginState, form: FormData): Promise<LoginSt
     await recordLoginFailure(ip);
     return { error: "That phone number and password don't match." };
   }
-  await clearLoginFailures(ip);
+  // A right sign-in leaves the address's wrong tries counted (they age out in 15 minutes).
   await startPersonSession(person.id, person.sessionVersion);
   redirect(next);
 }
