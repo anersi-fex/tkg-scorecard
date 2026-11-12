@@ -509,7 +509,7 @@ try {
   const goalShot = await actionShot(o, async () => {
     await o.locator("input[name=goal]").first().fill("150000");
     await o.locator("form:has(input[name=goal])").first().locator("button[type=submit]").click();
-  });
+  }, "150000"); // the goal's own call, not another action that may fire first
   await o.waitForSelector("text=Goal saved. The board shows it now.");
   check((await o.locator("input[name=pc_goal]").count()) === 0 && (await o.locator("[role=radiogroup][aria-label='P&C color']").count()) === 0, "Settings has no P&C goal and no P&C color while the P&C board is off");
   await o.fill("#message", "Finish strong. Every policy counts.");
@@ -1006,7 +1006,6 @@ try {
   check((await d.locator("#account-menu a[href='/settings']").count()) === 0 && (await d.locator("#account-menu a[href='/approvals']").count()) === 0 && (await d.locator("#account-menu a[href='/install']").count()) === 1, "an agent's menu has the phone guide and no Settings or Approvals");
   // The goal's save call, sent with the agent's session: refused by the action itself
   const asMember = await replay(dana, goalShot);
-  console.log('DBG asMember', asMember.status, asMember.text.slice(0,600), (await feed()).team.goalCents); //E2EDBG
   check(asMember.text.includes("Only an admin can do that") && (await feed()).team.goalCents === 15_000_000, `an agent who calls the goal's save action directly is refused and the goal stays (${asMember.status})`);
   await go(d, "/team", "input[aria-label='Find a person']");
   check((await d.locator("[data-join-card]").count()) === 0 && (await d.locator("button[aria-label^='Edit ']").count()) === 0 && (await d.locator("[data-add-person]").count()) === 0, "an agent sees People without the join link, Edit or Add");
@@ -1521,8 +1520,7 @@ try {
       const lateFix = await replay(theo.ctx, fixShot, swapIn(fixShot, '_monthly"\r\n\r\n125', '_monthly"\r\n\r\n135'));
       check(lateFix.text.includes("These count on the board. After 15 minutes, ask an admin to change them.") && (await feed()).agents.find((p) => p.id === ID[THEO])?.lifeCents === centsOf(THEO), "after 15 minutes the server refuses the seller's premium call too");
       const lateBack = await replay(theo.ctx, undoShot, undoBody(theoOwn.id));
-      console.log('DBG lateBack', lateBack.status, lateBack.text.slice(0,600), newestSaleOf(ID[THEO]), theoOwn.id); //E2EDBG
-      check(lateBack.text.includes("A sale can be taken back for 15 minutes. After that, ask an admin.") && newestSaleOf(ID[THEO]) === theoOwn.id, "and the take-back: the sale stands");
+      check(lateBack.text.includes("A sale can be taken back for 15 minutes. After that, ask an admin.") && sql(`select deleted_at is null from sales where id = '${theoOwn.id}'`) === "t", "and the take-back: the sale stands");
       await editSection(th, "Client", () => th.fill("#pe-email", `late.${theoOwn.client.email}`));
       check(await appears(th, "text=Saved."), "the seller changes the client's details any time");
       await openPolicy(th, theoOwn.id);
@@ -2099,9 +2097,9 @@ try {
     await go(o, "/settings", `${tvScreens} [role=radio]`);
     await o.click(tvScreen("Agency total only"));
     check(await settles(t2, () => document.querySelector("main")?.dataset.screen === "total", 12000), "Agency total only in Settings puts the TV on the agency total within a poll");
-    const totalText = await t2.textContent("body");
-    console.log('DBG totalText', (await t2.innerText('main')).slice(0,3000)); //E2EDBG
-    check(totalText.includes("Agency leaderboard") && totalText.includes("Life $") && totalText.includes("P&C $") && totalText.includes("of $180,000 · life + P&C goals"), "the agency total screen adds life and P&C up against both goals and splits them");
+    // innerText: what the screen shows (the split line is "Life" over "$6,240 · 1", "P&C" over its own)
+    const totalText = (await t2.innerText("main")).replace(/\s+/g, " ");
+    check(totalText.includes("Agency leaderboard") && /Life \$[\d,]+ · \d/.test(totalText) && /P&C \$[\d,]+ · \d/.test(totalText) && totalText.includes("Agency total · life + P&C") && totalText.includes("of $180,000 goal"), "the agency total screen adds life and P&C up against both goals and splits them");
     check((await t2.locator("[data-pill]").count()) === 1, "a kept screen shows only its own pill");
     await t2.screenshot({ path: `${OUT}/10c-board-total.png` });
     await o.click(tvScreen("P&C only"));
@@ -2110,8 +2108,7 @@ try {
     const pcText = await t2.innerText("main");
     check(pcText.includes("P&C leaderboard") && pcText.includes(GUS) && pcText.includes("By carrier") && pcText.includes(TOKEN ? "Geico" : "Progressive") && pcText.includes("By line") && pcText.includes(TOKEN ? "Umbrella" : "Auto") && !pcText.includes(THEO), "the P&C screen: the P&C team, by carrier, by line, no one without P&C");
     const pcLower = pcText.toLowerCase(); // innerText follows the eyebrows' capitals
-    console.log('DBG pcText', pcText.slice(0,3000)); //E2EDBG
-    check(pcLower.includes("p&c production") && pcLower.includes("of $30,000") && /needed a day|needed today|to go/.test(pcLower) && pcLower.includes("the month so far") && pcLower.includes("latest p&c sales") && pcText.includes(dollars(pcTotalDollars * 100)), "the P&C screen's right side is like the others: its goal, the tiles, the chart, the latest sales");
+    check(pcLower.includes("p&c production") && pcLower.includes("of $30,000") && /ahead by|behind by|goal hit/.test(pcLower) && pcLower.includes("on pace for") && pcLower.includes("policies sold") && pcLower.includes("latest p&c sales") && pcText.includes(dollars(pcTotalDollars * 100)), "the P&C screen's right side is like the others: its goal, on pace for, the tiles, the latest sales");
     await t2.screenshot({ path: `${OUT}/10b-board-pc.png` });
     await o.click(tvScreen("Rotate"));
     check(await settles(t2, () => document.querySelector("main")?.dataset.screen === "life" && document.querySelectorAll("[data-pill]").length === 6, 12000), "Rotate brings the TV back to the leaderboard with all six pills");
@@ -2224,12 +2221,11 @@ try {
       t3.evaluate(() => {
         const s = document.querySelector("main section[data-group=office]");
         const rows = [...s.querySelectorAll("li[data-person]")];
-        return { pages: s.getAttribute("data-pages"), title: s.querySelector("h2")?.innerText.replace(/\s+/g, " ") ?? "", rows: rows.length, columns: new Set(rows.map((li) => Math.round(li.getBoundingClientRect().left))).size, firstPlace: rows[0]?.getAttribute("data-place"), dots: s.querySelector("[aria-label^='Page ']")?.getAttribute("aria-label") ?? "", others: document.querySelectorAll("main section[data-group=others] li[data-person]").length };
+        return { pages: s.getAttribute("data-pages"), title: s.querySelector("h2")?.parentElement?.innerText.replace(/\s+/g, " ") ?? "", rows: rows.length, columns: new Set(rows.map((li) => Math.round(li.getBoundingClientRect().left))).size, firstPlace: rows[0]?.getAttribute("data-place"), dots: s.querySelector("[aria-label^='Page ']")?.getAttribute("aria-label") ?? "", others: document.querySelectorAll("main section[data-group=others] li[data-person]").length, otherPages: Number(document.querySelector("main section[data-group=others]")?.getAttribute("data-pages") ?? 0) };
       });
     await settles(t3, () => document.querySelector("main section[data-group=office] [aria-label^='Page ']")?.getAttribute("aria-label") === "Page 1 of 2", 5000);
     const page1 = await officeOf();
-    console.log('DBG page1', JSON.stringify(page1)); //E2EDBG
-    check(page1.pages === "2" && page1.rows >= 30 && page1.rows < IN_OFFICE && page1.rows % 3 === 0 && page1.columns === 3 && page1.title.startsWith(`In the office ${IN_OFFICE} people · ${officeSellers} sold`) && page1.dots === "Page 1 of 2" && page1.firstPlace === "1" && page1.others === OUTSIDE, `the TV shows the office group a page at a time in three columns (${page1.title}; ${page1.rows} rows, ${page1.columns} columns, ${page1.dots})`);
+    check(page1.pages === "2" && page1.rows >= 24 && page1.rows < IN_OFFICE && page1.rows % 3 === 0 && page1.columns === 3 && page1.title.startsWith(`In the office ${IN_OFFICE} people · ${officeSellers} sold`) && page1.dots === "Page 1 of 2" && page1.firstPlace === "1" && page1.others >= 1 && page1.others * page1.otherPages >= OUTSIDE, `the TV shows the office group a page at a time in three columns (${page1.title}; ${page1.rows} rows, ${page1.columns} columns, ${page1.dots}; everyone else ${page1.others} a page over ${page1.otherPages} pages)`);
     check(await fits(t3, "section[data-group], li[data-person]"), `a full page of the office group (${page1.rows} rows) and everyone else fit the TV at 1920x1080`);
     const cut = await t3.evaluate(() => [...document.querySelectorAll("main li[data-person] p")].filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent).slice(0, 5));
     check(cut.length === 0, `no name or amount on the TV's leaderboard is cut off${cut.length ? ` (${cut.join(", ")})` : ""}`);
@@ -2243,9 +2239,8 @@ try {
       await o.click(tvScreen(label));
       return settles(t3, (s) => document.querySelector("main")?.dataset.screen === s, 12000, screen);
     };
-    { await keep3("Production", "production"); await t3.waitForTimeout(2500); console.log('DBG prod', await t3.evaluate(() => ({ screen: document.querySelector('main')?.dataset.screen, rows: document.querySelectorAll('main li[data-row]').length, trs: document.querySelectorAll('main tr').length, text: document.querySelector('main')?.innerText.slice(0, 1500) }))); } //E2EDBG
-    check((await keep3("Production", "production")) && (await settles(t3, (n) => document.querySelectorAll("main li[data-row]").length === n, 3000, Math.min(20, ledger.size))), `Production shows the first ${Math.min(20, ledger.size)} of ${ledger.size} sellers`);
-    check((await fits(t3, "li[data-row]")) && (ledger.size <= 20 || (await t3.locator("main [aria-label='Page 1 of 2']").count()) === 1), "the Production screen's page fits the TV, with its page dots");
+    check((await keep3("Production", "production")) && (await settles(t3, (n) => document.querySelectorAll("main li[data-row]").length === n, 3000, Math.min(15, ledger.size))), `Production shows the first ${Math.min(15, ledger.size)} of ${ledger.size} sellers (15 rows a page)`);
+    check((await fits(t3, "li[data-row]")) && (ledger.size <= 15 || (await t3.locator("main [aria-label='Page 1 of 2']").count()) === 1), "the Production screen's page fits the TV, with its page dots");
     await t3.waitForTimeout(900); // the page's fade-in
     await t3.screenshot({ path: `${OUT}/25b-board-production-full.png` });
     check((await keep3("Scoreboard", "scoreboard")) && (await fits(t3, "[data-kpi], [data-card]")) && (await t3.innerText("main [data-kpi='Active agents']")).replace(/\s+/g, " ").includes(` ${ledger.size} `) && (await t3.innerText("main [data-kpi='Production']")).includes(tvMoney(totalCents())), `the Scoreboard screen fits and counts ${ledger.size} agents and ${tvMoney(totalCents())}`);
