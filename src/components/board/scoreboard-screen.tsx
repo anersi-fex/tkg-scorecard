@@ -73,6 +73,10 @@ export function ScoreboardScreen({ snap }: { snap: MonthSnapshot }) {
           <div className="tvb-middle">
             The middle agent is at <b className="num">{formatDollars(st.medianCents)}</b>.
           </div>
+          {st.tooFew ? (
+            <div className="tvb-middle" data-stand="too-few">Too few agents on the board to compare. This fills in once 5 agents have production in this period.</div>
+          ) : (
+          <>
           <div className="tvb-hist" role="img" aria-label={st.buckets.map((b) => `${b.label}: ${b.count}`).join(", ")}>
             {st.buckets.map((b) => (
               <div key={b.label} className="tvb-hcol">
@@ -89,9 +93,11 @@ export function ScoreboardScreen({ snap }: { snap: MonthSnapshot }) {
             ))}
           </div>
           <div className="tvb-hfoot">Each bar counts the agents whose production falls in that range</div>
+          </>
+          )}
         </div>
         <div className="tvb-card tvb-panel tvb-movers" data-card="movers">
-          <h2 className="tvb-title">{current ? "Moved most this week" : "Moved most in the last week"}</h2>
+          <h2 className="tvb-title">Moved most this week</h2>
           <div className="tvb-sub">{sb.movers.label} · Agency</div>
           <div className="tvb-mgrid">
             <div className="tvb-mh up">

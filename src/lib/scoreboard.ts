@@ -34,9 +34,10 @@ export function daysOfRange(from: string, to: string): string[] {
 }
 
 /**
- * The range to compare with: the same day numbers of the month before, cut at that month's end
- * (Oct 1 – 31 compares with Sep 1 – 30). A range that crosses a month edge compares with the
- * same number of days just before it.
+ * The range to compare with, as AgentSpace does (owner's screenshots, 2026-11-12: November's
+ * "$98.7K, up $22.4K vs Oct" is November so far against ALL of October): a range inside one month
+ * compares with the whole month before, labeled with that month's name ("Oct"). A range that
+ * crosses a month edge compares with the same number of days just before it.
  */
 export function compareRange(from: string, to: string): { from: string; to: string; label: string } {
   if (from.slice(0, 7) !== to.slice(0, 7)) {
@@ -48,10 +49,7 @@ export function compareRange(from: string, to: string): { from: string; to: stri
   const prev = addMonths(monthKeyOf(from), -1);
   const [y, m] = prev.split("-").map(Number);
   const last = daysInMonth(y, m);
-  const d1 = Math.min(Number(from.slice(8, 10)), last);
-  const d2 = Math.max(d1, Math.min(Number(to.slice(8, 10)), last));
-  const day = (d: number) => `${prev}-${String(d).padStart(2, "0")}`;
-  return { from: day(d1), to: day(d2), label: rangeLabel(day(d1), day(d2)) };
+  return { from: `${prev}-01`, to: `${prev}-${String(last).padStart(2, "0")}`, label: MONTHS_SHORT[m - 1] };
 }
 
 /** The ranges' steps, in dollars: the smallest one whose four steps reach the 90th percentile is used. */
@@ -73,22 +71,34 @@ function edgeLabel(dollars: number): string {
 }
 
 /**
- * "Where agents stand": the sellers' totals (cents) in five ranges, and the middle agent. The
- * middle of an even count is the lower of the two middle agents, so it is a real person's number.
+ * "Where agents stand", as AgentSpace draws it (owner's screenshots, 2026-11-12): the sellers'
+ * totals (cents) in up to six ranges, five of one step and an open last one ("$10K+"); an empty
+ * range just before the open one folds into it (November: "$8K+"). The step is the smallest nice
+ * one whose five steps reach the 90th percentile ($2K for October and November 2026). Fewer than
+ * five sellers is too few to compare (`tooFew`). The middle of an even count is the lower of the
+ * two middle agents, so it is a real person's number.
  */
 export function standOf(totalsCents: number[]): ScoreStand {
   const sorted = [...totalsCents].sort((a, b) => a - b);
   const n = sorted.length;
   const medianCents = n ? sorted[Math.floor((n - 1) / 2)] : 0;
   const p90 = n ? sorted[Math.max(0, Math.ceil(n * 0.9) - 1)] : 0;
-  const step = n ? niceStep(p90 / 100) : 2_000;
-  const counts = [0, 0, 0, 0, 0];
-  for (const t of sorted) counts[Math.min(4, Math.max(0, Math.floor(t / (step * 100))))]++;
+  const step = n ? niceStep((p90 / 100) * (4 / 5)) : 2_000;
+  const counts = [0, 0, 0, 0, 0, 0];
+  for (const t of sorted) counts[Math.min(5, Math.max(0, Math.floor(t / (step * 100))))]++;
+  // Six ranges only when the last two both have people; otherwise the last range is "$8K+" (an empty
+  // "$10K+" goes, and an empty "$8K–$10K" folds into it), as AgentSpace draws them.
+  let open = 5;
+  if (counts[4] === 0 || counts[5] === 0) {
+    counts[4] += counts[5];
+    counts.length = 5;
+    open = 4;
+  }
   const buckets: ScoreBucket[] = counts.map((count, i) => ({
-    label: i === 0 ? `Under ${edgeLabel(step)}` : i === 4 ? `${edgeLabel(step * 4)}+` : `${edgeLabel(step * i)}–${edgeLabel(step * (i + 1))}`,
+    label: i === 0 ? `Under ${edgeLabel(step)}` : i === open ? `${edgeLabel(step * open)}+` : `${edgeLabel(step * i)}–${edgeLabel(step * (i + 1))}`,
     count,
   }));
-  return { agents: n, medianCents, buckets };
+  return { agents: n, medianCents, buckets, tooFew: n < 5 };
 }
 
 interface Tally {
@@ -172,8 +182,9 @@ export function buildScoreboard(input: {
   // compare with (everyone reads "no change"); once the range is over, yesterday's ranking is the final one.
   const yesterday = addDays(today, -1);
   const firstDay = today <= from;
-  // "This week" ends today, or on the range's last day for a month that is over.
-  const anchor = today < to ? today : to;
+  // "This week" always ends today, whatever month is on screen (AgentSpace shows the same movers on
+  // every month); the loader hands in the last 14 days' sales too.
+  const anchor = today;
   const nowFrom = addDays(anchor, -6);
   const wasFrom = addDays(anchor, -13);
 
@@ -280,7 +291,7 @@ export function buildScoreboard(input: {
     .map((t) => ({ agentId: t.id, name: t.name, nowCents: t.nowCents, wasCents: t.wasCents, deltaCents: t.nowCents - t.wasCents }));
   const up = moved.filter((m) => m.deltaCents > 0).sort((a, b) => b.deltaCents - a.deltaCents || a.name.localeCompare(b.name)).slice(0, 3);
   const down = moved.filter((m) => m.deltaCents < 0).sort((a, b) => a.deltaCents - b.deltaCents || a.name.localeCompare(b.name)).slice(0, 3);
-  const moversLabel = anchor === today ? "Last 7 days vs the 7 days before" : `${rangeLabel(nowFrom, anchor)} vs ${rangeLabel(wasFrom, addDays(nowFrom, -1))}`;
+  const moversLabel = "Last 7 days vs the 7 days before";
 
   // Teams: each leader in scope with everyone below, all levels, added up.
   interface TeamTally { leaderId: string; name: string; members: number; activeAgents: number; cents: number; policies: number; yCents: number; yPolicies: number; ySold: boolean; byDay: Record<string, number>; byProduct: Record<string, number>; byCarrier: Record<string, number>; memberIds: string[] }

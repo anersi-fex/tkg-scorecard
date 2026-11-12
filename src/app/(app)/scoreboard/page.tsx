@@ -240,6 +240,11 @@ export default async function ScoreboardPage({ searchParams }: PageProps<"/score
             </div>
             {sb.stand.agents === 0 ? (
               <p className="sb-none">{whole ? "Nobody sold that month." : "Nobody has sold yet this month."}</p>
+            ) : sb.stand.tooFew ? (
+              <div className="sb-none" data-stand="too-few">
+                <p className="font-medium text-fg">Too few agents on the board to compare</p>
+                <p>This fills in once 5 agents have production in this period.</p>
+              </div>
             ) : (
               <>
                 <p className="sb-middle">
@@ -255,7 +260,7 @@ export default async function ScoreboardPage({ searchParams }: PageProps<"/score
           <section className="card sb-movers" data-section="movers">
             <div className="card-head">
               <div className="card-titles">
-                <h2 className="card-title">{whole ? "Moved most in the last week" : "Moved most this week"}</h2>
+                <h2 className="card-title">Moved most this week</h2>
                 <p className="card-sub">
                   {sb.movers.label} · {sb.scope === "agency" ? "Agency" : sb.scopeName}
                 </p>
@@ -372,12 +377,12 @@ function Kpi({ title, value, chip, line, caption, spark, className }: { title: s
   );
 }
 
-/** Five flat bars with the count on top and the range under each. */
+/** Up to six flat bars (AgentSpace's ranges) with the count on top and the range under each. */
 function Histogram({ sb }: { sb: Scoreboard }) {
   const most = Math.max(1, ...sb.stand.buckets.map((b) => b.count));
   return (
     <>
-      <div className="sb-hist" role="img" aria-label={sb.stand.buckets.map((b) => `${b.label}: ${b.count}`).join(", ")}>
+      <div className="sb-hist" style={{ ["--n" as string]: sb.stand.buckets.length }} role="img" aria-label={sb.stand.buckets.map((b) => `${b.label}: ${b.count}`).join(", ")}>
         {sb.stand.buckets.map((b) => (
           <div key={b.label} className="sb-hcol">
             <span className="sb-hcount num">{b.count}</span>
@@ -385,7 +390,7 @@ function Histogram({ sb }: { sb: Scoreboard }) {
           </div>
         ))}
       </div>
-      <div className="sb-hlabels">
+      <div className="sb-hlabels" style={{ ["--n" as string]: sb.stand.buckets.length }}>
         {sb.stand.buckets.map((b) => (
           <span key={b.label} className="num">
             {b.label}

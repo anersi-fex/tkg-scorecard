@@ -59,12 +59,12 @@
 .sb-stand .card-head, .sb-movers .card-head { margin-bottom: 8px; }
 .sb-middle { font-size: 14px; color: var(--t-text-2); }
 .sb-middle b { font-weight: 500; color: var(--t-text); }
-.sb-hist { flex: 1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; min-height: 150px; margin-top: 12px; border-bottom: 1px solid var(--t-line); }
+.sb-hist { flex: 1; display: grid; grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr)); gap: 8px; min-height: 150px; margin-top: 12px; border-bottom: 1px solid var(--t-line); }
 .sb-hcol { display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; height: 100%; }
 .sb-hcount { flex: none; margin-bottom: 6px; font-size: 12.5px; line-height: 16px; color: var(--t-text-2); text-align: center; }
 .sb-hbar { display: block; height: max(4px, calc((100% - 22px) * var(--f, 0))); border-radius: 8px 8px 0 0; background: var(--t-hist); }
 .sb-hbar.zero { height: 2px; border-radius: 1px; }
-.sb-hlabels { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.sb-hlabels { display: grid; grid-template-columns: repeat(var(--n, 5), minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
 .sb-hlabels > span { overflow: hidden; font-size: 12px; color: var(--t-text-2); text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 759px) {
   .sb-hlabels { gap: 4px; }
