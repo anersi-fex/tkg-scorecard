@@ -103,7 +103,8 @@ export function SettingsForms({
       <section>
         <ListTitle>TV screens</ListTitle>
         <p className="mt-1 px-1 text-[13px] text-gray-500">What the office TV shows. It follows within a few seconds.</p>
-        <TvScreensPicker current={settings.tvScreens} pcOn={pcOn} />
+        {/* A TV left on "P&C only" or "Agency total only" from before shows the leaderboard while P&C is off: light that row. */}
+        <TvScreensPicker current={!pcOn && (settings.tvScreens === "pc" || settings.tvScreens === "total") ? "life" : settings.tvScreens} pcOn={pcOn} />
       </section>
 
       <section>
@@ -339,7 +340,7 @@ function ColorwayPicker({ current }: { current: ColorwayKey }) {
             <span aria-hidden className="h-9 w-9 shrink-0 rounded-xl" style={{ background: `linear-gradient(135deg, ${c.swatch[0]}, ${c.swatch[1]})` }} />
             <span className="min-w-0">
               <span className={cn("block text-[15px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{c.name}</span>
-              <span className="block truncate text-[12px] font-medium text-gray-500">{key === "crimson" ? "Deep red to coral." : c.idea}</span>
+              <span className="block truncate text-[12px] font-medium text-gray-500">{c.idea}</span>
             </span>
           </button>
         );

@@ -6,6 +6,7 @@ import { Button, Card, LinkButton, cn } from "@/components/ui";
 import { toast } from "@/components/toaster";
 import { Art, type ArtName } from "./install-art";
 import { detectDevice, guideFor, type Device, type DeviceOs, type GuideKind } from "./detect";
+import { heldInstallOffer, type InstallPromptEvent } from "./offer";
 
 /**
  * The phone guide (owner, 2026-11-12): it looks at the phone it is on, says how many taps it
@@ -47,12 +48,6 @@ const STEPS: Partial<Record<GuideKind, Step[]>> = {
   ],
 };
 
-/** Chrome's install offer (Android): held until the person taps the button. */
-interface InstallPromptEvent extends Event {
-  prompt(): Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
-
 // What the phone says about itself, read once in the browser and again when it becomes an app.
 let cached: Device | null = null;
 function readDevice(): Device {
@@ -85,7 +80,9 @@ async function copyText(text: string): Promise<boolean> {
 export function InstallGuide({ welcome, firstName, address }: { welcome: boolean; firstName: string | null; address: string }) {
   const device = useSyncExternalStore(subscribeDevice, readDevice, serverDevice);
   const [picked, setPicked] = useState<DeviceOs | null>(null);
-  const [offer, setOffer] = useState<InstallPromptEvent | null>(null);
+  // Chrome makes its offer once per page load, often on the sign-in page or Home before this
+  // guide opens: the root layout holds it (offer.ts) and the guide starts from it.
+  const [offer, setOffer] = useState<InstallPromptEvent | null>(heldInstallOffer);
   const [added, setAdded] = useState(false);
 
   useEffect(() => {
@@ -119,7 +116,7 @@ export function InstallGuide({ welcome, firstName, address }: { welcome: boolean
         {welcome ? (
           <>
             <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.035em] text-gray-900">{firstName ? `Welcome, ${firstName}.` : "Welcome."}</h1>
-            <p className="mt-1 text-[16px] font-semibold text-gray-700">One last step: put Scorecard on your phone.</p>
+            {kind !== "installed" && !added && <p className="mt-1 text-[16px] font-semibold text-gray-700">One last step: put Scorecard on your phone.</p>}
           </>
         ) : (
           <>
@@ -142,8 +139,10 @@ export function InstallGuide({ welcome, firstName, address }: { welcome: boolean
           key={kind}
           kind={kind}
           device={device}
-          byHand={picked !== null && picked !== device.os}
-          offer={os === "android" ? offer : null}
+          // Picked by hand on another kind of phone, or inside another app (its taps are not there).
+          byHand={picked !== null && (picked !== device.os || device.kind === "in-app")}
+          // The one button installs on the phone in hand: only an Android phone showing its own taps gets it.
+          offer={device.os === "android" && os === "android" ? offer : null}
           onInstalled={() => setAdded(true)}
           address={address}
           welcome={welcome}
@@ -252,6 +251,7 @@ function PhoneSteps({
       setAsking(true);
       try {
         await offer.prompt();
+        window.__scInstallOffer = null; // an offer can be shown once
         const choice = await offer.userChoice;
         if (choice.outcome === "accepted") onInstalled();
       } catch {
@@ -278,8 +278,8 @@ function PhoneSteps({
         </Card>
         <p className="mt-3 px-1 text-[13px] font-medium text-gray-500">
           Nothing happened?{" "}
-          <button type="button" onClick={() => setManual(true)} className="font-semibold text-accent-text underline">
-            Do it by hand in 3 taps
+          <button type="button" data-by-hand onClick={() => setManual(true)} className="inline-flex min-h-11 items-center font-semibold text-accent-text underline">
+            Do it by hand in {steps.length} taps
           </button>
         </p>
       </>
@@ -325,7 +325,7 @@ function PhoneSteps({
                     </Button>
                   )}
                   <Button type="button" data-next onClick={() => setAt(i + 1)} className="flex-1">
-                    {i + 1 < steps.length ? "Next" : "I tapped Add"}
+                    {i + 1 < steps.length ? "Next" : "I did it"}
                   </Button>
                 </div>
               </Card>
@@ -362,9 +362,10 @@ function PhoneSteps({
         </li>
       </ol>
       {kind === "ios-browser" && (
-        <p className="mt-3 px-1 text-[13px] font-medium text-gray-500">
-          No &quot;Add to Home Screen&quot; in the list? Open this page in Safari and do the same three taps. <CopyLink address={address} inline />
-        </p>
+        <div className="mt-3 px-1 text-[13px] font-medium text-gray-500">
+          <p>No &quot;Add to Home Screen&quot; in the list? Open this page in Safari and do the same three taps.</p>
+          <CopyLink address={address} inline />
+        </div>
       )}
     </>
   );
@@ -379,7 +380,7 @@ function CopyLink({ address, inline = false }: { address: string; inline?: boole
   if (!address) return null;
   if (inline) {
     return (
-      <button type="button" data-copy onClick={copy} className="font-semibold text-accent-text underline">
+      <button type="button" data-copy onClick={copy} className="inline-flex min-h-11 items-center text-left font-semibold text-accent-text underline">
         {failed ? "Press and hold the address bar to copy the link" : "Copy link"}
       </button>
     );

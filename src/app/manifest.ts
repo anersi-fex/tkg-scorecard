@@ -9,9 +9,9 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
   const { agencyName } = await loadLook();
   return {
     id: "/",
-    name: "Scorecard",
+    name: "Scorecard by TKG",
     short_name: "Scorecard",
-    description: `The team's month, live on the office TV. ${agencyName}.`,
+    description: `The team's month, live on the office TV. By TKG × ${agencyName}.`,
     start_url: "/",
     scope: "/",
     display: "standalone",

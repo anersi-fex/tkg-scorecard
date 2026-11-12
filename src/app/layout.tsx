@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { THEME_SCRIPT } from "@/lib/theme-script";
+import { INSTALL_OFFER_SCRIPT } from "@/app/(app)/install/offer";
 import { loadLook } from "@/lib/look-setting";
 import "./globals.css";
 
@@ -41,13 +42,13 @@ function appBase(): URL {
   }
 }
 
-/** The agency's name (Settings) rides the description and the link preview; the app's name stays "Scorecard". */
+/** The agency's name (Settings) sits beside TKG's in the description and the link preview; the app's name stays "Scorecard". */
 export async function generateMetadata(): Promise<Metadata> {
   const { agencyName } = await loadLook();
   return {
     metadataBase: appBase(),
     title: { default: "Scorecard", template: "%s | Scorecard" },
-    description: `The team's month, live on the office TV. ${agencyName}.`,
+    description: `The team's month, live on the office TV. By TKG × ${agencyName}.`,
     applicationName: "Scorecard",
     icons: {
       icon: [
@@ -65,10 +66,10 @@ export async function generateMetadata(): Promise<Metadata> {
       type: "website",
       siteName: "Scorecard",
       title: "Scorecard",
-      description: `by ${agencyName}`,
-      images: [{ url: "/og.jpg", width: 1200, height: 630, alt: `Scorecard by ${agencyName}` }],
+      description: `by The Koka Group × ${agencyName}`,
+      images: [{ url: "/og.jpg", width: 1200, height: 630, alt: `Scorecard by The Koka Group × ${agencyName}` }],
     },
-    twitter: { card: "summary_large_image", title: "Scorecard", description: `by ${agencyName}`, images: ["/og.jpg"] },
+    twitter: { card: "summary_large_image", title: "Scorecard", description: `by The Koka Group × ${agencyName}`, images: ["/og.jpg"] },
   };
 }
 
@@ -93,6 +94,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className="h-full antialiased" data-colorway={look.colorway} data-pc-color={look.pcColor} data-board-theme={look.boardTheme} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: INSTALL_OFFER_SCRIPT }} />
       </head>
       <body className="flex min-h-full flex-col bg-ink text-gray-900">{children}</body>
     </html>

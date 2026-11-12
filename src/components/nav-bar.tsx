@@ -165,10 +165,11 @@ export function NavBar({ role, agency, name, level, approvals = 0 }: NavBarProps
       className={cn("sticky top-0 z-30 border-b bg-ink transition-colors has-[[aria-expanded=true]]:z-50", scrolled ? "border-line" : "border-transparent")}
     >
       <div className="mx-auto flex h-[60px] max-w-5xl items-center gap-3 pr-[11px] pl-4 sm:gap-6">
-        <Link href="/" aria-label="Scorecard, home" className="-my-1 flex min-h-11 shrink-0 items-center rounded-xl">
+        {/* On a narrow window the agency's name gives way before a link is cut: the lockup shrinks first, down to the icon and "Scorecard". */}
+        <Link href="/" aria-label="Scorecard, home" className="-my-1 flex min-h-11 min-w-[8.25rem] shrink-[9999] items-center rounded-xl">
           <ScoreLockup size={32} agency={agency} />
         </Link>
-        <nav aria-label="Main" className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-hidden sm:flex lg:gap-1">
+        <nav aria-label="Main" className="hidden min-w-0 flex-auto items-center gap-0.5 overflow-hidden sm:flex lg:gap-1">
           {LINKS.map((l) => {
             const active = isOn(l);
             return (

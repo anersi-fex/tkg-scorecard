@@ -166,7 +166,7 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
         </div>
       )}
 
-      <p data-wrap-foot className="mt-2.5 flex items-center justify-between gap-3 px-1 text-[11px] font-semibold text-gray-500">
+      <p data-wrap-foot className="mt-2.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-1 text-[11px] font-semibold text-gray-500">
         <span>
           {view === "month" ? (
             wrap.month.goalCents > 0 ? `${wrap.month.goalPct}% of the ${formatDollars(wrap.month.goalCents)} goal` : "No goal set"
@@ -177,7 +177,8 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
             </>
           )}
         </span>
-        <span className="min-w-0 shrink truncate">Scorecard · {agency}</span>
+        {/* The signature stays whole: it drops under the count when the two do not fit on one line. */}
+        <span data-wrap-sign className="ml-auto max-w-full min-w-0 truncate">Scorecard by TKG × {agency}</span>
       </p>
     </>
   );
