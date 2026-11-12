@@ -1,5 +1,8 @@
 // Session tokens: HMAC-SHA256 signed, stateless, Web Crypto only (runs in proxy.ts too).
-// Format: v1.<role>.<expiresEpochSec>.<pwtag>.<base64url signature>
+// Two kinds, one cookie, one signing key:
+//   v1.<role>.<expiresEpochSec>.<pwtag>.<base64url signature>            a shared password
+//   v2.<agent id>.<expiresEpochSec>.<sessionVersion>.<base64url signature>  a person's own sign-in
+// v1 format: v1.<role>.<expiresEpochSec>.<pwtag>.<base64url signature>
 // role: "owner" (Anersi, full control) or "team" (anyone on the team: log sales, see the board).
 // pwtag (first 8 hex of SHA-256 of that role's password) ties a token to the password that made
 // it: changing a password signs out every device that used it. Signing key: SESSION_SECRET (32+
@@ -78,6 +81,50 @@ export async function verifySessionToken(token: string | undefined | null): Prom
   if (!valid) return null;
   if (Number(expiresStr) <= Math.floor(Date.now() / 1000)) return null;
   return (await passwordTag(role)) === tag ? role : null;
+}
+
+// A person's own sign-in (owner, 2026-11-12). The token names the person and the session version
+// it was made under; whoever reads it checks the person's row (active, the same version) before
+// trusting it, so "Sign out everywhere", a new password or taking someone off the board ends it.
+const PERSON_VERSION = "v2";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export async function createPersonToken(agentId: string, sessionVersion: number, ttlSeconds: number): Promise<string> {
+  const id = String(agentId).toLowerCase();
+  if (!UUID.test(id)) throw new Error("A person's session needs their id");
+  if (!Number.isInteger(sessionVersion) || sessionVersion < 1 || sessionVersion > 999_999_999) throw new Error("A person's session needs their session version");
+  const expires = Math.floor(Date.now() / 1000) + ttlSeconds;
+  const payload = `${PERSON_VERSION}.${id}.${expires}.${sessionVersion}`;
+  const sig = await crypto.subtle.sign("HMAC", await hmacKey("sign"), enc(payload));
+  return `${payload}.${toBase64Url(sig)}`;
+}
+
+export type SessionClaim = { kind: "shared"; role: Role } | { kind: "person"; agentId: string; sessionVersion: number };
+
+/**
+ * What a cookie says, after its signature and its expiry were checked: a shared password's role
+ * (the v1 check, password tag included), or a person and their session version. A person's claim
+ * is not yet a session: src/lib/auth.ts checks the row. Null for anything else. Each kind signs
+ * its own label, so a v1 token relabeled v2 (or the reverse) fails the signature.
+ */
+export async function readSessionToken(token: string | undefined | null): Promise<SessionClaim | null> {
+  if (!token || token.length > 400) return null;
+  if (token.startsWith(`${VERSION}.`)) {
+    const role = await verifySessionToken(token);
+    return role ? { kind: "shared", role } : null;
+  }
+  if (!token.startsWith(`${PERSON_VERSION}.`)) return null;
+  const parts = token.split(".");
+  if (parts.length !== 5) return null;
+  const [version, agentId, expiresStr, versionStr, sigStr] = parts;
+  if (version !== PERSON_VERSION || !UUID.test(agentId)) return null;
+  if (!/^\d{1,12}$/.test(expiresStr) || !/^[1-9]\d{0,8}$/.test(versionStr)) return null;
+  const sig = fromBase64Url(sigStr);
+  if (!sig || sig.length !== 32) return null;
+  const valid = await crypto.subtle.verify("HMAC", await hmacKey("verify"), sig.slice().buffer, enc(`${version}.${agentId}.${expiresStr}.${versionStr}`));
+  if (!valid) return null;
+  if (Number(expiresStr) <= Math.floor(Date.now() / 1000)) return null;
+  return { kind: "person", agentId, sessionVersion: Number(versionStr) };
 }
 
 export const SESSION_COOKIE = "sc_session";
