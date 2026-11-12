@@ -1,41 +1,33 @@
 "use client";
 
-import { useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
-import Link from "next/link";
-import { Avatar } from "@/components/avatar";
-import { KindDot } from "@/components/kind";
-import { Button, Input, Label, cn } from "@/components/ui";
-import { formatMoney, parseDollars } from "@/lib/money";
-import { todayInDetroit } from "@/lib/month";
-import { KIND_LABEL, SALE_KINDS, type PcCarrier, type SaleKind } from "@/lib/types";
-import { logSale, removeSale } from "../sale-actions";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition, type FormEvent, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { cn } from "@/components/ui";
+import { Icon } from "@/components/ui/icon";
+import { Field, Initials, Panel } from "@/components/ui/kit";
 import { toast } from "@/components/toaster";
+import { parseDollars } from "@/lib/money";
+import { STEPS, STEP_FIELDS, blankForm, errorLine, monthlyText, summaryLine, validatePolicyForm, valuesOf, yearlyText, type FormKey, type PolicyForm } from "@/lib/policy-validate";
+import { BensFields, ClientFields, PolicyFields, type FieldErrors, type Lists } from "@/components/policy/policy-fields";
+import { PvDl, clientItems, policyItems } from "@/components/policy/policy-read";
+import { applyChange, toFormData, type Draft, type FieldValue } from "@/components/policy/form-logic";
+import { ageOn } from "@/lib/policy-validate";
+import { dayShort, firstName, monthWord, previewSale, type BoardLine } from "@/components/policy/format";
+import { logPolicy } from "../sale-actions";
 
-interface Person {
+/** Someone the viewer may log a sale for (rules.ts logForChoices), with the words under their name. */
+export interface WhoChoice {
   id: string;
   name: string;
-  tone: string;
-  /** P&C licensed (Team page): the Life / P&C switch shows for them. */
-  pcLicensed: boolean;
-  /** Works in the office: the office group leads the picker. */
-  inOffice?: boolean;
+  /** "You", "Manager", "Agent" ... */
+  line: string;
+  inOffice: boolean;
 }
 
-const WHO_KEY = "scorecard:who";
-/** The last few people picked on this phone, newest first (ids, as JSON): they lead the picker. */
+/** The last few people picked on this browser, newest first: ids only (never a client's detail). */
 const RECENT_KEY = "scorecard:recent";
 const RECENT_MAX = 6;
-
-// The last person picked on this phone (a rep logs their own sales); null on the server.
 const noSubscribe = () => () => {};
-function readSavedWho(): string | null {
-  try {
-    return localStorage.getItem(WHO_KEY);
-  } catch {
-    return null;
-  }
-}
-
 function readRecentRaw(): string | null {
   try {
     return localStorage.getItem(RECENT_KEY);
@@ -43,7 +35,6 @@ function readRecentRaw(): string | null {
     return null;
   }
 }
-
 function parseRecent(raw: string | null): string[] {
   if (!raw) return [];
   try {
@@ -53,420 +44,485 @@ function parseRecent(raw: string | null): string[] {
     return [];
   }
 }
+const norm = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+
+type Step = 1 | 2 | 3;
 
 /**
- * Four taps: who, how much, which carrier, Log it. A member logs for themselves, so there is no
- * person to pick (`self`: their own name heads the form). For the owner, an admin and the team
- * password the person a desk tag opens (`?agent=`) or the
- * last person picked on this phone is preselected, and the picker searches as they type, with
- * the people picked lately first, then the office group, then everyone else. A P&C licensed person (Team page) gets a
- * Life / P&C switch (owner, 2026-11-04); P&C mode brings the P&C carriers and the lines the picked
- * carrier writes (`?kind=pc` on a desk tag opens it that way). After logging, the screen offers
- * Undo for a bit, Log another, and the board.
+ * Log a sale in three steps (the demo the owner approved: AgentSpace's Post a Deal in our words):
+ * 1 Policy information, 2 Client information, 3 Review and log. Each step is checked before the
+ * next opens (policy-validate.ts, the same words the server uses), and the server's own field
+ * errors land on their fields. The draft lives in React state only: nothing typed here is kept in
+ * browser storage or the address. An agent logs for themself ("Logging for ..."); a manager or an
+ * admin picks who sold it. After logging the page opens /log?done=<id>.
  */
 export function LogForm({
-  agents,
-  products,
-  carriers,
-  pcCarriers,
-  today,
+  me,
+  choices,
   preset,
-  presetKind,
-  self = null,
-  me = null,
+  lists,
+  today,
+  month,
+  board,
+  anyone = false,
 }: {
-  /** A member's own id: they log for themselves and see no picker. */
-  self?: string | null;
-  /** The signed-in person (the owner or an admin too): preselected on a phone that has not picked anyone yet. */
-  me?: string | null;
-  agents: Person[];
-  products: string[];
-  carriers: string[];
-  pcCarriers: PcCarrier[];
-  today: string;
+  /** An admin logs for anyone on the board (the note under the picker says so). */
+  anyone?: boolean;
+  /** The person signed in (null: the owner password with no row of its own). */
+  me: string | null;
+  choices: WhoChoice[];
+  /** Picked first (a desk tag's ?agent=, or the viewer). */
   preset: string | null;
-  presetKind: SaleKind | null;
+  lists: Lists;
+  today: string;
+  /** This month, "YYYY-MM". */
+  month: string;
+  /** The month's board as it stands (life premium per person): the side's "On the board" line. */
+  board: BoardLine[];
 }) {
-  const saved = useSyncExternalStore(noSubscribe, readSavedWho, () => null);
-  const [picked, setPicked] = useState<string | null>(null);
-  const recentRaw = useSyncExternalStore(noSubscribe, readRecentRaw, () => null);
-  const recent = useMemo(() => parseRecent(recentRaw), [recentRaw]);
-  const onBoard = (id: string | null): id is string => !!id && agents.some((a) => a.id === id);
-  // A member is always themselves. Otherwise a desk tag's person wins, then the last one picked on
-  // this phone, then the person signed in, then whoever taps.
-  const who = self ?? picked ?? (onBoard(preset) ? preset : onBoard(saved) ? saved : onBoard(me) ? me : null);
-  const setWho = setPicked;
-  // The picker is open while nobody is picked, or after a tap on Change.
-  const [choosing, setChoosing] = useState(false);
-  const [search, setSearch] = useState("");
-  const [premium, setPremium] = useState("");
-  const [policies, setPolicies] = useState(1);
-  const [product, setProduct] = useState<string | null>(null);
-  const [carrier, setCarrier] = useState<string | null>(null);
-  // Life or P&C: only a licensed person can be on P&C; the choice is kept per visit (a desk tag can open on P&C).
-  const [kindPicked, setKindPicked] = useState<SaleKind | null>(null);
-  const canPc = !!agents.find((a) => a.id === who)?.pcLicensed;
-  const kind: SaleKind = canPc ? (kindPicked ?? presetKind ?? "life") : "life";
-  const carrierChoices = kind === "pc" ? pcCarriers.map((c) => c.name) : carriers;
-  // P&C: the lines the picked carrier writes (every line until one is picked); life: the product chips.
-  const pcLines = kind === "pc" ? (carrier ? (pcCarriers.find((c) => c.name === carrier)?.lines ?? []) : pcCarriers.flatMap((c) => c.lines).filter((l, i, all) => all.indexOf(l) === i)) : [];
-  const productChoices = kind === "pc" ? pcLines : products;
-  const pickKind = (next: SaleKind) => {
-    if (next === kind) return;
-    setKindPicked(next);
-    setCarrier(null);
-    setProduct(null);
-    setError(null);
-  };
-  const [date, setDate] = useState(today);
-  // Only a day the person picked is sent; otherwise the server stamps its own Detroit today, so a
-  // screen left open past midnight never dates a sale to yesterday.
-  const [dateTouched, setDateTouched] = useState(false);
-  const [more, setMore] = useState(false);
-  const [note, setNote] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ id: string; who: string; cents: number; carrier: string | null } | null>(null);
+  const router = useRouter();
+  const [draft, setDraft] = useState<Draft>(() => ({ f: blankForm(preset ?? "", today), billingTouched: false }));
+  const [soldOnTouched, setSoldOnTouched] = useState(false);
+  const [step, setStep] = useState<Step>(1);
+  const [tried, setTried] = useState<Record<1 | 2, boolean>>({ 1: false, 2: false });
+  const [serverErrors, setServerErrors] = useState<FieldErrors>({});
+  const [alert, setAlert] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const premiumRef = useRef<HTMLInputElement | null>(null);
+  const [focusError, setFocusError] = useState(0);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const f = draft.f;
+  const ctx = useMemo(() => ({ today, ...lists }), [today, lists]);
+  const picker = choices.length > 1;
+  const seller = choices.find((c) => c.id === f.agentId) ?? null;
 
-  const cents = parseDollars(premium);
-  const ready = !!who && cents != null && cents > 0 && !!carrier && carrierChoices.includes(carrier);
+  const errorsOf = (s: 1 | 2): FieldErrors => {
+    const local = tried[s] ? validatePolicyForm(f, ctx, STEP_FIELDS[s]) : {};
+    const fromServer: FieldErrors = {};
+    for (const [k, v] of Object.entries(serverErrors)) if (STEP_FIELDS[s].includes(k as FormKey)) fromServer[k as FormKey] = v;
+    return { ...fromServer, ...local };
+  };
+  const errors: FieldErrors = step < 3 ? errorsOf(step as 1 | 2) : {};
+  const nErrors = Object.keys(errors).length;
 
-  const submit = () => {
-    if (!who) return setError(self ? "Sign in again to log a sale." : "Tap who sold it.");
-    if (cents == null || cents === 0) return setError("Type the annual premium, like 1250.");
-    if (!carrier) return setError("Tap the carrier it was written with.");
-    setError(null);
-    const form = new FormData();
-    form.set("agent_id", who);
-    form.set("premium", premium);
-    form.set("policies", String(policies));
-    if (product) form.set("product", product);
-    form.set("carrier", carrier);
-    form.set("kind", kind);
-    if (note.trim()) form.set("note", note.trim());
-    form.set("sold_on", dateTouched ? date : "");
-    start(async () => {
-      const r = await logSale(form);
-      if (!r.ok) {
-        setError(r.error);
+  const change = (k: keyof PolicyForm, v: FieldValue) => {
+    if (k === "soldOn") setSoldOnTouched(true);
+    setDraft((d) => applyChange(d, k, v, { carrierProducts: lists.carrierProducts, autoDay: true }));
+    if (serverErrors[k as FormKey] || (k === "policyNumber" || k === "applicationNumber" ? serverErrors.numbers : false)) {
+      setServerErrors((e) => {
+        const next = { ...e };
+        delete next[k as FormKey];
+        if (k === "policyNumber" || k === "applicationNumber") delete next.numbers;
+        return next;
+      });
+    }
+  };
+
+  // After a step moves, the page goes to its top; after a refused Next, the first marked field gets focus.
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [step]);
+  useEffect(() => {
+    if (!focusError) return;
+    const el = formRef.current?.querySelector<HTMLElement>(".has-error .input, .has-error .select, .has-error .textarea");
+    el?.focus();
+  }, [focusError]);
+
+  const goStep = (to: Step) => {
+    if (to <= step) {
+      setStep(to);
+      setAlert(null);
+      return;
+    }
+    for (let s = step; s < to; s++) {
+      if (s === 3) break;
+      const errs = validatePolicyForm(f, ctx, STEP_FIELDS[s as 1 | 2]);
+      if (Object.keys(errs).length) {
+        setTried((t) => ({ ...t, [s]: true }));
+        setStep(s as Step);
+        setFocusError((n) => n + 1);
         return;
       }
-      try {
-        if (!self) {
-          localStorage.setItem(WHO_KEY, who);
-          localStorage.setItem(RECENT_KEY, JSON.stringify([who, ...recent.filter((id) => id !== who)].slice(0, RECENT_MAX)));
-        }
-      } catch {
-        /* private mode */
+    }
+    setAlert(null);
+    setStep(to);
+  };
+
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (step < 3) return goStep((step + 1) as Step);
+    for (const s of [1, 2] as const) {
+      if (Object.keys(validatePolicyForm(f, ctx, STEP_FIELDS[s])).length) {
+        setTried((t) => ({ ...t, [s]: true }));
+        setStep(s);
+        setFocusError((n) => n + 1);
+        return;
       }
-      const person = agents.find((a) => a.id === who)?.name ?? "Someone";
-      setDone({ id: r.id!, who: person, cents: cents, carrier: carrier ? `${carrier}${kind === "pc" ? " · P&C" : ""}` : null });
-      toast(r.message ?? "Logged.");
+    }
+    const fd = toFormData(f, undefined, { soldOnTouched });
+    start(async () => {
+      const r = await logPolicy(fd);
+      if (r.ok) {
+        if (picker && f.agentId) {
+          try {
+            const recent = parseRecent(readRecentRaw());
+            localStorage.setItem(RECENT_KEY, JSON.stringify([f.agentId, ...recent.filter((id) => id !== f.agentId)].slice(0, RECENT_MAX)));
+          } catch {
+            // blocked storage: the picker just has no "Picked lately"
+          }
+        }
+        const id = "id" in r && typeof r.id === "string" ? r.id : null;
+        if (id) router.push(`/log?done=${encodeURIComponent(id)}`);
+        else {
+          toast(r.message ?? "Logged.");
+          router.push("/policies");
+        }
+        return;
+      }
+      const errs = ("errors" in r && r.errors) || {};
+      setServerErrors(errs);
+      const keys = Object.keys(errs) as FormKey[];
+      if (keys.length) {
+        const s: 1 | 2 = keys.some((k) => STEP_FIELDS[1].includes(k)) ? 1 : 2;
+        setStep(s);
+        setAlert(errorLine(keys.filter((k) => STEP_FIELDS[s].includes(k)).length || keys.length));
+        setFocusError((n) => n + 1);
+      } else {
+        setAlert(r.error);
+        toast(r.error, false);
+      }
     });
   };
 
-  const reset = () => {
-    setDone(null);
-    setPremium("");
-    setPolicies(1);
-    setProduct(null);
-    setCarrier(null);
-    setNote("");
-    setDate(todayInDetroit());
-    setDateTouched(false);
-    setError(null);
-  };
-
-  const whoPerson = agents.find((a) => a.id === who);
-  // The picker's groups: with a name typed, the matches; otherwise the people picked lately on
-  // this phone, then the office group, then everyone else (each by name).
-  const typed = search.trim().toLowerCase();
-  const byName = (a: Person, b: Person) => a.name.localeCompare(b.name);
-  const groups: { title: string; people: Person[] }[] = [];
-  if (typed) {
-    const found = agents.filter((a) => a.name.toLowerCase().includes(typed)).sort(byName);
-    if (found.length) groups.push({ title: "Matches", people: found });
-  } else {
-    const lately = recent.map((id) => agents.find((a) => a.id === id)).filter((a): a is Person => !!a);
-    const rest = agents.filter((a) => !lately.includes(a));
-    const office = rest.filter((a) => a.inOffice).sort(byName);
-    const others = rest.filter((a) => !a.inOffice).sort(byName);
-    if (lately.length) groups.push({ title: "Picked lately", people: lately });
-    if (office.length) groups.push({ title: "In the office", people: office });
-    if (others.length) groups.push({ title: office.length ? "Everyone else" : "Everyone", people: others });
-  }
-
-  if (done) {
-    return (
-      <div className="rounded-[26px] bg-surface p-6 text-center shadow-card">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-tide text-white shadow-glow">
-          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M5 12.5l4.5 4.5L19 7.5" />
-          </svg>
-        </div>
-        <h2 className="mt-4 text-[22px] font-extrabold tracking-[-0.03em] text-gray-900">Logged</h2>
-        <p className="mt-1 text-[15px] text-gray-600">
-          <span className="font-semibold text-gray-900">{done.who}</span> · <span className="font-mono font-semibold text-gray-900">{formatMoney(done.cents)}</span> annual premium
-          {done.carrier ? ` with ${done.carrier}` : ""}. The board is celebrating.
-        </p>
-        <div className="mt-6 grid gap-2">
-          <Button type="button" className="h-12 w-full rounded-2xl text-[15px]" onClick={reset}>
-            Log another
-          </Button>
-          <Link href="/" className="inline-flex min-h-11 items-center justify-center rounded-2xl border border-line bg-surface px-4 text-sm font-bold text-gray-900 shadow-card hover:bg-gray-50">
-            See this month
-          </Link>
-          <UndoButton id={done.id} onUndone={reset} />
-        </div>
-      </div>
-    );
-  }
+  const alertText = nErrors ? errorLine(nErrors) : step === 3 ? alert : null;
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        submit();
-      }}
-      className="space-y-5"
-    >
-      {error && (
-        <p role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-900">
-          {error}
-        </p>
-      )}
-
-      {self ? (
-        <section data-logging-for className="flex items-center gap-3 rounded-[22px] bg-surface px-4 py-3 shadow-card">
-          <Avatar name={whoPerson?.name ?? "You"} tone={whoPerson?.tone} neutral={!whoPerson} size={40} />
-          <p className="min-w-0 flex-1 truncate text-[15px] font-medium text-gray-600">
-            Logging for <span className="font-bold text-gray-900">{whoPerson?.name ?? "you"}</span>
-          </p>
-        </section>
-      ) : (
-        <section data-who>
-          <h2 className="mb-2 px-1 text-[13px] font-bold tracking-[0.06em] text-gray-500 uppercase">Who sold it</h2>
-          {whoPerson && !choosing ? (
-            <div className="flex items-center gap-3 rounded-[22px] bg-surface py-2 pr-2 pl-4 shadow-card outline-2 outline-accent">
-              <Avatar name={whoPerson.name} tone={whoPerson.tone} size={40} />
-              <p className="min-w-0 flex-1 truncate text-[16px] font-bold text-accent-text">{whoPerson.name}</p>
-              <button type="button" onClick={() => setChoosing(true)} className="min-h-11 shrink-0 rounded-full px-3 text-[14px] font-bold text-accent-text hover:bg-tint">
-                Change
-              </button>
+    <div className="log-grid">
+      <div className="col log-main">
+        <section className="card log-card" data-step={step}>
+          <div className="log-progress">
+            <div className="log-steps-line">
+              <span className="log-step-now">
+                Step {step} of 3 · {STEPS[step - 1]}
+              </span>
+              {step < 3 && <span className="log-step-next">Next: {STEPS[step]}</span>}
             </div>
-          ) : (
-            <div className="rounded-[22px] bg-surface p-3 shadow-card">
-              <div className="relative">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-gray-400">
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="M20 20l-3.5-3.5" />
-                </svg>
-                <Input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Type a name" aria-label="Find who sold it" autoComplete="off" className="rounded-full pl-9" />
-              </div>
-              <div className="mt-2 max-h-[19rem] space-y-2 overflow-y-auto overscroll-contain pr-0.5" role="radiogroup" aria-label="Who sold it">
-                {groups.length === 0 && <p className="px-1 py-3 text-[14px] text-gray-600">Nobody by that name.</p>}
-                {groups.map((g) => (
-                  <div key={g.title}>
-                    {groups.length > 1 && <p className="px-1 pb-1 text-[11.5px] font-bold tracking-[0.06em] text-gray-500 uppercase">{g.title}</p>}
-                    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                      {g.people.map((a) => {
-                        const on = who === a.id;
-                        return (
-                          <button
-                            key={a.id}
-                            type="button"
-                            role="radio"
-                            aria-checked={on}
-                            onClick={() => {
-                              setWho(a.id);
-                              setChoosing(false);
-                              setSearch("");
-                              // The kind this person lands on; a change in either direction drops a carrier or line from the other list.
-                              const nextKind: SaleKind = a.pcLicensed ? (kindPicked ?? presetKind ?? "life") : "life";
-                              if (nextKind !== kind) {
-                                setCarrier(null);
-                                setProduct(null);
-                              }
-                              setError(null);
-                              premiumRef.current?.focus();
-                            }}
-                            className={cn("flex min-h-12 items-center gap-2 rounded-2xl bg-surface-2 px-2.5 text-left transition", on ? "outline-2 -outline-offset-2 outline-accent" : "hover:bg-gray-100")}
-                          >
-                            <Avatar name={a.name} tone={a.tone} size={30} />
-                            <span className={cn("truncate text-[14px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{a.name}</span>
-                          </button>
-                        );
-                      })}
+            <div className="log-rail" role="progressbar" aria-valuemin={1} aria-valuemax={3} aria-valuenow={step} aria-label={`Step ${step} of 3`}>
+              <i style={{ width: `${((step / 3) * 100).toFixed(2)}%` }} />
+            </div>
+          </div>
+          {step < 3 && (
+            <p className="log-req">
+              <span className="req">*</span> Required
+            </p>
+          )}
+          {alertText && (
+            <div className="form-alert" role="alert">
+              <Icon name="alert" size={16} />
+              <span>{alertText}</span>
+            </div>
+          )}
+          {step === 1 && (picker ? <WhoPicker choices={choices} anyone={anyone} me={me} value={f.agentId} error={errors.agentId} onPick={(id) => change("agentId", id)} /> : <LoggingFor name={seller?.name ?? choices[0]?.name ?? ""} />)}
+          <form ref={formRef} className="log-form" method="post" noValidate onSubmit={submit}>
+            {step === 1 && <PolicyFields f={f} onChange={change} errors={errors} idp="" lists={lists} today={today} autoDay billingTouched={draft.billingTouched} withNotes uwHelp="Starts the policy in Underwriting." />}
+            {step === 2 && (
+              <>
+                <ClientFields f={f} onChange={change} errors={errors} idp="" lists={lists} today={today} />
+                <BensFields bens={f.bens} idp="" error={errors.bens} onBens={(bens) => setDraft((d) => ({ ...d, f: { ...d.f, bens } }))} />
+              </>
+            )}
+            {step === 3 && <Review f={f} lists={lists} today={today} sellerName={seller?.name ?? ""} onEdit={(s) => goStep(s)} />}
+            <div className="form-foot log-foot">
+              {step > 1 ? (
+                <button type="button" className="btn btn-secondary" onClick={() => goStep((step - 1) as Step)} disabled={pending}>
+                  <Icon name="arrow-left" size={18} />
+                  <span>Previous</span>
+                </button>
+              ) : (
+                <span />
+              )}
+              {step < 3 ? (
+                <button type="submit" className="btn btn-primary" id="log-next">
+                  <span>Next</span>
+                  <Icon name="arrow-right" size={18} />
+                </button>
+              ) : (
+                <button type="submit" className="btn btn-primary btn-lg" id="log-go" disabled={pending}>
+                  <Icon name="check-circle" size={18} />
+                  <span>{pending ? "Logging..." : "Log sale"}</span>
+                </button>
+              )}
+            </div>
+          </form>
+        </section>
+      </div>
+      <SideColumn f={f} step={step} sellerId={f.agentId} sellerName={seller?.name ?? ""} self={!!me && f.agentId === me} today={today} month={month} board={board} onStep={goStep} />
+    </div>
+  );
+}
+
+function LoggingFor({ name }: { name: string }) {
+  return (
+    <div className="log-for" data-logging-for>
+      <Initials name={name} small />
+      <span>
+        Logging for <b>{name}</b>
+      </span>
+      <span className="log-for-note">Agents log their own sales.</span>
+    </div>
+  );
+}
+
+/** Who sold it: a searchable list (Picked lately, In the office, Everyone else), the viewer first. */
+function WhoPicker({ choices, anyone, me, value, error, onPick }: { choices: WhoChoice[]; anyone: boolean; me: string | null; value: string; error?: string; onPick: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const wrap = useRef<HTMLDivElement | null>(null);
+  const recentRaw = useSyncExternalStore(noSubscribe, readRecentRaw, () => null);
+  const recent = useMemo(() => parseRecent(recentRaw), [recentRaw]);
+  const cur = choices.find((c) => c.id === value) ?? null;
+
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: PointerEvent) => {
+      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+    };
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", down);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", down);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
+
+  const words = norm(q).trim().split(/\s+/).filter(Boolean);
+  const byName = (a: WhoChoice, b: WhoChoice) => (a.id === me ? -1 : b.id === me ? 1 : a.name.localeCompare(b.name));
+  const groups: { title: string; people: WhoChoice[] }[] = [];
+  if (words.length) {
+    const found = choices.filter((c) => words.every((w) => norm(c.name).includes(w))).sort(byName);
+    if (found.length) groups.push({ title: "Matches", people: found });
+  } else {
+    const lately = recent.map((id) => choices.find((c) => c.id === id)).filter((c): c is WhoChoice => !!c);
+    const seen = new Set(lately.map((c) => c.id));
+    const rest = choices.filter((c) => !seen.has(c.id)).sort(byName);
+    const office = rest.filter((c) => c.inOffice);
+    const others = rest.filter((c) => !c.inOffice);
+    if (lately.length) groups.push({ title: "Picked lately", people: lately });
+    if (office.length) groups.push({ title: "In the office", people: office });
+    if (others.length) groups.push({ title: office.length || lately.length ? "Everyone else" : "Everyone", people: others });
+  }
+  const pick = (id: string) => {
+    onPick(id);
+    setOpen(false);
+    setQ("");
+  };
+  return (
+    <div className="log-who" ref={wrap}>
+      <Field label="Who sold it" htmlFor="log-who" required error={error} help={cur && cur.id !== me ? `${firstName(cur.name)} gets the sale on the board; you're named as the one who logged it.` : undefined}>
+        <div className="pop-wrap log-who-wrap">
+          <button type="button" id="log-who" className={cn("log-who-btn", open && "open")} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((v) => !v)} data-who>
+            {cur ? <Initials name={cur.name} small /> : <span className="avatar sm" aria-hidden />}
+            <span className="log-who-cur">
+              <span className="log-who-name ell">
+                {cur ? cur.name : "Pick who sold it"}
+                {cur && cur.id === me && <span className="you">You</span>}
+              </span>
+              <span className="log-who-line ell">{cur ? (cur.id === me ? "Logging for yourself" : cur.line) : `${choices.length} people`}</span>
+            </span>
+            <Icon name="chevron-down" size={16} className="log-who-chev" />
+          </button>
+          {open && (
+            <div className="pop pop-left log-who-pop-box">
+              <div className="log-who-pop">
+                <div className="search-wrap">
+                  <span className="search-ico" aria-hidden>
+                    <Icon name="search" size={17} />
+                  </span>
+                  <input
+                    autoFocus
+                    type="search"
+                    className="input search-input"
+                    placeholder="Find someone"
+                    aria-label="Find who sold it"
+                    autoComplete="off"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      const first = groups[0]?.people[0];
+                      if (first) pick(first.id);
+                    }}
+                  />
+                </div>
+                <div className="log-who-list" role="listbox" aria-label="Who sold it">
+                  {groups.length === 0 && <p className="log-who-none">No one by that name {anyone ? "on the board" : "on your team"}.</p>}
+                  {groups.map((g) => (
+                    <div key={g.title} role="group" aria-label={g.title}>
+                      {groups.length > 1 || g.title !== "Matches" ? <p className="log-who-group">{g.title}</p> : null}
+                      {g.people.map((c) => (
+                        <button key={`${g.title}-${c.id}`} type="button" role="option" aria-selected={c.id === value} className={cn("log-who-opt", c.id === value && "on")} onClick={() => pick(c.id)}>
+                          <Initials name={c.name} small />
+                          <span className="log-who-t">
+                            <span className="log-who-n ell">{c.name}</span>
+                            <span className="log-who-s ell">{c.id === me ? "You" : c.line}</span>
+                          </span>
+                          {c.id === value && <Icon name="check" size={16} />}
+                        </button>
+                      ))}
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <p className="log-who-note">{anyone ? `Admins log for anyone on the board (${choices.length} people).` : `Managers log for themselves and everyone under them (${choices.length} people).`}</p>
               </div>
             </div>
           )}
-        </section>
-      )}
-
-      {canPc && (
-        <section>
-          <h2 className="mb-2 px-1 text-[13px] font-bold tracking-[0.06em] text-gray-500 uppercase">What kind</h2>
-          <div role="radiogroup" aria-label="What kind" className="grid grid-cols-2 gap-1 rounded-2xl bg-track p-1">
-            {SALE_KINDS.map((k) => {
-              const on = kind === k;
-              return (
-                <button
-                  key={k}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  onClick={() => pickKind(k)}
-                  className={cn("flex min-h-11 items-center justify-center gap-2 rounded-xl text-[14px] font-bold transition", on ? "bg-segment text-gray-900 shadow-card" : "text-gray-600 hover:text-gray-900")}
-                >
-                  <KindDot kind={k} className="h-2 w-2" />
-                  {KIND_LABEL[k]}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      <section className="rounded-[26px] bg-surface p-4 shadow-card">
-        <Label htmlFor="premium" className="text-[13px] font-bold tracking-[0.06em] text-gray-500 uppercase">
-          Annual premium
-        </Label>
-        <div className="relative">
-          <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 font-mono text-[28px] font-bold text-gray-400">$</span>
-          <input
-            ref={premiumRef}
-            id="premium"
-            name="premium"
-            inputMode="decimal"
-            autoComplete="off"
-            placeholder="0"
-            value={premium}
-            onChange={(e) => {
-              setPremium(e.target.value);
-              setError(null);
-            }}
-            className="h-16 w-full rounded-2xl border border-line bg-surface-2 pr-4 pl-10 font-mono text-[32px] font-bold text-gray-900 placeholder:text-gray-400 focus:border-accent focus:ring-2 focus:ring-tint focus:outline-none"
-          />
         </div>
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <span className="text-[14px] font-semibold text-gray-700">Policies</span>
-          <div className="flex items-center gap-1 rounded-full bg-track p-1">
-            <button type="button" aria-label="One policy less" onClick={() => setPolicies((p) => Math.max(1, p - 1))} className="h-9 w-9 rounded-full bg-segment text-lg font-bold text-gray-900 shadow-card">
-              –
-            </button>
-            <span className="w-8 text-center font-mono text-[16px] font-bold text-gray-900">{policies}</span>
-            <button type="button" aria-label="One policy more" onClick={() => setPolicies((p) => Math.min(50, p + 1))} className="h-9 w-9 rounded-full bg-segment text-lg font-bold text-gray-900 shadow-card">
-              +
-            </button>
-          </div>
-        </div>
-      </section>
+      </Field>
+    </div>
+  );
+}
 
-      <section>
-        <h2 className="mb-2 px-1 text-[13px] font-bold tracking-[0.06em] text-gray-500 uppercase">Carrier</h2>
-        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Carrier">
-          {carrierChoices.map((c) => {
-            const on = carrier === c;
-            return (
-              <button
-                key={c}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                onClick={() => {
-                  setCarrier(c);
-                  // A line the new carrier does not write goes.
-                  if (kind === "pc" && product && !(pcCarriers.find((x) => x.name === c)?.lines ?? []).includes(product)) setProduct(null);
-                  setError(null);
-                }}
-                className={cn("min-h-11 rounded-full px-4 text-[14px] font-bold transition", on ? "bg-tide-strong text-white shadow-glow" : "bg-surface text-gray-700 shadow-card hover:bg-gray-50")}
-              >
-                {c}
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-2 px-1 text-[13px] font-bold tracking-[0.06em] text-gray-500 uppercase">{kind === "pc" ? "Line" : "Product (optional)"}</h2>
-        {kind === "pc" && carrier && <p className="mb-2 px-1 text-[12px] font-medium text-gray-500">What {carrier} writes.</p>}
-        <div className="flex flex-wrap gap-2">
-          {productChoices.map((p) => {
-            const on = product === p;
-            return (
-              <button
-                key={p}
-                type="button"
-                aria-pressed={on}
-                onClick={() => setProduct(on ? null : p)}
-                className={cn("min-h-11 rounded-full px-4 text-[14px] font-bold transition", on ? "bg-tide-strong text-white shadow-glow" : "bg-surface text-gray-700 shadow-card hover:bg-gray-50")}
-              >
-                {p}
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="rounded-[26px] bg-surface p-4 shadow-card">
-        <button type="button" onClick={() => setMore((m) => !m)} aria-expanded={more} className="flex min-h-11 w-full items-center justify-between text-left text-[15px] font-bold text-gray-900">
-          Day and note
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={cn("text-gray-400 transition-transform", more && "rotate-90")}>
-            <path d="M9 6l6 6-6 6" />
-          </svg>
+/** Step 3: the sale as it will be logged, with Edit back to each step. */
+function Review({ f, lists, today, sellerName, onEdit }: { f: PolicyForm; lists: Lists; today: string; sellerName: string; onEdit: (s: Step) => void }) {
+  const v = valuesOf(f, lists.carrierProducts);
+  const read = {
+    carrier: v.carrier || null,
+    product: v.product || null,
+    effectiveDate: v.effectiveDate,
+    monthlyCents: v.monthlyCents,
+    premiumCents: v.monthlyCents ? v.monthlyCents * 12 : 0,
+    rateClass: v.rateClass,
+    coverageCents: v.coverageCents,
+    soldOn: v.soldOn ?? today,
+    ssBenefit: v.ssBenefit,
+    billingCycle: v.billingCycle,
+    billingDay: v.billingDay,
+    policyNumber: v.policyNumber,
+    applicationNumber: v.applicationNumber,
+    leadSource: v.leadSource,
+    underwriting: v.underwriting,
+  };
+  const items = policyItems(read, undefined, sellerName);
+  if (v.notes) items.push({ label: "Notes", value: <span className="wrap-text">{v.notes}</span>, span: 4 });
+  const sec = (title: string, s: Step, body: ReactNode) => (
+    <section className="log-rev-sec">
+      <div className="log-rev-head">
+        <h3 className="form-section-title">{title}</h3>
+        <button type="button" className="link log-rev-edit" onClick={() => onEdit(s)}>
+          <Icon name="pencil" size={14} />
+          Edit
         </button>
-        {more && (
-          <div className="mt-2 grid gap-3">
-            <div>
-              <Label htmlFor="sold_on">Day it counts for</Label>
-              <Input
-                id="sold_on"
-                name="sold_on"
-                type="date"
-                value={date}
-                max={todayInDetroit()}
-                onChange={(e) => {
-                  setDate(e.target.value);
-                  setDateTouched(true);
-                }}
-              />
-            </div>
-            <div>
-              <Label htmlFor="note">Note (only in the app)</Label>
-              <Input id="note" name="note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder="Referral from Mark" />
-            </div>
-          </div>
-        )}
-      </section>
-
-      <Button type="submit" className="h-14 w-full rounded-2xl text-[17px]" disabled={pending || !ready}>
-        {pending ? "Logging..." : ready ? `Log ${formatMoney(cents!)}${kind === "pc" ? " P&C" : ""}` : "Log it"}
-      </Button>
-    </form>
+      </div>
+      {body}
+    </section>
   );
-}
-
-function UndoButton({ id, onUndone }: { id: string; onUndone: () => void }) {
-  const [pending, start] = useTransition();
   return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={() =>
-        start(async () => {
-          const r = await removeSale(id);
-          toast(r.ok ? "Taken back." : r.error, r.ok);
-          if (r.ok) onUndone();
-        })
-      }
-      className="min-h-11 text-[14px] font-semibold text-red-700"
-    >
-      {pending ? "Taking it back..." : "Oops, take it back"}
-    </button>
+    <>
+      <p className="log-rev-sum">{summaryLine({ client: v.client, carrier: read.carrier, product: read.product, monthlyCents: read.monthlyCents, premiumCents: read.premiumCents })}</p>
+      {sec("Policy", 1, <PvDl items={items} cols={4} />)}
+      {sec("Client", 2, <PvDl items={clientItems(v.client, today, { bens: v.beneficiaries })} cols={4} />)}
+    </>
   );
 }
+
+/** The computer's side column: Your sale (the steps, what is filled in, the board preview) and Good to know. */
+function SideColumn({ f, step, sellerId, sellerName, self, today, month, board, onStep }: { f: PolicyForm; step: Step; sellerId: string; sellerName: string; self: boolean; today: string; month: string; board: BoardLine[]; onStep: (s: Step) => void }) {
+  const monthly = f.monthly.trim() ? parseDollars(f.monthly) : null;
+  const client = `${f.firstName} ${f.lastName}`.trim();
+  const age = f.dob && f.dob < today ? ageOn(f.dob, today) : null;
+  const money = monthly && monthly > 0 ? `${monthlyText(monthly)} · ${yearlyText(monthly * 12)}` : "";
+  const row = (k: string, v: string, dim?: boolean) => (
+    <div className="log-sum-row">
+      <span className="log-sum-k">{k}</span>
+      <span className={cn("log-sum-v", dim && "dim")}>{v}</span>
+    </div>
+  );
+  let preview: ReactNode = null;
+  if (monthly && monthly > 0 && sellerId) {
+    const sold = f.soldOn || today;
+    if (sold.slice(0, 7) !== month) preview = <p className="log-board">It counts on {monthWord(sold.slice(0, 7))}&apos;s board, the month it was submitted.</p>;
+    else {
+      const p = previewSale(board, sellerId, sellerName, monthly * 12);
+      const who = self ? "You" : firstName(sellerName);
+      const move =
+        p.before != null ? (
+          p.after < p.before ? (
+            <>
+              {who} {self ? "go" : "goes"} from <b>#{p.before}</b> to <b>#{p.after}</b>
+            </>
+          ) : (
+            <>
+              {who} stay{self ? "" : "s"} at <b>#{p.after}</b>
+            </>
+          )
+        ) : (
+          <>
+            {who} join{self ? "" : "s"} the board at <b>#{p.after}</b>
+          </>
+        );
+      preview = (
+        <div className="log-board">
+          <span className="log-board-k">
+            <Icon name="trend-up" size={15} className="ico" />
+            On the board
+          </span>
+          <span className="log-board-v">{move}</span>
+          <span className="log-board-s num">
+            {fmt(p.centsBefore)} → {fmt(p.centsAfter)} this month
+          </span>
+        </div>
+      );
+    }
+  }
+  return (
+    <div className="col log-side only-wide">
+      <Panel title="Your sale" className="log-sum">
+        <ol className="log-steps">
+          {STEPS.map((t, i) => {
+            const n = (i + 1) as Step;
+            const state = n < step ? "done" : n === step ? "now" : "todo";
+            return (
+              <li key={t}>
+                <button type="button" className={cn("log-sn", state)} aria-current={n === step ? "step" : undefined} onClick={() => onStep(n)}>
+                  <span className="log-sn-i">{state === "done" ? <Icon name="check" size={13} stroke={2.4} /> : n}</span>
+                  <span>{t}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+        <div className="log-sum-rows">
+          {row("Sold by", sellerName || "Not picked yet", !sellerName)}
+          {row("Policy", [f.carrier, f.product].filter(Boolean).join(" · ") || "Not picked yet", !f.carrier)}
+          {row("Premium", money || "Not entered yet", !money)}
+          {row("Effective", f.effectiveDate ? dayShort(f.effectiveDate) : "Not picked yet", !f.effectiveDate)}
+          {row("Client", client ? `${client}${age != null ? `, ${age}` : ""}` : "Step 2", !client)}
+        </div>
+        {preview}
+      </Panel>
+      <Panel title="Good to know" className="log-know">
+        <ul className="log-know-list">
+          <li>
+            <Icon name="chart" size={15} className="ico" />
+            <span>It&apos;s on the board, Home and the TV the moment you log it.</span>
+          </li>
+          <li>
+            <Icon name="tv" size={15} className="ico" />
+            <span>The TV shows the name, the amount and the carrier. Never the client.</span>
+          </li>
+          <li>
+            <Icon name="clock" size={15} className="ico" />
+            <span>For 15 minutes you can fix anything or take it back. After that, the premium, carrier, product and day are an admin&apos;s to change.</span>
+          </li>
+        </ul>
+      </Panel>
+    </div>
+  );
+}
+
+const fmt = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;

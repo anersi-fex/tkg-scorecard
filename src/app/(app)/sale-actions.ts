@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireViewer } from "@/lib/auth";
 import { getSettings, lineFor, listAgents } from "@/lib/data";
@@ -8,6 +10,7 @@ import { NEEDS_OWN_SIGN_IN, createPolicy, fixBoardSale, logBoardSale, removePoli
 import { formFromFormData, type FormKey } from "@/lib/policy-validate";
 import { addDays, isDateKey, todayInDetroit } from "@/lib/month";
 import { parseDollars } from "@/lib/money";
+import { SESSION_COOKIE } from "@/lib/session";
 import type { ActionResult } from "./actions";
 
 /**
@@ -95,6 +98,17 @@ export async function removePolicyAction(id: string): Promise<PolicyActionResult
   } catch (err) {
     return { ok: false, error: lineFor(err) };
   }
+}
+
+/**
+ * "This needs your own sign-in." (Log a sale, Policies and a policy for the shared team password):
+ * ends this browser's session and opens the personal sign-in form. A plain link to /login would
+ * bounce, since a shared password's session is sent straight back from there.
+ */
+export async function signInWithOwnNumber(): Promise<void> {
+  const store = await cookies();
+  store.delete(SESSION_COOKIE);
+  redirect("/login?way=person");
 }
 
 // ---- the one-screen form and Home's sale rows (until Phase B replaces those screens) --------------

@@ -1,0 +1,114 @@
+/* Home's own layout (the demo's styles-home.css). Phone first: one column in the demo's order, set
+   with `order` on the cards while the column wrappers are display: contents. The page's own width
+   (a container query) switches to two columns from 760px and three from 1100px. */
+
+.wrap { container: home / inline-size; min-width: 0; }
+
+.grid { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.col { display: contents; }
+.prod { order: 1; }
+.mini { order: 2; }
+.pipe { order: 3; }
+.coming { order: 4; }
+.chart { order: 5; }
+.board { order: 6; }
+.latest { order: 7; }
+.teams { order: 8; }
+.pc { order: 9; }
+
+@container home (min-width: 760px) {
+  .grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); grid-template-rows: auto 1fr; gap: 20px; align-items: start; }
+  .col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  .col > * { order: 0; }
+  .left { grid-column: 1; grid-row: 1; }
+  .mid { grid-column: 2; grid-row: 1 / span 2; }
+  .right { grid-column: 1; grid-row: 2; }
+}
+@container home (min-width: 1100px) {
+  .grid { grid-template-columns: 340px minmax(0, 1fr) 324px; grid-template-rows: auto; }
+  .mid { grid-row: 1; }
+  .right { grid-column: 3; grid-row: 1; }
+  .grid.noRight { grid-template-columns: 340px minmax(0, 1fr); }
+}
+
+/* the header's tools */
+.tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.months { display: inline-flex; align-items: center; gap: 4px; }
+.pick { width: 240px; }
+@container home (max-width: 759px) {
+  .tools { width: 100%; }
+  .tools > nav { display: flex; flex: 1 1 100%; }
+  .tools > nav > a { flex: 1 1 0; }
+  .pick { width: 100%; }
+}
+
+/* Production */
+.prodCard { display: flex; flex-direction: column; padding: 22px 24px 20px; }
+.prodHead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.prodRange { font-size: 12.5px; color: var(--t-text-3); }
+.prodBig { margin-top: 6px; font-size: 40px; font-weight: 500; line-height: 1.1; letter-spacing: -.015em; }
+.prodGoal { margin-top: 18px; }
+.prodGoalRow { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; margin-top: 10px; font-size: 13px; color: var(--t-text-2); }
+.prodGoalRow b { color: var(--t-text); font-weight: 500; }
+.prodGoalRow b.upText { color: var(--t-up); }
+.prodGoalRow b.downText { color: var(--t-down); }
+.noGoal { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 14px; font-size: 13px; color: var(--t-text-2); }
+.noGoal > span:first-child { display: inline-flex; align-items: center; gap: 6px; }
+.prodLines { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--t-line); }
+.prodLine { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 13.5px; }
+.prodK { display: inline-flex; align-items: center; gap: 7px; color: var(--t-text-2); white-space: nowrap; }
+.prodV { text-align: right; }
+.prodV b { font-weight: 500; }
+.paceIco { color: var(--t-accent); align-self: center; }
+.paceV { font-size: 21px; font-weight: 500; letter-spacing: -.01em; }
+@container home (max-width: 759px) {
+  .prodCard { padding: 18px 18px 16px; }
+  .prodBig { font-size: 36px; }
+}
+
+/* the four small cards */
+.miniGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.miniCard { padding: 15px 16px 14px; }
+.miniCard :global(.kpi-value) { font-size: 28px; }
+.miniCard :global(.kpi-sub) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* pipeline rows: the status pill, the count and the premium */
+.pipeRow { min-height: 44px; padding: 7px 0; }
+.pipeRight { display: flex; align-items: baseline; gap: 14px; flex: none; }
+.pipeN { min-width: 22px; font-size: 14px; font-weight: 500; text-align: right; }
+.pipeC { min-width: 62px; font-size: 12.5px; color: var(--t-text-2); text-align: right; }
+.zero .pipeN { color: var(--t-text-3); }
+.zero :global(.status) { opacity: .5; }
+
+/* coming up */
+.cuIco { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--t-raised); color: var(--t-text-2); }
+.cuIco.warn { background: var(--t-down-bg); color: var(--t-down); }
+
+/* the chart and the leaderboard */
+.legend { display: inline-flex; align-items: center; gap: 14px; font-size: 12px; color: var(--t-text-2); }
+.legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.lgLine { display: inline-block; width: 14px; height: 2px; border-radius: 1px; background: var(--t-text); }
+.lgGoal { display: inline-block; width: 14px; height: 0; border-top: 2px dashed var(--t-text-3); }
+@container home (max-width: 759px) { .legend { display: none; } }
+
+.lb { margin: 0 -10px; padding: 0; list-style: none; }
+.group + .group { margin-top: 14px; }
+.groupTitle { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 4px; font-size: 11.5px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--t-text-3); }
+.fold { border-top: 1px solid var(--t-line); margin-top: 4px; }
+.fold > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; cursor: pointer; list-style: none; font-size: 13.5px; font-weight: 500; color: var(--t-accent-text); }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary .less { display: none; }
+.fold[open] > summary .more { display: none; }
+.fold[open] > summary .less { display: inline; }
+.foldNote { font-size: 12px; color: var(--t-text-2); font-weight: 400; }
+.boardFoot { display: flex; justify-content: center; }
+.emptyMe { padding: 30px 24px; }
+
+/* a latest-sales row with its menu */
+.saleLink { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; color: inherit; }
+.saleLink:hover :global(.lr-title) { text-decoration: underline; text-decoration-color: var(--t-text-3); text-underline-offset: 3px; }
+
+/* The kit's text helpers (globals.css does not define them yet: reported), kept inside Home. */
+.wrap :global(.num) { font-variant-numeric: tabular-nums lining-nums; }
+.wrap :global(.ell) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wrap :global(.wrap-text) { overflow-wrap: anywhere; }
