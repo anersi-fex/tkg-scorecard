@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requirePage } from "@/lib/auth";
+import { currentViewer, requirePage } from "@/lib/auth";
 import { dbConfigured } from "@/lib/supabase";
 import { getSettings, goalsForMonth } from "@/lib/data";
 import { addMonths, monthKeyOf, monthLabel, todayInDetroit } from "@/lib/month";
@@ -15,7 +15,7 @@ export default async function SettingsPage() {
   if (!dbConfigured()) return <PageTitle>Settings</PageTitle>;
   const month = monthKeyOf(todayInDetroit());
   const next = addMonths(month, 1);
-  const [settings, goals, nextGoals] = await Promise.all([getSettings(), goalsForMonth(month), goalsForMonth(next)]);
+  const [settings, goals, nextGoals, viewer] = await Promise.all([getSettings(), goalsForMonth(month), goalsForMonth(next), currentViewer()]);
   return (
     <>
       <PageTitle sub="Only you see this screen.">Settings</PageTitle>
@@ -29,6 +29,7 @@ export default async function SettingsPage() {
         shortcutTooShort={!!process.env.LOG_TOKEN && process.env.LOG_TOKEN.length < LOG_TOKEN_MIN}
         teamPasswordSet={!!process.env.TEAM_PASSWORD}
         base={await appBase()}
+        owner={viewer?.level === "owner"}
       />
     </>
   );

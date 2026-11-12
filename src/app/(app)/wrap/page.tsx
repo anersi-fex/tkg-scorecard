@@ -6,6 +6,7 @@ import { loadMonthSnapshot } from "@/lib/board";
 import { buildWrap, carrierSummary, isWrapView, periodFor, periodNav, WRAP_VIEWS, type PeriodWrap, type WrapLine, type WrapPeriod, type WrapView } from "@/lib/wrap";
 import { datesOfMonth, dayLabelLong, isDateKey, monthKeyOf, monthName, todayInDetroit, weekday } from "@/lib/month";
 import { formatDollars } from "@/lib/money";
+import { DEFAULT_AGENCY_NAME } from "@/lib/types";
 import { Avatar, firstName } from "@/components/avatar";
 import { KindDot } from "@/components/kind";
 import { Eyebrow, ListCard, ROW_INSET } from "@/components/tide";
@@ -53,8 +54,15 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
   if (!dbConfigured()) return <Header period={period} day={day} today={today} />;
 
   let wrap: PeriodWrap;
+  // Life only (owner, 2026-11-12): with the P&C board off the loader leaves P&C out, and nothing
+  // here names it. The agency's name (Settings) signs the screenshot.
+  let pcOn = false;
+  let agency = DEFAULT_AGENCY_NAME;
   try {
-    wrap = buildWrap(await loadMonthSnapshot(monthKeyOf(day), { today }), day, view);
+    const snap = await loadMonthSnapshot(monthKeyOf(day), { today });
+    pcOn = snap.pcEnabled === true;
+    agency = snap.agencyName || DEFAULT_AGENCY_NAME;
+    wrap = buildWrap(snap, day, view);
   } catch (err) {
     return (
       <>
@@ -79,7 +87,7 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
 
   return (
     <>
-      <Header period={period} day={day} today={today} badge={verdict} total={wrap.teamCents > 0 ? `${wrap.pcCents > 0 ? `${formatDollars(wrap.lifeCents)} life + ${formatDollars(wrap.pcCents)} P&C` : formatDollars(wrap.teamCents)} · ${wrap.policies} ${wrap.policies === 1 ? "policy" : "policies"}` : undefined} />
+      <Header period={period} day={day} today={today} badge={verdict} total={wrap.teamCents > 0 ? `${pcOn && wrap.pcCents > 0 ? `${formatDollars(wrap.lifeCents)} life + ${formatDollars(wrap.pcCents)} P&C` : formatDollars(wrap.teamCents)} · ${wrap.policies} ${wrap.policies === 1 ? "policy" : "policies"}` : undefined} />
 
       {/* Player of the period */}
       {wrap.player ? (
@@ -101,7 +109,7 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
             <p className="mt-2.5 truncate border-t border-on-grad-line pt-2 text-[12px] font-semibold">
               Best deal · {firstName(best.agentName)} · <span className="font-mono text-[13px]">{formatDollars(best.premiumCents)}</span>
               {best.policies > 1 && ` · ${best.policies} policies`}
-              {best.kind === "pc" && " · P&C"}
+              {pcOn && best.kind === "pc" && " · P&C"}
               {best.carrier && ` · ${best.carrier}`}
               {best.product && ` · ${best.product}`}
               {/* A day shows the clock, and only when the sale was logged on its own day (not a past day or an import); a week or month shows the day. */}
@@ -129,7 +137,7 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
             {wrap.month.policies > 0 ? `${wrap.month.policies} ${wrap.month.policies === 1 ? "policy" : "policies"} in ${month}, none with a carrier.` : `No policies in ${month}${wrap.current ? " yet" : ""}.`}
           </div>
         ) : (
-          wrap.topCarriers.map((c, i) => <CarrierSquare key={c.name} name={c.name} count={c.count} top={i === 0} pc={c.pc} />)
+          wrap.topCarriers.map((c, i) => <CarrierSquare key={c.name} name={c.name} count={c.count} top={i === 0} pc={pcOn && c.pc} />)
         )}
       </div>
 
@@ -140,7 +148,7 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
         </li>
         {wrap.lines.length === 0 && <li className="px-4 py-3 text-[14px] text-gray-600">Nobody is on the board yet.</li>}
         {(fold ? sold : wrap.lines).map((l) => (
-          <WrapRow key={l.id} line={l} />
+          <WrapRow key={l.id} line={l} pcOn={pcOn} />
         ))}
         {fold && quiet.length > 0 && (
           <li className={cn("px-4 py-2 text-[12px] font-semibold text-gray-500", ROW_INSET.plain)}>No sale: {quiet.map((l) => firstName(l.name)).join(", ")}</li>
@@ -169,7 +177,7 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
             </>
           )}
         </span>
-        <span className="shrink-0">Scorecard by TKG</span>
+        <span className="min-w-0 shrink truncate">Scorecard · {agency}</span>
       </p>
     </>
   );
@@ -205,7 +213,7 @@ function CarrierSquare({ name, count, top, pc }: { name: string; count: number; 
   );
 }
 
-function WrapRow({ line }: { line: WrapLine }) {
+function WrapRow({ line, pcOn }: { line: WrapLine; pcOn: boolean }) {
   const sold = line.premiumCents > 0;
   const medal = line.rank === 1 ? "text-gold" : line.rank === 2 ? "text-silver" : line.rank === 3 ? "text-bronze" : "text-gray-500";
   return (
@@ -220,7 +228,7 @@ function WrapRow({ line }: { line: WrapLine }) {
         {sold && (
           <p className="truncate text-[11.5px] leading-tight font-semibold text-gray-500">
             {line.policies} {line.policies === 1 ? "policy" : "policies"}
-            {line.pcPolicies > 0 && ` (${line.pcPolicies} P&C)`}
+            {pcOn && line.pcPolicies > 0 && ` (${line.pcPolicies} P&C)`}
             {line.carriers.length > 0 && ` · ${carrierSummary(line.carriers)}`}
           </p>
         )}

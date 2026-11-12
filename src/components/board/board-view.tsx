@@ -2,20 +2,23 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { AgentLine, FeedSale, MonthSnapshot } from "@/lib/board";
+import type { FeedSale, MonthSnapshot } from "@/lib/board";
 import type { BoardTheme } from "@/lib/types";
-import { formatDollars, formatMoney } from "@/lib/money";
-import { dayLabel, daysLeftLabel, monthName } from "@/lib/month";
+import { formatMoney } from "@/lib/money";
+import { dayLabel, daysLeftLabel } from "@/lib/month";
 import { TEAM_TIME_ZONE } from "@/lib/timezone";
-import { Avatar, firstName, shortName } from "@/components/avatar";
-import { ScoreMark, TkgMark } from "@/components/brand";
-import { GoalBar } from "@/components/goal-bar";
-import { KindDot, KindSplit, PcTag } from "@/components/kind";
-import { MonthChart } from "@/components/month-chart";
+import { Avatar } from "@/components/avatar";
+import { ScoreMark } from "@/components/brand";
 import { cn, formatClock } from "@/components/ui";
 import { burst } from "./confetti";
 import { soundFile, type SoundKey } from "@/lib/sounds";
-import { SCREEN_MS, VIEWS, VIEW_LABEL, lifeDaily, linesSummary, nextScreen, pcDaily, screenFor, type View } from "@/lib/views";
+import { SCREEN_LABEL, nextScreen, rotationScreens, screenFacts, screenFor, screenMs, type Screen } from "@/lib/views";
+import { LifeScreen } from "./life-screen";
+import { ViewDot } from "./parts";
+import { MainScreen, PcScreen } from "./pc-screens";
+import { ProductionScreen } from "./production-screen";
+import { ScoreboardScreen } from "./scoreboard-screen";
+import { TeamsScreen } from "./teams-screen";
 
 /**
  * The TV board. One screen, no scrolling, sized from the viewport (1em = about 1% of the width,
@@ -268,35 +271,30 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
   // The screens (2026-11-12): the leaderboard for 40 s, then the Scoreboard, Production and Teams
   // for 20 s each (P&C and the agency total only while P&C is switched on); a screen with nothing
   // to show is skipped; or the one screen the TV is kept on (Settings > TV screens, from the poll).
-  const scoreRows = snap.scoreboard?.rows.length ?? 0;
-  const scoreTeams = snap.scoreboard?.teams.length ?? 0;
   const pcEnabled = snap.pcEnabled === true;
-  const pcCents = snap.team.pcCents;
-  const facts = useMemo(
-    () => screenFacts({ pcEnabled, team: { pcCents }, scoreboard: snap.scoreboard ? { rows: new Array(scoreRows), teams: new Array(scoreTeams) } : null }),
-    // Only the counts matter: a poll brings a new scoreboard object every 5 s, the rotation must not restart with it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [pcEnabled, pcCents, scoreRows, scoreTeams, snap.scoreboard === null],
-  );
+  const facts = screenFacts(snap);
   const rotate = snap.tvScreens === "rotate";
   const [rotating, setRotating] = useState<Screen>("life");
   const [turn, setTurn] = useState(0);
   const screen = screenFor(snap.tvScreens, rotating, facts);
   const inRotation = rotationScreens(facts);
   const cycling = rotate && inRotation.length > 1;
+  const next = nextScreen(screen, facts);
   // A screen whose list has more pages than its time allows stays until each page had its turn.
   const [paged, setPaged] = useState<{ screen: Screen; pages: number }>({ screen: "life", pages: 1 });
   const pages = paged.screen === screen ? paged.pages : 1;
   const onPages = useCallback((n: number) => setPaged((old) => (old.screen === screen && old.pages === n ? old : { screen, pages: n })), [screen]);
   const stay = screenMs(screen, pages);
+  // The timer follows only the screen, its time and what comes next (all plain values), so the
+  // poll every 5 s never restarts it.
   useEffect(() => {
     if (!cycling) return;
     const id = setTimeout(() => {
-      setRotating(nextScreen(screen, facts));
+      setRotating(next);
       setTurn((t) => t + 1);
     }, stay);
     return () => clearTimeout(id);
-  }, [cycling, screen, facts, turn, stay]);
+  }, [cycling, next, turn, stay]);
   const tones = Object.fromEntries(snap.agents.map((a) => [a.id, a.tone]));
 
   return (
@@ -356,11 +354,10 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
 }
 
 /**
- * The screens under the month: all three while the TV rotates, the one on screen lit with a line
- * that runs out with its time; only the kept screen when the owner keeps the TV on one.
+ * The screens under the month: one pill per screen in rotation, the one on screen lit with a line
+ * that runs out with its time; only the kept screen when the TV is kept on one.
  */
-function ScreenPills({ screen, all, timed, turn }: { screen: View; all: boolean; timed: boolean; turn: number }) {
-  const shown = all ? VIEWS : [screen];
+function ScreenPills({ screen, shown, timed, turn, ms }: { screen: Screen; shown: Screen[]; timed: boolean; turn: number; ms: number }) {
   return (
     <div className="mt-[0.45em] inline-flex gap-[0.3em] rounded-full bg-track p-[0.22em]">
       {shown.map((v) => {
@@ -373,12 +370,12 @@ function ScreenPills({ screen, all, timed, turn }: { screen: View; all: boolean;
             className={cn(
               "relative inline-flex items-center overflow-hidden rounded-full px-[1.05em] pt-[0.28em] pb-[0.34em] text-[0.95em] font-bold whitespace-nowrap",
               on ? "bg-segment shadow-card" : "text-gray-500",
-              on && (v === "life" ? "text-accent-text" : v === "pc" ? "text-pc-text" : "text-gray-900"),
+              on && (v === "pc" ? "text-pc-text" : v === "total" ? "text-gray-900" : "text-accent-text"),
             )}
           >
-            <ViewDot view={v} className="mr-[0.45em] h-[0.5em] w-[0.5em]" />
-            {VIEW_LABEL[v]}
-            {on && timed && <span key={turn} aria-hidden className="board-timer absolute bottom-0 left-0 h-[0.17em] w-full rounded-full bg-current opacity-80" style={{ animationDuration: `${SCREEN_MS[v]}ms` }} />}
+            {(v === "pc" || v === "total") && <ViewDot view={v} className="mr-[0.45em] h-[0.5em] w-[0.5em]" />}
+            {SCREEN_LABEL[v]}
+            {on && timed && <span key={`${turn}-${ms}`} aria-hidden className="board-timer absolute bottom-0 left-0 h-[0.17em] w-full rounded-full bg-current opacity-80" style={{ animationDuration: `${ms}ms` }} />}
           </span>
         );
       })}
@@ -386,22 +383,24 @@ function ScreenPills({ screen, all, timed, turn }: { screen: View; all: boolean;
   );
 }
 
-/** The lockup at the board's size: the mark, "Scorecard", "by TKG" (all in em, so it scales with the TV). */
-function BoardLockup() {
+/** The lockup at the board's size: the mark, "Scorecard", the agency's name under it (all in em, so it scales with the TV). */
+function BoardLockup({ agency }: { agency: string }) {
   return (
-    <div className="flex items-center gap-[0.7em]">
+    <div className="flex min-w-0 items-center gap-[0.7em]">
       <ScoreMark size={64} className="!h-[2.9em] !w-[2.9em] !rounded-[0.8em] [&>svg]:!h-[2.9em] [&>svg]:!w-[2.9em]" />
-      <div className="flex flex-col leading-none">
+      <div className="flex min-w-0 flex-col leading-none">
         <span className="text-[1.6em] font-extrabold tracking-[-0.03em] text-gray-900">Scorecard</span>
-        <span className="mt-[0.2em] flex items-center gap-[0.3em] text-[0.7em] font-medium text-gray-500">
-          by <TkgMark height={12} className="!h-[0.95em] !w-auto text-gray-700" />
-        </span>
+        {agency.trim() && (
+          <span data-agency className="mt-[0.3em] max-w-[18em] truncate text-[0.85em] font-bold tracking-[0.01em] text-gray-500">
+            {agency}
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-function Celebration({ sale, sound, onRefused, onPlayed }: { sale: FeedSale; sound: SoundKey; onRefused: () => void; onPlayed: () => void }) {
+function Celebration({ sale, sound, pc, onRefused, onPlayed }: { sale: FeedSale; sound: SoundKey; pc: boolean; onRefused: () => void; onPlayed: () => void }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
     if (!canvas.current) return;
@@ -438,12 +437,12 @@ function Celebration({ sale, sound, onRefused, onPlayed }: { sale: FeedSale; sou
       <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
       <div className="board-pop relative flex flex-col items-center rounded-[2em] bg-surface px-[3.2em] py-[2.4em] text-center shadow-float">
         <Avatar name={sale.agentName} tone="bg-tide text-white shadow-glow" size={96} className="!h-[6em] !w-[6em] !text-[2.2em]" />
-        <p className={cn("mt-[0.9em] text-[1.1em] font-bold tracking-[0.1em] uppercase", sale.kind === "pc" ? "text-pc-text" : "text-accent-text")}>{sale.kind === "pc" ? "New P&C sale" : "New sale"}</p>
+        <p className={cn("mt-[0.9em] text-[1.1em] font-bold tracking-[0.1em] uppercase", pc ? "text-pc-text" : "text-accent-text")}>{pc ? "New P&C sale" : "New sale"}</p>
         <p className="mt-[0.2em] text-[2.8em] leading-tight font-extrabold tracking-[-0.03em]">{sale.agentName}</p>
         <p className="mt-[0.4em] font-mono text-[3.6em] leading-none font-bold tracking-[-0.035em] text-gray-900">{formatMoney(sale.premiumCents)}</p>
         <p className="mt-[0.6em] text-[1.2em] font-semibold text-gray-500">
           annual premium
-          {sale.kind === "pc" ? " · P&C" : ""}
+          {pc ? " · P&C" : ""}
           {sale.carrier ? ` · ${sale.carrier}` : ""}
           {sale.product ? ` · ${sale.product}` : ""}
           {sale.policies > 1 ? ` · ${sale.policies} policies` : ""}

@@ -297,3 +297,25 @@ test("the goal is life: P&C fills the totals but never wins a day or moves the m
   // The month view: life against the straight line, not the $200,000 written in all
   assert.notEqual(buildWrap(input(sales), "2026-10-28", "month").verdict.kind, "goal_hit");
 });
+
+test("life only: when only life sales reach the Wrap, nothing on it is P&C", () => {
+  // The loader drops P&C sales while Settings has P&C off (lifeOnlyInput in snapshot.ts).
+  const all = [
+    sale("a", "Anersi Koka", "2026-10-28", 4000, { carrier: "Newbridge" }),
+    sale("a", "Anersi Koka", "2026-10-28", 1500, { kind: "pc", carrier: "Progressive", product: "Auto" }),
+    sale("c", "Maira Angulo", "2026-10-27", 2500),
+  ];
+  const life = all.filter((s) => s.kind !== "pc");
+  for (const view of ["day", "week", "month"] as const) {
+    const w = buildWrap(input(life), "2026-10-28", view);
+    assert.deepEqual([w.pcCents, w.pcPolicies, w.month.pcCents], [0, 0, 0], view);
+    assert.equal(w.teamCents, w.lifeCents, view);
+    assert.equal(w.month.productionCents, w.month.lifeCents, view);
+    assert.ok([...w.carriers, ...w.products, ...w.topCarriers].every((c) => !c.pc), view);
+    assert.ok(w.lines.every((l) => l.pcCents === 0 && l.pcPolicies === 0 && l.carriers.every((c) => !c.pc)), view);
+    assert.ok(!w.carriers.some((c) => c.name === "Progressive"), view);
+  }
+  // The verdict is the same with or without the P&C sale: it always measured life.
+  assert.deepEqual(buildWrap(input(life), "2026-10-28").verdict, buildWrap(input(all), "2026-10-28").verdict);
+  assert.equal(buildWrap(input(life), "2026-10-28").teamCents, 4000 * 100);
+});

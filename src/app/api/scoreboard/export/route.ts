@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   if (team && !UUID.test(team)) return bad("That team was not found");
   try {
     const sb = await loadScoreboard({ month, leaderId: team, today });
-    // A team id that is nobody's (or a person nobody is under) would be an empty file with no reason.
+    // An id that is nobody's would be an empty file with no reason given.
     if (team && sb.scopeName === "This team") return bad("That team was not found");
     const name = `scoreboard${who === "teams" ? "-teams" : ""}${view === "dates" ? "" : `-by-${view}`}-${month}.csv`;
     // The mark at the start tells a spreadsheet the file is UTF-8 (names with accents stay right).

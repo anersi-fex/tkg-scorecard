@@ -1,42 +1,110 @@
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { timingSafeEqual, createHash } from "crypto";
-import { verifySessionToken, SESSION_COOKIE, passwordFor, type Role } from "./session";
+import { createPersonToken, readSessionToken, SESSION_COOKIE, SESSION_TTL_SECONDS, passwordFor, type Role } from "./session";
+import { ownerPerson, personForSession } from "./people";
+import { isManager, isOwner, type Viewer } from "./viewer";
 import { db } from "./supabase";
 
 /**
- * Session checks. proxy.ts is only an optimistic gate (Next 16): every page calls requirePage()
- * and every server action and route handler calls requireRole() before touching data.
- * Two roles: the owner (full control) and the team (log sales, see everything).
+ * Session checks. proxy.ts is only an optimistic gate (Next 16): every page calls pageViewer()
+ * and every server action and route handler calls requireViewer() before touching data.
+ *
+ * Who is looking (src/lib/viewer.ts): the owner, an admin, a member (a person's own sign-in) or
+ * the team (the shared team password: the TV, and phones that have not joined yet). The two
+ * shared passwords work as they always did; the owner password signs in as the owner person.
  */
 export const OWNER_NAME = "Anersi Koka";
 /** The Shortcut token must be at least this long (the route refuses shorter ones; Settings says so). */
 export const LOG_TOKEN_MIN = 12;
 
-export async function currentRole(): Promise<Role | null> {
+export type Need = "any" | "manager" | "owner";
+
+async function readViewer(): Promise<Viewer | null> {
+  let claim: Awaited<ReturnType<typeof readSessionToken>> = null;
   try {
     const store = await cookies();
-    return await verifySessionToken(store.get(SESSION_COOKIE)?.value);
+    claim = await readSessionToken(store.get(SESSION_COOKIE)?.value);
+  } catch {
+    return null;
+  }
+  if (!claim) return null;
+  if (claim.kind === "shared") {
+    if (claim.role === "team") return { level: "team", agentId: null, name: null, via: "team-password" };
+    // The owner password is the owner person (their row, when there is one). It still signs in
+    // when the database does not answer, so the owner is never locked out of their own app.
+    try {
+      const owner = await ownerPerson();
+      return { level: "owner", agentId: owner?.id ?? null, name: owner?.name ?? OWNER_NAME, via: "owner-password" };
+    } catch {
+      return { level: "owner", agentId: null, name: OWNER_NAME, via: "owner-password" };
+    }
+  }
+  // A person's own sign-in counts only while their row is on the board and the session version
+  // is the one the token was made under (Sign out everywhere and a new password raise it).
+  // When the row cannot be read, nobody is signed in.
+  try {
+    const person = await personForSession(claim.agentId);
+    if (!person || !person.active || person.sessionVersion !== claim.sessionVersion) return null;
+    return { level: person.role, agentId: person.id, name: person.name, via: "person" };
   } catch {
     return null;
   }
 }
 
-/** Pages and layouts: bounce to /login without a valid session; the role for what to show. */
-export async function requirePage(need: Role | "any" = "any"): Promise<Role> {
-  const role = await currentRole();
-  if (!role) redirect("/login");
-  if (need === "owner" && role !== "owner") redirect("/");
-  return role;
+/** Who is signed in on this request, or null. Read once per request. */
+export const currentViewer: () => Promise<Viewer | null> = cache(readViewer);
+
+function allowed(viewer: Viewer, need: Need): boolean {
+  return need === "any" || (need === "manager" ? isManager(viewer) : isOwner(viewer));
+}
+
+/** Pages and layouts: to /login without a session, home without the level; the viewer for what to show. */
+export async function pageViewer(need: Need = "any"): Promise<Viewer> {
+  const viewer = await currentViewer();
+  if (!viewer) redirect("/login");
+  if (!allowed(viewer, need)) redirect("/");
+  return viewer;
 }
 
 /** Server actions and route handlers: throw instead of redirecting. */
+export async function requireViewer(need: Need = "any"): Promise<Viewer> {
+  const viewer = await currentViewer();
+  if (!viewer) throw new Error("Not signed in");
+  if (!allowed(viewer, need)) throw new Error(need === "owner" ? "Only the owner can do that" : "Only an admin can do that");
+  return viewer;
+}
+
+// The two-role view, for files that have not moved to the viewer yet: the owner and an admin
+// read as "owner", a member and the team password as "team".
+const roleOf = (viewer: Viewer): Role => (isManager(viewer) ? "owner" : "team");
+
+export async function currentRole(): Promise<Role | null> {
+  const viewer = await currentViewer();
+  return viewer ? roleOf(viewer) : null;
+}
+
+export async function requirePage(need: Role | "any" = "any"): Promise<Role> {
+  return roleOf(await pageViewer(need === "owner" ? "manager" : "any"));
+}
+
 export async function requireRole(need: Role | "any" = "any"): Promise<Role> {
-  const role = await currentRole();
-  if (!role) throw new Error("Not signed in");
-  if (need === "owner" && role !== "owner") throw new Error("Only the owner can do that");
-  return role;
+  return roleOf(await requireViewer(need === "owner" ? "manager" : "any"));
+}
+
+const cookieFlags = () => ({ httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/", maxAge: SESSION_TTL_SECONDS });
+
+/** Signs this device in as a person (after a right phone number and password, or a join): the same cookie and flags as the shared passwords. */
+export async function startPersonSession(agentId: string, sessionVersion: number): Promise<void> {
+  const token = await createPersonToken(agentId, sessionVersion, SESSION_TTL_SECONDS);
+  (await cookies()).set(SESSION_COOKIE, token, cookieFlags());
+}
+
+/** Signs this device out. */
+export async function endSession(): Promise<void> {
+  (await cookies()).delete(SESSION_COOKIE);
 }
 
 /**
@@ -59,7 +127,10 @@ export function roleForPassword(supplied: string): Role | null {
 
 // Login throttle: a per-instance map plus a shared per-address count in login_attempts (holds
 // across serverless instances), and a high flood cap across every address, so one stranger
-// typing wrong passwords locks only themselves out, never the owner or the TV.
+// typing wrong passwords locks only themselves out, never the owner or the TV. The same count
+// guards the personal sign-in and the join links. A personal sign-in also counts wrong passwords
+// per account, in the same table under "acct:<id>" (verifyPersonLogin in people.ts: 20 in 15
+// minutes, twice the per-address limit, so one address can never lock a person out).
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_PER_IP = 10;
 const MAX_GLOBAL = 500;

@@ -91,11 +91,21 @@ function TapTile({ children, className }: { children: ReactNode; className?: str
 }
 
 /** The frame every picture sits in. */
-function Stage({ children, label }: { children: ReactNode; label: string }) {
+function Stage({ children, label, stacked = false }: { children: ReactNode; label: string; stacked?: boolean }) {
   return (
-    <div role="img" aria-label={label} className="flex min-h-[132px] items-center justify-center gap-4 rounded-2xl bg-ink px-4 py-5">
+    <div role="img" aria-label={label} className={cn("flex min-h-[132px] items-center justify-center overflow-hidden rounded-2xl bg-ink px-4 py-5", stacked ? "flex-col gap-3.5" : "gap-4")}>
       {children}
     </div>
+  );
+}
+
+/** Under the button to tap: the other button some phones show in its place. */
+function OrElse({ children, text }: { children: ReactNode; text: string }) {
+  return (
+    <span className="flex items-center gap-2 text-[13px] font-semibold text-gray-600">
+      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-line bg-surface text-gray-700">{children}</span>
+      {text}
+    </span>
   );
 }
 
@@ -154,6 +164,8 @@ export type ArtName =
   | "ios-row"
   | "ios-add"
   | "dots"
+  | "app-dots"
+  | "app-dots-stacked"
   | "lines"
   | "android-row"
   | "android-install"
@@ -169,16 +181,13 @@ export function Art({ name }: { name: ArtName }) {
   switch (name) {
     case "share":
       return (
-        <Stage label="The Share button: a square with an arrow pointing up. Beside it, three dots.">
+        <Stage stacked label="The Share button: a square with an arrow pointing up. Under it, three dots: tap those first when the Share button is hidden.">
           <TapTile>
             <ShareGlyph />
           </TapTile>
-          <span className="flex flex-col items-center gap-1.5 text-gray-500">
-            <span className="text-[12px] font-semibold">not there? first</span>
-            <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-line bg-surface text-gray-700">
-              <DotsGlyph size={24} />
-            </span>
-          </span>
+          <OrElse text="Hidden? Tap these three dots first.">
+            <DotsGlyph size={20} />
+          </OrElse>
         </Stage>
       );
     case "ios-row":
@@ -196,6 +205,18 @@ export function Art({ name }: { name: ArtName }) {
               <span className="text-[15px] font-bold text-gray-900">Scorecard</span>
             </div>
           </div>
+        </Stage>
+      );
+    case "app-dots":
+    case "app-dots-stacked":
+      return (
+        <Stage stacked label="Three dots. Under them, the Share button: some apps show it in their place.">
+          <TapTile>
+            <DotsGlyph stacked={name === "app-dots-stacked"} />
+          </TapTile>
+          <OrElse text="Some apps show this button in their place.">
+            <ShareGlyph size={20} />
+          </OrElse>
         </Stage>
       );
     case "dots":

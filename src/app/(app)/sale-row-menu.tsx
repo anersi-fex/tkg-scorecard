@@ -14,7 +14,22 @@ const UNDO_WINDOW_MS = 15 * 60 * 1000;
  * The "…" at the end of a sale row: the owner can fix or remove any sale; the team can take back
  * one logged in the last 15 minutes.
  */
-export function SaleRowMenu({ sale, role, agents, carriers, pcCarriers }: { sale: FeedSale; role: Role; agents: Array<{ id: string; name: string }>; carriers: string[]; pcCarriers: string[] }) {
+export function SaleRowMenu({
+  sale,
+  role,
+  agents,
+  carriers,
+  pcCarriers,
+  pcEnabled = false,
+}: {
+  sale: FeedSale;
+  role: Role;
+  agents: Array<{ id: string; name: string }>;
+  carriers: string[];
+  pcCarriers: string[];
+  /** Whether the owner has the P&C board on; off (the default), the sheet is life only and never names P&C. */
+  pcEnabled?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
@@ -82,12 +97,26 @@ export function SaleRowMenu({ sale, role, agents, carriers, pcCarriers }: { sale
           )}
         </div>
       )}
-      {editing && <EditSheet sale={sale} agents={agents} carriers={carriers} pcCarriers={pcCarriers} onClose={() => setEditing(false)} />}
+      {editing && <EditSheet sale={sale} agents={agents} carriers={carriers} pcCarriers={pcEnabled ? pcCarriers : []} pcEnabled={pcEnabled} onClose={() => setEditing(false)} />}
     </div>
   );
 }
 
-function EditSheet({ sale, agents, carriers, pcCarriers, onClose }: { sale: FeedSale; agents: Array<{ id: string; name: string }>; carriers: string[]; pcCarriers: string[]; onClose: () => void }) {
+function EditSheet({
+  sale,
+  agents,
+  carriers,
+  pcCarriers,
+  pcEnabled,
+  onClose,
+}: {
+  sale: FeedSale;
+  agents: Array<{ id: string; name: string }>;
+  carriers: string[];
+  pcCarriers: string[];
+  pcEnabled: boolean;
+  onClose: () => void;
+}) {
   // The row's carrier stays pickable even if it left the Settings lists.
   const known = sale.carrier && !carriers.includes(sale.carrier) && !pcCarriers.includes(sale.carrier) ? [sale.carrier] : [];
   const [pending, start] = useTransition();
@@ -130,14 +159,19 @@ function EditSheet({ sale, agents, carriers, pcCarriers, onClose }: { sale: Feed
             <Label htmlFor="e-policies">Policies</Label>
             <Input id="e-policies" name="policies" type="number" min={1} max={50} defaultValue={sale.policies} className="font-mono" required />
           </div>
-          <div>
-            <Label htmlFor="e-kind">Kind</Label>
-            <Select id="e-kind" name="kind" defaultValue={sale.kind}>
-              <option value="life">Life</option>
-              <option value="pc">P&amp;C</option>
-            </Select>
-          </div>
-          <div>
+          {pcEnabled ? (
+            <div>
+              <Label htmlFor="e-kind">Kind</Label>
+              <Select id="e-kind" name="kind" defaultValue={sale.kind}>
+                <option value="life">Life</option>
+                <option value="pc">P&amp;C</option>
+              </Select>
+            </div>
+          ) : (
+            // Life only: the sale keeps the kind it has, and nothing on the sheet asks.
+            <input type="hidden" name="kind" value={sale.kind} />
+          )}
+          <div className={pcEnabled ? undefined : "col-span-2"}>
             <Label htmlFor="e-carrier">Carrier</Label>
             <Select id="e-carrier" name="carrier" defaultValue={sale.carrier ?? ""}>
               <option value="">Not set</option>
@@ -146,24 +180,34 @@ function EditSheet({ sale, agents, carriers, pcCarriers, onClose }: { sale: Feed
                   {c}
                 </option>
               ))}
-              <optgroup label="Life">
-                {carriers.map((c) => (
+              {pcEnabled ? (
+                <>
+                  <optgroup label="Life">
+                    {carriers.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="P&amp;C">
+                    {pcCarriers.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </optgroup>
+                </>
+              ) : (
+                carriers.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
-                ))}
-              </optgroup>
-              <optgroup label="P&amp;C">
-                {pcCarriers.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </optgroup>
+                ))
+              )}
             </Select>
           </div>
           <div className="col-span-2">
-            <Label htmlFor="e-product">Product (a P&amp;C sale: the line, like Auto or Home)</Label>
+            <Label htmlFor="e-product">{pcEnabled ? "Product (a P&C sale: the line, like Auto or Home)" : "Product"}</Label>
             <Input id="e-product" name="product" defaultValue={sale.product ?? ""} maxLength={40} />
           </div>
           <div className="col-span-2">

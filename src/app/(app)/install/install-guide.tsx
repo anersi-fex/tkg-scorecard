@@ -105,8 +105,13 @@ export function InstallGuide({ welcome, firstName, address }: { welcome: boolean
     };
   }, []);
 
-  const kind: GuideKind | null = device ? (picked ? (picked === device.os && device.kind !== "installed" ? device.kind : guideFor(picked)) : device.kind) : null;
+  // A phone picked by hand wins. Picking the phone that was detected keeps its own browser's taps,
+  // except inside another app: there the pick is the way out of "Open this in Safari".
+  const keep = device && picked === device.os && device.kind !== "installed" && device.kind !== "in-app";
+  const kind: GuideKind | null = device ? (picked ? (keep ? device.kind : guideFor(picked)) : device.kind) : null;
   const os: DeviceOs | null = device ? (picked ?? device.os) : null;
+  // The switch lights the phone whose guide is on screen; inside another app none of the three is.
+  const lit: DeviceOs | null = picked ?? (device && device.kind !== "in-app" ? device.os : null);
 
   return (
     <div data-install={kind ?? "checking"} className="mx-auto w-full max-w-xl">
@@ -159,9 +164,9 @@ export function InstallGuide({ welcome, firstName, address }: { welcome: boolean
               <button
                 key={value}
                 type="button"
-                aria-pressed={os === value}
+                aria-pressed={lit === value}
                 onClick={() => setPicked(value)}
-                className={cn("min-h-11 rounded-[10px] text-[14px] transition-colors", os === value ? "bg-segment font-bold text-gray-900 shadow-card" : "font-semibold text-gray-600")}
+                className={cn("min-h-11 rounded-[10px] text-[14px] transition-colors", lit === value ? "bg-segment font-bold text-gray-900 shadow-card" : "font-semibold text-gray-600")}
               >
                 {label}
               </button>
@@ -444,7 +449,7 @@ function InApp({ device, address }: { device: Device; address: string }) {
     jump = "";
   }
   const steps: Step[] = [
-    { text: "Tap the three dots on this screen.", hint: "Some apps show the Share button (a square with an arrow) in their place.", art: ios ? "share" : "dots" },
+    { text: "Tap the three dots on this screen.", hint: "Some apps show the Share button (a square with an arrow) in their place.", art: ios ? "app-dots" : "app-dots-stacked" },
     { text: `Tap Open in ${browser}.`, hint: "It may say Open in browser.", art: ios ? "open-in-safari" : "open-in-chrome" },
   ];
   return (

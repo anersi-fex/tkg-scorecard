@@ -59,9 +59,10 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   const today = todayInDetroit();
   const current = monthKeyOf(today);
   const month = typeof params.month === "string" && isMonthKey(params.month) ? params.month : current;
-  // Life first (owner, 2026-11-04: the goal is life); P&C and the agency total one tap away.
-  const view: View = isView(params.view) ? params.view : "life";
-  if (!dbConfigured()) return <PageHeader month={month} current={current} view={view} />;
+  // Life first (owner, 2026-11-04: the goal is life). The other two views exist only while the owner
+  // has the P&C board on (Settings > Other lines of business); off, Home is the life board alone.
+  const asked: View = isView(params.view) ? params.view : "life";
+  if (!dbConfigured()) return <PageHeader month={month} current={current} view="life" />;
 
   let s: MonthSnapshot;
   try {
@@ -69,12 +70,14 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   } catch (err) {
     return (
       <>
-        <PageHeader month={month} current={current} view={view} />
+        <PageHeader month={month} current={current} view="life" />
         <Notice tone="red">The database answered with an error: {err instanceof Error ? err.message : "unknown"}. Check that the setup SQL ran (SETUP.md, step 3).</Notice>
       </>
     );
   }
   const { carriers, pcCarriers } = await getSettings();
+  const pcOn = s.pcEnabled === true;
+  const view: View = pcOn ? asked : "life";
   // The goal line today: how far through its business days the month is (the same tick on every bar).
   // Each view draws it, and its legend, only once its own goals give a bar something to measure against.
   const tick = s.clock.position === "current" && s.clock.elapsed > 0 ? Math.round(s.clock.progress * 100) : null;
@@ -85,7 +88,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   return (
     <>
       <PageHeader month={month} current={current} view={view} daysLeft={s.clock.position === "current" ? { text: daysLeftLabel(s.clock), amber: s.clock.remaining <= 2 } : null} />
-      <ViewSwitch view={view} month={month} current={current} />
+      {pcOn && <ViewSwitch view={view} month={month} current={current} />}
 
       {view === "life" && <LifeView s={s} role={role} goalLine={tick !== null && (s.team.goalCents > 0 || s.agents.some((a) => a.goalCents > 0)) ? tick : null} today={today} />}
       {view === "pc" && <PcView s={s} role={role} goalLine={tick !== null && (s.team.pcGoalCents > 0 || s.agents.some((a) => a.pcGoalCents > 0)) ? tick : null} today={today} />}
@@ -106,7 +109,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[15px] font-bold text-gray-900">
                   {r.agentName}
-                  {r.kind === "pc" && <PcTag className="ml-1.5 align-middle" />}
+                  {pcOn && r.kind === "pc" && <PcTag className="ml-1.5 align-middle" />}
                 </p>
                 <p className="truncate text-[13px] font-medium text-gray-500">
                   {[r.carrier, r.product, r.policies > 1 ? `${r.policies} policies` : null, r.soldOn === today ? `Today, ${formatClock(r.createdAt)}` : formatDate(r.soldOn, { year: false })]
@@ -115,7 +118,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
                 </p>
               </div>
               <p className="shrink-0 font-mono text-[16px] font-bold text-gray-900">{formatMoney(r.premiumCents)}</p>
-              <SaleRowMenu sale={r} role={role} agents={s.agents.map((a) => ({ id: a.id, name: a.name }))} carriers={carriers} pcCarriers={pcCarriers.map((c) => c.name)} />
+              <SaleRowMenu sale={r} role={role} agents={s.agents.map((a) => ({ id: a.id, name: a.name }))} carriers={carriers} pcCarriers={pcOn ? pcCarriers.map((c) => c.name) : []} pcEnabled={pcOn} />
             </li>
           ))}
         </ListCard>
@@ -127,7 +130,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
           <Eyebrow>{monthLabel(month)} recap</Eyebrow>
           <ul className="mt-2 space-y-1.5 text-[14px] text-gray-700">
             <li>
-              <span className="font-semibold text-gray-900">{top.name}</span> led life with {formatDollars(top.lifeCents)} and {top.lifePolicies} {top.lifePolicies === 1 ? "policy" : "policies"}.
+              <span className="font-semibold text-gray-900">{top.name}</span> led {pcOn ? "life " : ""}with {formatDollars(top.lifeCents)} and {top.lifePolicies} {top.lifePolicies === 1 ? "policy" : "policies"}.
             </li>
             {s.team.bestLifeDay && (
               <li>
@@ -135,7 +138,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
               </li>
             )}
             <li>
-              {s.team.lifePolicies} life policies, {formatDollars(s.team.lifeAverageCents)} average premium, {s.clock.businessDays} business days.
+              {s.team.lifePolicies} {pcOn ? "life policies" : s.team.lifePolicies === 1 ? "policy" : "policies"}, {formatDollars(s.team.lifeAverageCents)} average premium, {s.clock.businessDays} business days.
             </li>
           </ul>
         </Card>
@@ -188,7 +191,7 @@ function LifeView({ s, role, goalLine, today }: { s: MonthSnapshot; role: string
   return (
     <>
       <Card className="relative overflow-hidden p-5">
-        <Eyebrow>{s.clock.position === "past" ? "How the month went · life" : "Life production"}</Eyebrow>
+        <Eyebrow>{s.pcEnabled ? (s.clock.position === "past" ? "How the month went · life" : "Life production") : s.clock.position === "past" ? "How the month went" : "Production"}</Eyebrow>
         <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
           <span className="font-mono text-[40px] leading-none font-bold tracking-[-0.03em] text-gray-900">{formatDollars(s.team.lifeCents)}</span>
           {s.team.goalCents > 0 && (
@@ -197,7 +200,7 @@ function LifeView({ s, role, goalLine, today }: { s: MonthSnapshot; role: string
             </span>
           )}
         </div>
-        <div className="mt-4 flex" role="progressbar" aria-label="Life against the goal" aria-valuenow={Math.min(100, s.team.goalPct)} aria-valuemin={0} aria-valuemax={100}>
+        <div className="mt-4 flex" role="progressbar" aria-label={s.pcEnabled ? "Life against the goal" : "Production against the goal"} aria-valuenow={Math.min(100, s.team.goalPct)} aria-valuemin={0} aria-valuemax={100}>
           <GoalBar width={width} lifeShare={width} goalLine={s.team.goalCents > 0 ? goalLine : null} className="h-3" tickClassName="-top-1 h-5 w-0.5" />
         </div>
         <p className={cn("mt-3 text-[14px] leading-snug font-semibold", toneClass(line.tone))}>{line.text}</p>
@@ -218,7 +221,7 @@ function LifeView({ s, role, goalLine, today }: { s: MonthSnapshot; role: string
       {/* One track per person: the share of their own goal in life (of the leader's life without one), a gray tick at the goal line today. */}
       <div className="mt-6">
         <div className="flex items-end justify-between gap-3">
-          <ListTitle count={people.length}>Life leaderboard</ListTitle>
+          <ListTitle count={people.length}>{s.pcEnabled ? "Life leaderboard" : "Leaderboard"}</ListTitle>
           {goalLine !== null && (
             <p className="flex shrink-0 items-center gap-1.5 pr-1 pb-0.5 text-[11px] font-semibold text-gray-500">
               <span aria-hidden className="inline-block h-3 w-0.5 rounded-[1px] bg-gray-500" />

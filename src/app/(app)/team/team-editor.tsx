@@ -28,7 +28,7 @@ interface Person {
 }
 
 /** The team list; the owner adds people, renames them, sets a goal, and takes someone off the board. */
-export function TeamEditor({ people, role, month, base }: { people: Person[]; role: Role; month: string; base: string }) {
+export function TeamEditor({ people, role, month, base, pcEnabled = false }: { people: Person[]; role: Role; month: string; base: string; /** The owner's P&C board is on; off (the default), nothing here names P&C. */ pcEnabled?: boolean }) {
   const active = people.filter((p) => p.active);
   const gone = people.filter((p) => !p.active);
   const [open, setOpen] = useState<string | null>(null);
@@ -47,12 +47,12 @@ export function TeamEditor({ people, role, month, base }: { people: Person[]; ro
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[15px] font-bold text-gray-900">
                     {p.name}
-                    {p.pcLicensed && <PcTag className="ml-1.5 align-middle" />}
+                    {pcEnabled && p.pcLicensed && <PcTag className="ml-1.5 align-middle" />}
                   </p>
                   <p className="text-[13px] font-medium text-gray-500">
-                    {p.pcCents > 0 ? `${formatDollars(p.cents - p.pcCents)} life · ${formatDollars(p.pcCents)} P&C` : formatDollars(p.cents)} · {p.policies} {p.policies === 1 ? "policy" : "policies"}
+                    {pcEnabled && p.pcCents > 0 ? `${formatDollars(p.cents - p.pcCents)} life · ${formatDollars(p.pcCents)} P&C` : formatDollars(p.cents)} · {p.policies} {p.policies === 1 ? "policy" : "policies"}
                     {p.goalCents > 0 && ` · goal ${formatDollars(p.goalCents)}`}
-                    {p.pcGoalCents > 0 && ` · P&C goal ${formatDollars(p.pcGoalCents)}`}
+                    {pcEnabled && p.pcGoalCents > 0 && ` · P&C goal ${formatDollars(p.pcGoalCents)}`}
                   </p>
                 </div>
                 {role === "owner" && (
@@ -61,7 +61,7 @@ export function TeamEditor({ people, role, month, base }: { people: Person[]; ro
                   </button>
                 )}
               </div>
-              {role === "owner" && open === p.id && <PersonEditor person={p} month={month} base={base} onClose={() => setOpen(null)} />}
+              {role === "owner" && open === p.id && <PersonEditor person={p} month={month} base={base} pcEnabled={pcEnabled} onClose={() => setOpen(null)} />}
             </li>
           ))}
         </ListCard>
@@ -111,7 +111,7 @@ function AddPerson() {
   );
 }
 
-function PersonEditor({ person, month, base, onClose }: { person: Person; month: string; base: string; onClose: () => void }) {
+function PersonEditor({ person, month, base, pcEnabled, onClose }: { person: Person; month: string; base: string; pcEnabled: boolean; onClose: () => void }) {
   const [pending, start] = useTransition();
   const link = `${base}/log?agent=${person.id}`;
   return (
@@ -147,15 +147,15 @@ function PersonEditor({ person, month, base, onClose }: { person: Person; month:
         className="flex items-end gap-2"
       >
         <div className="min-w-0 flex-1">
-          <Label htmlFor={`goal-${person.id}`}>Their life goal this month ($ annual premium; blank for none)</Label>
+          <Label htmlFor={`goal-${person.id}`}>{pcEnabled ? "Their life goal this month ($ annual premium; blank for none)" : "Their goal this month ($ annual premium; blank for none)"}</Label>
           <Input id={`goal-${person.id}`} name="goal" inputMode="decimal" defaultValue={person.goalCents ? String(person.goalCents / 100) : ""} placeholder="25000" className="font-mono" />
         </div>
         <Button type="submit" variant="secondary" className="h-11 rounded-xl" disabled={pending}>
           Save
         </Button>
       </form>
-      <PcRow person={person} />
-      {person.pcLicensed && (
+      {pcEnabled && <PcRow person={person} />}
+      {pcEnabled && person.pcLicensed && (
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -182,7 +182,7 @@ function PersonEditor({ person, month, base, onClose }: { person: Person; month:
           <code className="min-w-0 flex-1 truncate rounded-xl bg-surface px-3 py-2 font-mono text-[12px] text-gray-700">{link}</code>
           <CopyButton text={link} />
         </div>
-        {person.pcLicensed && (
+        {pcEnabled && person.pcLicensed && (
           <>
             <p className="mt-2 text-[13px] font-medium text-gray-700">Their P&amp;C desk link: the same, already switched to P&amp;C (a second tag for P&amp;C days).</p>
             <div className="mt-1 flex items-center gap-2">

@@ -10,6 +10,8 @@ import { SOUNDS, type SoundKey } from "@/lib/sounds";
 import { Button, Input, Label, Notice, Textarea } from "@/components/ui";
 import { ListCard, ListTitle, ROW_INSET } from "@/components/tide";
 import { saveBoardSettings, saveBoardTheme, saveColorway, savePcColor, saveSaleSound, saveTeamGoal, saveTeamPcGoal, saveTvScreens } from "../actions";
+import { savePcEnabled } from "../people-actions";
+import { Switch } from "@/components/switch";
 import { toast } from "@/components/toaster";
 import { KindDot } from "@/components/kind";
 
@@ -29,6 +31,7 @@ export function SettingsForms({
   shortcutTooShort,
   teamPasswordSet,
   base,
+  owner = false,
 }: {
   settings: AppSettings;
   months: MonthGoal[];
@@ -37,12 +40,17 @@ export function SettingsForms({
   shortcutTooShort: boolean;
   teamPasswordSet: boolean;
   base: string;
+  /** The owner alone gets the "Other lines of business" row at the bottom (an admin never sees it). */
+  owner?: boolean;
 }) {
+  // Life only (owner, 2026-11-12): with the P&C board off, nothing on this screen names P&C
+  // except the owner's one switch at the very bottom.
+  const pcOn = settings.pcEnabled === true;
   return (
     <div className="space-y-6">
       <section>
-        <ListTitle>Life goal</ListTitle>
-        <p className="mt-1 px-1 text-[13px] text-gray-500">Life annual premium for the whole team: the goal the board measures, with what each day needs.</p>
+        <ListTitle>{pcOn ? "Life goal" : "Goal"}</ListTitle>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">{pcOn ? "Life annual premium" : "Annual premium"} for the whole team: the goal the board measures, with what each day needs.</p>
         <ListCard className="mt-2 divide-y divide-line">
           {months.map((m) => (
             <li key={m.key} className="px-4 py-3">
@@ -52,17 +60,19 @@ export function SettingsForms({
         </ListCard>
       </section>
 
-      <section>
-        <ListTitle>P&amp;C goal</ListTitle>
-        <p className="mt-1 px-1 text-[13px] text-gray-500">P&amp;C annual premium for the P&amp;C team. The P&amp;C screen measures it; the agency total adds both goals up.</p>
-        <ListCard className="mt-2 divide-y divide-line">
-          {months.map((m) => (
-            <li key={m.key} className="px-4 py-3">
-              <GoalForm month={m} pc />
-            </li>
-          ))}
-        </ListCard>
-      </section>
+      {pcOn && (
+        <section>
+          <ListTitle>P&amp;C goal</ListTitle>
+          <p className="mt-1 px-1 text-[13px] text-gray-500">P&amp;C annual premium for the P&amp;C team. The P&amp;C screen measures it; the agency total adds both goals up.</p>
+          <ListCard className="mt-2 divide-y divide-line">
+            {months.map((m) => (
+              <li key={m.key} className="px-4 py-3">
+                <GoalForm month={m} pc />
+              </li>
+            ))}
+          </ListCard>
+        </section>
+      )}
 
       <section>
         <ListTitle>Colorway</ListTitle>
@@ -70,11 +80,13 @@ export function SettingsForms({
         <ColorwayPicker current={settings.colorway} />
       </section>
 
-      <section>
-        <ListTitle>P&amp;C color</ListTitle>
-        <p className="mt-1 px-1 text-[13px] text-gray-500">P&amp;C&apos;s own color on the bars, rings and tags, next to life&apos;s. Dusty blue is the default.</p>
-        <PcColorPicker current={settings.pcColor} colorway={settings.colorway} />
-      </section>
+      {pcOn && (
+        <section>
+          <ListTitle>P&amp;C color</ListTitle>
+          <p className="mt-1 px-1 text-[13px] text-gray-500">P&amp;C&apos;s own color on the bars, rings and tags, next to life&apos;s. Dusty blue is the default.</p>
+          <PcColorPicker current={settings.pcColor} colorway={settings.colorway} />
+        </section>
+      )}
 
       <section>
         <ListTitle>TV look</ListTitle>
@@ -85,7 +97,7 @@ export function SettingsForms({
       <section>
         <ListTitle>TV screens</ListTitle>
         <p className="mt-1 px-1 text-[13px] text-gray-500">What the office TV shows. It follows within a few seconds.</p>
-        <TvScreensPicker current={settings.tvScreens} />
+        <TvScreensPicker current={settings.tvScreens} pcOn={pcOn} />
       </section>
 
       <section>
@@ -143,7 +155,61 @@ export function SettingsForms({
           </li>
         </ListCard>
       </section>
+
+      {owner && (
+        <section data-other-lines>
+          <ListTitle>Other lines of business</ListTitle>
+          <PcBoardSwitch on={pcOn} />
+        </section>
+      )}
     </div>
+  );
+}
+
+/**
+ * The owner's one switch for P&C (owner, 2026-11-12: "This is only gonna be life insurance"):
+ * off, P&C sales and goals stop counting and no screen names them; on, the P&C board, the
+ * life and P&C total and their settings come back. Nothing is deleted either way.
+ */
+function PcBoardSwitch({ on }: { on: boolean }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [checked, setChecked] = useState(on);
+  const [seen, setSeen] = useState(on);
+  if (seen !== on) {
+    setSeen(on);
+    setChecked(on);
+  }
+  return (
+    <ListCard className="mt-2">
+      <li className="flex items-center justify-between gap-3 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-[15px] font-bold text-gray-900">P&amp;C board</p>
+          <p className="text-[12px] font-medium text-gray-500">
+            {checked ? "On: P&C sales count on their own board, beside life." : "Off: Scorecard is life insurance only. Turning it on brings back the P&C board and its settings. Nothing is deleted."}
+          </p>
+        </div>
+        <Switch
+          checked={checked}
+          disabled={pending}
+          label="P&C board"
+          onChange={(next) => {
+            setChecked(next);
+            start(async () => {
+              try {
+                const r = await savePcEnabled(next);
+                toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+                if (r.ok) router.refresh();
+                else setChecked(!next);
+              } catch {
+                toast("Couldn't reach the server. Try again.", false);
+                setChecked(!next);
+              }
+            });
+          }}
+        />
+      </li>
+    </ListCard>
   );
 }
 
@@ -326,21 +392,23 @@ function BoardThemePicker({ current }: { current: BoardTheme }) {
   );
 }
 
+const screenIcon = (d: string) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d={d} />
+  </svg>
+);
+
 const TV_SCREEN_OPTIONS: Record<TvScreens, { label: string; note: string; icon: React.ReactNode; tone: string }> = {
   rotate: {
     label: "Rotate",
-    note: "Life 60 s, then P&C 15 s, then Agency total 15 s",
+    note: "The leaderboard 40 s, then each other screen 20 s",
     tone: "bg-surface-2 text-gray-700",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M20 11a8 8 0 0 0-14.3-4.9L4 8" />
-        <path d="M4 4v4h4" />
-        <path d="M4 13a8 8 0 0 0 14.3 4.9L20 16" />
-        <path d="M20 20v-4h-4" />
-      </svg>
-    ),
+    icon: screenIcon("M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"),
   },
-  life: { label: "Life only", note: "the goal screen, all day", tone: "bg-tint", icon: <KindDot kind="life" className="h-3 w-3" /> },
+  life: { label: "Leaderboard", note: "everyone's month, the office group on top", tone: "bg-tint text-accent-text", icon: screenIcon("M4 20v-6h4v6M10 20V5h4v15M16 20v-9h4v9") },
+  scoreboard: { label: "Scoreboard", note: "the top numbers, where agents stand, who moved most", tone: "bg-surface-2 text-gray-700", icon: screenIcon("M4 5h7v6H4zM13 5h7v6h-7zM4 13h16v6H4z") },
+  production: { label: "Production", note: "the day-by-day table", tone: "bg-surface-2 text-gray-700", icon: screenIcon("M4 5h16v14H4zM4 10h16M4 15h16M10 5v14") },
+  teams: { label: "Teams", note: "each team's numbers", tone: "bg-surface-2 text-gray-700", icon: screenIcon("M12 4v5M6 20v-4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4M12 9v5M10 4h4M4 20h4M16 20h4") },
   pc: { label: "P&C only", note: "P&C sales and the P&C team", tone: "bg-pc-tint", icon: <KindDot kind="pc" className="h-3 w-3" /> },
   total: {
     label: "Agency total only",
@@ -355,8 +423,8 @@ const TV_SCREEN_OPTIONS: Record<TvScreens, { label: string; note: string; icon: 
   },
 };
 
-/** Settings > TV screens: the TV rotates its three screens, or stays on one; saved on a tap. */
-function TvScreensPicker({ current }: { current: TvScreens }) {
+/** Settings > TV screens: the TV rotates its screens, or stays on one; saved on a tap. P&C's two screens are offered only while P&C is on. */
+function TvScreensPicker({ current, pcOn }: { current: TvScreens; pcOn: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [picked, setPicked] = useState<TvScreens>(current);
@@ -384,7 +452,7 @@ function TvScreensPicker({ current }: { current: TvScreens }) {
   return (
     <div role="radiogroup" aria-label="TV screens">
       <ListCard className="mt-2">
-        {TV_SCREENS.map((key) => {
+        {TV_SCREENS.filter((key) => pcOn || (key !== "pc" && key !== "total")).map((key) => {
           const o = TV_SCREEN_OPTIONS[key];
           const on = picked === key;
           return (
@@ -549,6 +617,7 @@ function GoalForm({ month, pc = false }: { month: MonthGoal; pc?: boolean }) {
 
 function BoardForm({ settings }: { settings: AppSettings }) {
   const [pending, start] = useTransition();
+  const pcOn = settings.pcEnabled === true;
   return (
     <form
       onSubmit={(e) => {
@@ -566,17 +635,20 @@ function BoardForm({ settings }: { settings: AppSettings }) {
         <Input id="message" name="message" defaultValue={settings.message} maxLength={120} placeholder="Every policy counts. Finish strong." />
       </div>
       <div>
-        <Label htmlFor="carriers">Life carriers on Log a sale (one per line; a sale always names one)</Label>
+        <Label htmlFor="carriers">{pcOn ? "Life carriers" : "Carriers"} on Log a sale (one per line; a sale always names one)</Label>
         <Textarea id="carriers" name="carriers" defaultValue={settings.carriers.join("\n")} rows={7} className="font-medium" />
       </div>
       <div>
-        <Label htmlFor="products">Life product chips on Log a sale (one per line)</Label>
+        <Label htmlFor="products">{pcOn ? "Life product chips" : "Product chips"} on Log a sale (one per line)</Label>
         <Textarea id="products" name="products" defaultValue={settings.products.join("\n")} rows={5} className="font-medium" />
       </div>
-      <div>
-        <Label htmlFor="pc_carriers">P&amp;C carriers and the lines each one writes (one per line, like &quot;Progressive: Auto, Renters, ATV&quot;)</Label>
-        <Textarea id="pc_carriers" name="pc_carriers" defaultValue={settings.pcCarriers.map((c) => (c.lines.length ? `${c.name}: ${c.lines.join(", ")}` : c.name)).join("\n")} rows={6} className="font-medium" />
-      </div>
+      {/* Without this box the stored P&C carriers stay as they are (saveBoardSettings keeps them). */}
+      {pcOn && (
+        <div>
+          <Label htmlFor="pc_carriers">P&amp;C carriers and the lines each one writes (one per line, like &quot;Progressive: Auto, Renters, ATV&quot;)</Label>
+          <Textarea id="pc_carriers" name="pc_carriers" defaultValue={settings.pcCarriers.map((c) => (c.lines.length ? `${c.name}: ${c.lines.join(", ")}` : c.name)).join("\n")} rows={6} className="font-medium" />
+        </div>
+      )}
       <Button type="submit" className="h-11 rounded-xl" disabled={pending}>
         {pending ? "Saving..." : "Save"}
       </Button>

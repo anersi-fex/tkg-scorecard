@@ -20,8 +20,7 @@ interface Page<T> {
  * project says so), so this asks page after page until the count it was told is reached. `page`
  * must keep one order (end it with a unique column) and ask for `{ count: "exact" }`.
  */
-export async function allRows<T>(where: string, page: (from: number, to: number) => PromiseLike<Page<T>>): Promise<T[]> {
-  const SIZE = 1000;
+export async function allRows<T>(where: string, page: (from: number, to: number) => PromiseLike<Page<T>>, SIZE = 1000): Promise<T[]> {
   const out: T[] = [];
   for (let i = 0; i < 500; i++) {
     const { data, error, count } = await page(out.length, out.length + SIZE - 1);
