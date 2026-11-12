@@ -13,8 +13,6 @@ export const PHONE_VIEWPORT: Viewport = {
   initialScale: 0.85,
   maximumScale: 0.85,
   viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f2f3f7" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b0d12" },
-  ],
+  // The page color of the dark look, the default for everyone (2026-11-12).
+  themeColor: "#141519",
 };

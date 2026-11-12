@@ -2,9 +2,10 @@ import type { ReactNode } from "react";
 import { cn } from "@/components/ui";
 
 /**
- * Small Tide pieces shared by every screen: iOS-style
- * grouped list rows with inset hairlines, an eyebrow label and a row chevron. Colors are theme
- * tokens only, so every piece reads in light and dark. (Avatars live in `avatar.tsx`.)
+ * Small pieces shared by every screen, in the CRM look (2026-11-12, the demo): grouped list rows
+ * with inset hairlines inside a card (the card color, a 1px line, radius 16, no shadow), a section
+ * title, an eyebrow label and a row chevron. Colors are theme tokens only, so every piece reads in
+ * dark and light. (Avatars live in `avatar.tsx`; the demo's kit is in `src/components/ui/`.)
  */
 
 /**
@@ -23,10 +24,10 @@ export const ROW_INSET = {
     "relative not-first:before:pointer-events-none not-first:before:absolute not-first:before:top-0 not-first:before:right-0 not-first:before:left-4 not-first:before:h-px not-first:before:bg-line",
 } as const;
 
-/** The white (night, in dark mode) rounded card that holds grouped rows. */
+/** The card that holds grouped rows. */
 export function ListCard({ children, className }: { children: ReactNode; className?: string }) {
   // No overflow clip: a row's menu (the "…" on a sale) opens past the card's edge; rows paint no full-width fills.
-  return <ul className={cn("rounded-[22px] bg-surface shadow-card", className)}>{children}</ul>;
+  return <ul className={cn("rounded-2xl border border-line bg-surface", className)}>{children}</ul>;
 }
 
 /**
@@ -35,10 +36,10 @@ export function ListCard({ children, className }: { children: ReactNode; classNa
  */
 export function ListTitle({ children, count, icon, className }: { children: ReactNode; count?: number; icon?: ReactNode; className?: string }) {
   return (
-    <h2 className={cn("flex items-center gap-2 px-1 text-[20px] leading-tight font-extrabold tracking-[-0.03em] text-gray-900", className)}>
+    <h2 className={cn("flex items-center gap-2 px-1 text-[17px] leading-tight font-medium tracking-[-0.005em] text-fg", className)}>
       {icon}
       {children}
-      {count != null && <span className="font-mono text-[15px] font-semibold tracking-normal text-gray-500">{count}</span>}
+      {count != null && <span className="font-mono text-[14px] font-normal tracking-normal text-fg-2">{count}</span>}
     </h2>
   );
 }
@@ -46,7 +47,7 @@ export function ListTitle({ children, count, icon, className }: { children: Reac
 /** Small uppercase label over a card's content ("CALL OF THE WEEK"). */
 export function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <span className={cn("inline-flex items-center gap-1.5 text-[11px] font-bold uppercase leading-none tracking-[0.09em] text-gray-500", className)}>
+    <span className={cn("inline-flex items-center gap-1.5 text-[11.5px] font-medium uppercase leading-none tracking-[0.08em] text-fg-2", className)}>
       {children}
     </span>
   );
@@ -61,11 +62,11 @@ export function RowChevron({ className, accent = false }: { className?: string; 
       height="14"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2.4"
+      strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
-      className={cn("shrink-0", accent ? "text-accent-text" : "text-gray-400", className)}
+      className={cn("shrink-0", accent ? "text-accent-text" : "text-fg-3", className)}
     >
       <path d="M9 6l6 6-6 6" />
     </svg>

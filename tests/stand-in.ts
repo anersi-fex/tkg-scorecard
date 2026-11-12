@@ -25,7 +25,7 @@ process.env.SESSION_SECRET = "s".repeat(48);
 
 // ---- the stand-in database ------------------------------------------------------------------
 export type Row = Record<string, unknown>;
-export const tables: Record<string, Row[]> = { login_attempts: [], agents: [], invites: [], settings: [], approvals: [], sales: [], goals: [], agent_goals: [] };
+export const tables: Record<string, Row[]> = { login_attempts: [], agents: [], invites: [], settings: [], approvals: [], sales: [], goals: [], agent_goals: [], sale_events: [] };
 /** Milliseconds each way for a database call: 0 answers on the next tick (one-at-a-time tests), more makes bursts interleave. */
 export const lag = { ms: 0 };
 const sleep = (ms: number) => new Promise((r) => (ms > 0 ? setTimeout(r, ms) : setImmediate(r)));
@@ -40,7 +40,8 @@ export const attemptRow = (key: string): Row => ({ id: ids.next++, ip: key, at: 
 class Query {
   private op: "select" | "insert" | "update" | "delete" | "upsert" = "select";
   private filters: ((r: Row) => boolean)[] = [];
-  private payload: Row = {};
+  private payload: Row | Row[] = {};
+  private window: [number, number] | null = null;
   private head = false;
   private one: null | "single" | "maybe" = null;
   private returning = false;
@@ -52,7 +53,7 @@ class Query {
     else this.returning = true;
     return this;
   }
-  insert(p: Row) {
+  insert(p: Row | Row[]) {
     this.op = "insert";
     this.payload = p;
     return this;
@@ -107,6 +108,10 @@ class Query {
     this.sort = [c, opts?.ascending !== false];
     return this;
   }
+  range(from: number, to: number) {
+    this.window = [from, to];
+    return this;
+  }
   limit(n: number) {
     this.max = n;
     return this;
@@ -125,8 +130,11 @@ class Query {
     if (broken.has(this.table)) return { data: null, error: { message: `relation "public.${this.table}" does not exist`, code: "42P01" } };
     const hit = (r: Row) => this.filters.every((f) => f(r));
     let out: Row[] = [];
-    if (this.op === "insert" || this.op === "upsert") {
-      const p = this.payload;
+    if (this.op === "insert" && Array.isArray(this.payload)) {
+      out = this.payload.map((p) => ({ id: this.table === "sale_events" ? ids.next++ : randomUUID(), ...p }));
+      rows.push(...out);
+    } else if (this.op === "insert" || this.op === "upsert") {
+      const p = this.payload as Row;
       if (this.table === "agents" && p.phone && rows.some((r) => r.phone === p.phone)) return { data: null, error: { code: "23505", message: "duplicate key" } };
       if (this.op === "upsert" && rows.some((r) => r.key === p.key)) return { data: null, error: null };
       const row: Row =
@@ -134,11 +142,13 @@ class Query {
           ? { id: ids.next++, at: new Date().toISOString(), ...p }
           : this.table === "agents"
             ? { id: randomUUID(), active: true, role: "member", session_version: 1, pass_hash: null, phone: null, upline_id: null, in_office: false, ...p }
-            : { id: randomUUID(), ...p };
+            : this.table === "sales"
+              ? { id: randomUUID(), created_at: new Date().toISOString(), deleted_at: null, agents: { name: String(tables.agents.find((a) => a.id === p.agent_id)?.name ?? "Someone") }, ...p }
+              : { id: randomUUID(), ...p };
       rows.push(row);
       out = [row];
     } else if (this.op === "update") {
-      const p = this.payload;
+      const p = this.payload as Row;
       if (this.table === "agents" && p.phone && rows.some((r) => r.phone === p.phone && !hit(r))) return { data: null, error: { code: "23505", message: "duplicate key" } };
       out = rows.filter(hit);
       for (const r of out) Object.assign(r, p);
@@ -151,6 +161,7 @@ class Query {
         const [c, asc] = this.sort;
         out = [...out].sort((a, b) => ((a[c] as number) < (b[c] as number) ? -1 : 1) * (asc ? 1 : -1));
       }
+      if (this.window) out = out.slice(this.window[0], this.window[1] + 1);
       if (this.max != null) out = out.slice(0, this.max);
       if (this.head) return { data: null, error: null, count: out.length };
     }

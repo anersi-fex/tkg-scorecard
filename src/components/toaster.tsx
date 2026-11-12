@@ -36,17 +36,11 @@ export function Toaster() {
     <div
       aria-live="polite"
       className="pointer-events-none fixed inset-x-0 z-40 flex justify-center px-4"
-      style={{ bottom: "calc(var(--tabbar-h, 0px) + max(16px, env(safe-area-inset-bottom, 0px)) + 8px)" }}
+      style={{ bottom: "calc(var(--tabbar-h, 0px) + max(20px, env(safe-area-inset-bottom, 0px)) + 8px)" }}
     >
       {msg && (
-        <p
-          key={msg.id}
-          role="status"
-          className={cn(
-            "pointer-events-auto max-w-md rounded-2xl px-4 py-3 text-[14px] leading-snug font-semibold shadow-float",
-            msg.ok ? "bg-gray-900 text-ink" : "bg-danger text-white",
-          )}
-        >
+        // The demo's toast: the raised color, a hairline, a soft shadow; a problem reads in rose.
+        <p key={msg.id} role="status" className={cn("toast toast-text pointer-events-auto leading-snug", !msg.ok && "text-rose")}>
           {msg.text}
         </p>
       )}

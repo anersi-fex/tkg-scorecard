@@ -14,7 +14,7 @@ import { isAgentRole, type Agent, type AgentRole } from "./types";
  */
 export type Person = Agent & { phone: string | null; has_login: boolean };
 
-const PERSON_COLUMNS = "id, name, active, sort, pc_licensed, upline_id, in_office, role, joined_at, phone";
+const PERSON_COLUMNS = "id, name, active, sort, pc_licensed, upline_id, upline_confirmed, in_office, role, joined_at, phone";
 type PersonRow = Omit<Person, "has_login">;
 
 export const BAD_LINK = "This link isn't good anymore. Ask for a new one.";
@@ -141,7 +141,14 @@ async function wouldLoop(id: string, uplineId: string): Promise<boolean> {
   return false;
 }
 
-/** Whose team a person is on (null: the top of the tree). Refuses a loop. */
+/**
+ * A row a join can claim by its name: a member or a manager who has no sign-in yet. An owner's or an
+ * admin's row is claimed only through its own person link.
+ */
+export const claimableRole = (role: AgentRole | null | undefined): boolean => (role ?? "member") === "member" || role === "manager";
+const CLAIMABLE_ROLES: AgentRole[] = ["member", "manager"];
+
+/** Whose team a person is on (null: the top of the tree). Refuses a loop. An admin setting it confirms it (0006). */
 export async function setUpline(id: string, uplineId: string | null): Promise<void> {
   if (!isUuid(id) || (uplineId !== null && !isUuid(uplineId))) throw new Said("That person isn't here.");
   const person = await personForSession(id);
@@ -151,7 +158,39 @@ export async function setUpline(id: string, uplineId: string | null): Promise<vo
     if (!upline || !upline.active) throw new Said("That upline isn't on the board.");
     if (await wouldLoop(id, uplineId)) throw new Said(id === uplineId ? "A person can't be their own upline." : `${upline.name} is on ${person.name}'s team, so ${person.name} can't go under them.`);
   }
-  await patchPerson(id, { upline_id: uplineId }, "people.upline");
+  await patchPerson(id, { upline_id: uplineId, upline_confirmed: true }, "people.upline");
+}
+
+/**
+ * The upline a joiner picked is confirmed (by that upline, a manager above them, or an admin: the
+ * caller checks who, rules.canConfirmJoiner). Only while it is still waiting; false when there was
+ * nothing to confirm (already confirmed, declined, or the upline changed meanwhile).
+ */
+export async function confirmUpline(id: string, uplineId: string): Promise<boolean> {
+  if (!isUuid(id) || !isUuid(uplineId)) return false;
+  const { data, error } = await db()
+    .from("agents")
+    .update({ upline_confirmed: true, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("upline_id", uplineId)
+    .eq("upline_confirmed", false)
+    .select("id");
+  if (error) fail("people.confirm", error);
+  return (data?.length ?? 0) > 0;
+}
+
+/** "Not on my team": the waiting upline is cleared (the person stays on the board, on nobody's team). */
+export async function declineUpline(id: string, uplineId: string): Promise<boolean> {
+  if (!isUuid(id) || !isUuid(uplineId)) return false;
+  const { data, error } = await db()
+    .from("agents")
+    .update({ upline_id: null, upline_confirmed: true, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("upline_id", uplineId)
+    .eq("upline_confirmed", false)
+    .select("id");
+  if (error) fail("people.decline", error);
+  return (data?.length ?? 0) > 0;
 }
 
 export async function setInOffice(id: string, on: boolean): Promise<void> {
@@ -159,9 +198,9 @@ export async function setInOffice(id: string, on: boolean): Promise<void> {
   await patchPerson(id, { in_office: on === true }, "people.office");
 }
 
-/** Admin or member. The owner's row never changes here (the database holds exactly one owner). */
+/** Admin, manager or member. The owner's row never changes here (the database holds exactly one owner). */
 export async function setRole(id: string, role: AgentRole): Promise<void> {
-  if (!isUuid(id) || (role !== "admin" && role !== "member")) throw new Said("That isn't one of the levels.");
+  if (!isUuid(id) || (role !== "admin" && role !== "manager" && role !== "member")) throw new Said("That isn't one of the levels.");
   const { data, error } = await db().from("agents").update({ role, updated_at: new Date().toISOString() }).eq("id", id).neq("role", "owner").select("id");
   if (error) fail("people.role", error);
   if (!data?.length) throw new Said("That person's level can't be changed.");
@@ -355,17 +394,29 @@ export interface JoinInput {
  */
 export type JoinResult = { ok: true; agentId: string; sessionVersion: number } | { ok: false; error: string; counts?: boolean };
 
-type Roster = { id: string; name: string; active: boolean; role: AgentRole; upline_id: string | null; phone: string | null; session_version: number }[];
+type Roster = { id: string; name: string; active: boolean; role: AgentRole; upline_id: string | null; upline_confirmed: boolean; phone: string | null; session_version: number }[];
 async function roster(): Promise<Roster> {
-  const { data, error } = await db().from("agents").select("id, name, active, role, upline_id, phone, session_version");
+  const { data, error } = await db().from("agents").select("id, name, active, role, upline_id, upline_confirmed, phone, session_version");
   if (error) fail("people.roster", error);
-  return (data ?? []).map((r) => ({ id: String(r.id), name: String(r.name), active: r.active === true, role: isAgentRole(r.role) ? r.role : "member", upline_id: r.upline_id ? String(r.upline_id) : null, phone: typeof r.phone === "string" ? r.phone : null, session_version: Number(r.session_version) }));
+  return (data ?? []).map((r) => ({
+    id: String(r.id),
+    name: String(r.name),
+    active: r.active === true,
+    role: isAgentRole(r.role) ? r.role : "member",
+    upline_id: r.upline_id ? String(r.upline_id) : null,
+    upline_confirmed: r.upline_confirmed !== false,
+    phone: typeof r.phone === "string" ? r.phone : null,
+    session_version: Number(r.session_version),
+  }));
 }
 
 /**
  * Joining through a link (contract decision 5), everything checked here on the server:
  *   agency  a new person, or the claim of someone already on the board with the same name who
- *           has no sign-in yet (members only; an owner or admin row needs its own person link)
+ *           has no sign-in yet (members and managers only; an owner or admin row needs its own
+ *           person link). An upline picked on the agency link waits to be confirmed (0006: the
+ *           upline, a manager above them, or an admin); the leader a leader's link names is
+ *           confirmed at once (the leader or an admin made that link).
  *   person  that one person sets their number, their password and the office mark
  *   reset   that one person sets a new password
  * One-use links are taken with a guarded update before anything is written, so a link works once.
@@ -427,11 +478,13 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
   const picked = isUuid(input.uplineId) ? people.find((p) => p.id === input.uplineId && p.active) : undefined;
   const linkLeader = invite.upline_id ? people.find((p) => p.id === invite.upline_id && p.active) : undefined;
   const upline = picked ?? linkLeader ?? null;
+  // Confirmed at once only when the upline is the leader whose link this is (or there is none).
+  const confirmed = !upline || (!!linkLeader && upline.id === linkLeader.id);
   const pass_hash = await hashPassword(input.password);
   const now = new Date().toISOString();
 
   if (match) {
-    if (logins.has(match.id) || match.role !== "member") return { ok: false, error: `${match.name} is already on Scorecard. Sign in, or ask an admin for your own link.`, counts: true };
+    if (logins.has(match.id) || !claimableRole(match.role)) return { ok: false, error: `${match.name} is already on Scorecard. Sign in, or ask an admin for your own link.`, counts: true };
     if (holder) await releaseParkedPhone(holder.id, typedPhone);
     // The claim: only while the row still has no sign-in (two phones at once: one wins).
     const next = match.session_version + 1;
@@ -443,9 +496,15 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
     // A leader's link opens with that leader already picked: that is the link's default, not a
     // pick, so it never moves someone an admin already placed (it fills an empty upline, below).
     const chose = picked && picked.id !== invite.upline_id ? picked : undefined;
-    if (chose && chose.id !== match.id && !(await wouldLoop(match.id, chose.id))) patch.upline_id = chose.id;
-    else if (!match.upline_id && upline && upline.id !== match.id && !(await wouldLoop(match.id, upline.id))) patch.upline_id = upline.id;
-    const { data, error } = await db().from("agents").update(patch).eq("id", match.id).is("pass_hash", null).eq("role", "member").eq("active", true).select("id");
+    // Their own pick waits to be confirmed; a row that keeps its upline keeps its confirmed state.
+    if (chose && chose.id !== match.id && !(await wouldLoop(match.id, chose.id))) {
+      patch.upline_id = chose.id;
+      patch.upline_confirmed = false;
+    } else if (!match.upline_id && upline && upline.id !== match.id && !(await wouldLoop(match.id, upline.id))) {
+      patch.upline_id = upline.id;
+      patch.upline_confirmed = confirmed;
+    }
+    const { data, error } = await db().from("agents").update(patch).eq("id", match.id).is("pass_hash", null).in("role", CLAIMABLE_ROLES).eq("active", true).select("id");
     if (error) {
       if ((error as { code?: string }).code === "23505") return { ok: false, error: PHONE_TAKEN, counts: true };
       fail("people.claim", error);
@@ -460,7 +519,7 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
   const sort = ((last?.sort as number | undefined) ?? 0) + 1;
   const { data, error } = await db()
     .from("agents")
-    .insert({ name, sort, role: "member", phone: typedPhone, pass_hash, in_office: input.inOffice === true, upline_id: upline?.id ?? null, joined_at: now })
+    .insert({ name, sort, role: "member", phone: typedPhone, pass_hash, in_office: input.inOffice === true, upline_id: upline?.id ?? null, upline_confirmed: confirmed, joined_at: now })
     .select("id, session_version")
     .single();
   if (error) {

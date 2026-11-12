@@ -337,7 +337,8 @@ export function buildSnapshot(input: SnapshotInput): MonthSnapshot {
         lastSaleAt: p.last,
         active: a.active,
         inOffice: a.in_office === true,
-        uplineId: a.upline_id ?? null,
+        // A picked upline that waits to be confirmed puts nobody on a team (0006).
+        uplineId: a.upline_confirmed === false ? null : (a.upline_id ?? null),
       };
     });
   // Three orders: life (the main board), all of it added up, and P&C for the people who write it.

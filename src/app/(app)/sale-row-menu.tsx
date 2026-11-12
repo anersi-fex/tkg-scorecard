@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import type { Role } from "@/lib/session";
 import type { FeedSale } from "@/lib/board";
 import { formatMoney } from "@/lib/money";
-import { editSale, removeSale } from "./actions";
+import { editSale, removeSale } from "./sale-actions";
 import { toast } from "@/components/toaster";
 import { Button, Input, Label, Select, cn } from "@/components/ui";
 

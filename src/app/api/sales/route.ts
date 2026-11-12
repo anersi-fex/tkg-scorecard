@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual, createHash } from "crypto";
 import { z } from "zod";
-import { getSettings, insertSale, listAgents } from "@/lib/data";
+import { getSettings, listAgents } from "@/lib/data";
+import { logBoardSale } from "@/lib/policies";
 import { addDays, isDateKey, todayInDetroit } from "@/lib/month";
 import { parseDollars } from "@/lib/money";
 import { LOG_TOKEN_MIN } from "@/lib/auth";
@@ -16,7 +17,8 @@ export const dynamic = "force-dynamic";
  * names in Settings (any case). While the owner has P&C on (settings.app.pcEnabled; off since
  * 2026-11-12), a P&C sale sends `"kind": "pc"` with one of the P&C carriers and, as `product`,
  * the line (Auto, Home …), for a person marked P&C licensed; while it is off, that kind is
- * refused. Answers { ok, sale }.
+ * refused. Answers { ok, sale }. A sale logged here has no client details: status Submitted, the
+ * monthly premium the annual / 12, source "shortcut", and a history line (src/lib/policies.ts).
  */
 const Body = z.object({
   agent: z.string().trim().min(1).max(80),
@@ -61,8 +63,10 @@ export async function POST(request: Request) {
   // Life only (owner, 2026-11-12): the other kind is refused while the owner's switch is off.
   if (kind === "pc" && !settings.pcEnabled) return NextResponse.json({ ok: false, error: "That kind of sale is turned off" }, { status: 400 });
   const pcCarrier = kind === "pc" ? settings.pcCarriers.find((c) => c.name.toLowerCase() === body.carrier.toLowerCase()) : undefined;
-  const carrier = kind === "pc" ? pcCarrier?.name : settings.carriers.find((c) => c.toLowerCase() === body.carrier.toLowerCase());
-  if (!carrier) return NextResponse.json({ ok: false, error: kind === "pc" ? "No such P&C carrier" : "No such carrier", carriers: kind === "pc" ? settings.pcCarriers.map((c) => c.name) : settings.carriers }, { status: 400 });
+  // The life carriers: the list in Settings, and the carriers with products (Settings > Carriers and products).
+  const lifeCarriers = [...new Set([...settings.carriers, ...Object.keys(settings.carrierProducts)])];
+  const carrier = kind === "pc" ? pcCarrier?.name : lifeCarriers.find((c) => c.toLowerCase() === body.carrier.toLowerCase());
+  if (!carrier) return NextResponse.json({ ok: false, error: kind === "pc" ? "No such P&C carrier" : "No such carrier", carriers: kind === "pc" ? settings.pcCarriers.map((c) => c.name) : lifeCarriers }, { status: 400 });
   // A P&C line is kept as the carrier writes it ("auto" becomes "Auto"); anything else is kept as sent.
   const product = kind === "pc" && body.product ? (pcCarrier?.lines.find((l) => l.toLowerCase() === body.product!.toLowerCase()) ?? body.product) : body.product;
   const want = body.agent.toLowerCase();
@@ -76,19 +80,17 @@ export async function POST(request: Request) {
   }
   if (kind === "pc" && !match.pc_licensed) return NextResponse.json({ ok: false, error: `${match.name} isn't marked P&C licensed (People page)` }, { status: 400 });
   try {
-    const sale = await insertSale({
-      agent_id: match.id,
-      premium_cents: cents,
+    const sale = await logBoardSale(null, {
+      agentId: match.id,
+      premiumCents: cents,
       policies: body.policies ?? 1,
       product: product || null,
       carrier,
       kind,
-      client: null,
       note: body.note || null,
-      sold_on: soldOn,
-      logged_by: "shortcut",
+      soldOn,
     });
-    return NextResponse.json({ ok: true, sale: { id: sale.id, agent: sale.agent_name, premium_cents: sale.premium_cents, carrier: sale.carrier, kind: sale.kind, sold_on: sale.sold_on } });
+    return NextResponse.json({ ok: true, sale: { id: sale.id, agent: sale.agentName, premium_cents: cents, carrier, kind, sold_on: soldOn } });
   } catch (err) {
     console.error("sale_api_failed", err instanceof Error ? err.name : "error");
     return NextResponse.json({ ok: false, error: "The database didn't answer" }, { status: 503 });
@@ -100,7 +102,7 @@ export async function GET(request: Request) {
   if (!tokenOk(request.headers.get("authorization"))) return NextResponse.json({ ok: false, error: "Not allowed" }, { status: 401 });
   try {
     const [agents, settings] = await Promise.all([listAgents(), getSettings()]);
-    const life = { ok: true, people: agents.map((a) => a.name), carriers: settings.carriers };
+    const life = { ok: true, people: agents.map((a) => a.name), carriers: [...new Set([...settings.carriers, ...Object.keys(settings.carrierProducts)])] };
     // The P&C lists ride along only while the owner has P&C on.
     return NextResponse.json(settings.pcEnabled ? { ...life, pcPeople: agents.filter((a) => a.pc_licensed).map((a) => a.name), pcCarriers: settings.pcCarriers } : life);
   } catch {

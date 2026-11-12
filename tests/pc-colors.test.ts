@@ -30,9 +30,9 @@ test("globals.css: Dusty blue in the base tokens, the others as data-pc-color bl
     }
   }
   for (const c of design.filter((c) => c.key !== "dusty")) {
-    assert.ok(css.includes(`html[data-pc-color="${c.key}"] {\n  --t-pc: ${c.light.pc};`), `${c.key} light`);
-    assert.ok(css.includes(`html[data-pc-color="${c.key}"][data-theme="dark"] {\n  --t-pc: ${c.dark.pc};`), `${c.key} dark`);
-    assert.ok(css.includes(`html[data-pc-color="${c.key}"]:not([data-theme="light"]) {\n    --t-pc: ${c.dark.pc};`), `${c.key} phone dark`);
+    assert.ok(css.includes(`html[data-pc-color="${c.key}"] {\n  --t-pc: ${c.dark.pc};`), `${c.key} dark (the default)`);
+    assert.ok(css.includes(`html[data-pc-color="${c.key}"][data-theme="light"] {\n  --t-pc: ${c.light.pc};`), `${c.key} light`);
+    assert.ok(css.includes(`html[data-pc-color="${c.key}"][data-theme="auto"] {\n    --t-pc: ${c.light.pc};`), `${c.key} phone light`);
   }
   // After the colorways, so the owner's P&C pick wins over anything a colorway sets.
   assert.ok(css.indexOf("/* pc-colors:start") > css.indexOf("/* colorways:end */"));

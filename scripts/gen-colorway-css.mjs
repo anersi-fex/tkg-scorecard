@@ -1,7 +1,8 @@
 // Writes the colorway blocks and the P&C color blocks of src/app/globals.css from
 // design/colorways.mjs (the same source the mockup renderer uses). Run: npm run colorways
 // The default colorway (Crimson) fills the base tokens; the others become html[data-colorway=…]
-// blocks (light, dark by choice, dark by the phone's setting) that outrank the base blocks.
+// blocks (dark, the app's default; light by choice; light on a light phone with "Auto") that
+// outrank the base blocks. They re-color the accent only (never the neutrals).
 // P&C's color works the same way on its own attribute: Dusty blue is the base, the others are
 // html[data-pc-color=…] blocks, written after the colorways so the owner's P&C pick always wins.
 import { readFileSync, writeFileSync } from "node:fs";
@@ -11,21 +12,26 @@ const APP_COLORWAYS = ["crimson", "sky", "champion", "emerald"];
 const DEFAULT = "crimson";
 const FILE = new URL("../src/app/globals.css", import.meta.url).pathname;
 
-const lines = (t, indent) =>
+/** "#c42b32" and 0.14 → "rgba(196,43,50,0.14)" (the soft accent fill and the muted share bars). */
+const alpha = (hex, a) => {
+  const h = hex.replace("#", "");
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  return `rgba(${r},${g},${b},${a})`;
+};
+
+// Only the accent: since the CRM look (2026-11-12) a colorway never changes the app's neutrals
+// (page, card, raised, line, track, segment), whatever design/colorways.mjs gives the mockups.
+const lines = (t, indent, mode) =>
   [
-    t.page && `--t-page: ${t.page};`,
-    t.card && `--t-card: ${t.card};`,
-    t.raised && `--t-raised: ${t.raised};`,
-    t.line && `--t-line: ${t.line};`,
-    t.track && `--t-track: ${t.track};`,
-    t.segment && `--t-segment: ${t.segment};`,
     `--t-accent: ${t.accent};`,
     `--t-accent-text: ${t.accentText};`,
     `--t-tint: ${t.tint};`,
+    `--t-accent-soft: ${alpha(t.accent, mode === "dark" ? 0.14 : 0.1)};`,
     `--t-grad-from: ${t.gradFrom};`,
     `--t-grad-to: ${t.gradTo};`,
-    `--t-grad: linear-gradient(135deg, ${t.gradFrom}, ${t.gradTo});`,
-    `--t-grad-strong: linear-gradient(135deg, ${t.strongFrom}, ${t.strongTo});`,
+    `--t-grad: linear-gradient(90deg, ${t.gradFrom}, ${t.gradTo});`,
+    `--t-grad-strong: linear-gradient(90deg, ${t.strongFrom}, ${t.strongTo});`,
+    `--t-bar-grad: linear-gradient(90deg, ${alpha(t.gradFrom, 0.42)}, ${alpha(t.gradTo, 0.42)});`,
     `--t-glow: ${t.glow};`,
     `--t-bar: ${t.bar};`,
     `--t-chip-bg: ${t.chipBg};`,
@@ -47,9 +53,9 @@ out += `/* The default colorway is ${byKey[DEFAULT].name}: its values are the ba
 for (const k of APP_COLORWAYS.filter((k) => k !== DEFAULT)) {
   const c = byKey[k];
   out += `/* ${c.name}: ${c.idea} */\n`;
-  out += `html[data-colorway="${k}"] {\n${lines(c.light, "  ")}\n}\n`;
-  out += `html[data-colorway="${k}"][data-theme="dark"] {\n${lines(c.dark, "  ")}\n}\n`;
-  out += `@media (prefers-color-scheme: dark) {\n  html[data-colorway="${k}"]:not([data-theme="light"]) {\n${lines(c.dark, "    ")}\n  }\n}\n`;
+  out += `html[data-colorway="${k}"] {\n${lines(c.dark, "  ", "dark")}\n}\n`;
+  out += `html[data-colorway="${k}"][data-theme="light"] {\n${lines(c.light, "  ", "light")}\n}\n`;
+  out += `@media (prefers-color-scheme: light) {\n  html[data-colorway="${k}"][data-theme="auto"] {\n${lines(c.light, "    ", "light")}\n  }\n}\n`;
 }
 out += `/* colorways:end */`;
 
@@ -64,9 +70,9 @@ pcOut += `/* P&C's default color is ${pcByKey[DEFAULT_PC_COLOR].name}: its value
 for (const k of APP_PC_COLORS.filter((k) => k !== DEFAULT_PC_COLOR)) {
   const c = pcByKey[k];
   pcOut += `/* ${c.name}: ${c.idea} */\n`;
-  pcOut += `html[data-pc-color="${k}"] {\n${pcLines(c.light, "  ")}\n}\n`;
-  pcOut += `html[data-pc-color="${k}"][data-theme="dark"] {\n${pcLines(c.dark, "  ")}\n}\n`;
-  pcOut += `@media (prefers-color-scheme: dark) {\n  html[data-pc-color="${k}"]:not([data-theme="light"]) {\n${pcLines(c.dark, "    ")}\n  }\n}\n`;
+  pcOut += `html[data-pc-color="${k}"] {\n${pcLines(c.dark, "  ")}\n}\n`;
+  pcOut += `html[data-pc-color="${k}"][data-theme="light"] {\n${pcLines(c.light, "  ")}\n}\n`;
+  pcOut += `@media (prefers-color-scheme: light) {\n  html[data-pc-color="${k}"][data-theme="auto"] {\n${pcLines(c.light, "    ")}\n  }\n}\n`;
 }
 pcOut += `/* pc-colors:end */`;
 
@@ -92,6 +98,12 @@ const dpc = pcByKey[DEFAULT_PC_COLOR];
 for (const [mode, t] of [["light", dpc.light], ["dark", dpc.dark]]) {
   for (const [name, value] of [["pc", t.pc], ["pc-text", t.pcText], ["pc-tint", t.pcTint], ["pc-from", t.pcFrom], ["pc-to", t.pcTo]]) {
     if (!base.includes(`--t-${name}: ${value};`)) throw new Error(`globals.css base ${mode} tokens: --t-${name} should be ${value} (${dpc.name})`);
+  }
+}
+const dc = byKey[DEFAULT];
+for (const [mode, t] of [["light", dc.light], ["dark", dc.dark]]) {
+  for (const [name, value] of [["accent", t.accent], ["accent-text", t.accentText], ["grad-from", t.gradFrom], ["grad-to", t.gradTo], ["chip-text", t.chipText]]) {
+    if (!base.includes(`--t-${name}: ${value};`)) throw new Error(`globals.css base ${mode} tokens: --t-${name} should be ${value} (${dc.name})`);
   }
 }
 writeFileSync(FILE, css);

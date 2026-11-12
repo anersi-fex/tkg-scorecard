@@ -49,19 +49,19 @@ export function LoginForm({ next, start }: { next: string; start: LoginWay }) {
   }
 
   return (
-    <form ref={formRef} method="post" onSubmit={onSubmit} className="space-y-4" data-way={way}>
+    <form ref={formRef} method="post" onSubmit={onSubmit} className="space-y-[18px]" data-way={way}>
       {error && <Notice tone="red">{error}</Notice>}
       <input type="hidden" name="next" value={next} />
       {way === "person" ? (
         <>
           <div>
-            <Label htmlFor="phone" className="font-semibold">
+            <Label htmlFor="phone">
               Cell number
             </Label>
-            <Input key="phone" id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="248 555 0100" className="h-12 rounded-2xl text-[17px]" autoFocus required />
+            <Input key="phone" id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="248 555 0100" className="text-[15px]" autoFocus required />
           </div>
           <div>
-            <Label htmlFor="password" className="font-semibold">
+            <Label htmlFor="password">
               Password
             </Label>
             <PasswordField key="person-password" id="password" name="password" autoComplete="current-password" required />
@@ -69,22 +69,22 @@ export function LoginForm({ next, start }: { next: string; start: LoginWay }) {
         </>
       ) : (
         <div>
-          <Label htmlFor="password" className="font-semibold">
+          <Label htmlFor="password">
             Team password
           </Label>
-          <Input key="team-password" id="password" name="password" type="password" autoComplete="current-password" className="h-12 rounded-2xl text-[17px]" autoFocus required />
+          <Input key="team-password" id="password" name="password" type="password" autoComplete="current-password" className="text-[15px]" autoFocus required />
         </div>
       )}
-      <Button type="submit" className="h-12 w-full rounded-2xl text-[15px]" disabled={pending}>
+      <Button type="submit" className="min-h-[46px] w-full text-[15px]" disabled={pending}>
         {pending ? "Checking..." : "Sign in"}
       </Button>
       <div className="text-center">
         {way === "person" ? (
-          <button type="button" onClick={() => swap("team")} className="min-h-11 rounded-xl px-3 text-[14px] font-semibold text-accent-text hover:bg-tint">
+          <button type="button" onClick={() => swap("team")} className="min-h-10 rounded-lg px-3 text-[13.5px] font-medium text-accent-text hover:underline">
             Use the team password
           </button>
         ) : (
-          <button type="button" onClick={() => swap("person")} className="min-h-11 rounded-xl px-3 text-[14px] font-semibold text-accent-text hover:bg-tint">
+          <button type="button" onClick={() => swap("person")} className="min-h-10 rounded-lg px-3 text-[13.5px] font-medium text-accent-text hover:underline">
             Use your own sign-in
           </button>
         )}

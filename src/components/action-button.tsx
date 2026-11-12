@@ -36,7 +36,7 @@ export function ActionButton({
         type="button"
         variant={variant}
         disabled={pending}
-        className={cn("rounded-2xl", wide && "w-full", className)}
+        className={cn(wide && "w-full", className)}
         onClick={() => {
           if (confirm && !window.confirm(confirm)) return;
           setResult(null);
@@ -50,7 +50,7 @@ export function ActionButton({
       >
         {pending ? (busyLabel ?? "Working...") : label}
       </Button>
-      {result && !result.ok && <p className="mt-2 text-[13px] leading-snug text-red-700">{result.error}</p>}
+      {result && !result.ok && <p className="mt-2 text-[12.5px] leading-snug font-medium text-rose">{result.error}</p>}
     </div>
   );
 }

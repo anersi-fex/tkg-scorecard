@@ -45,10 +45,10 @@ export function ScoreMark({ size = 32, className }: { size?: number; className?:
     <span
       aria-hidden
       className={cn("inline-flex shrink-0 items-center justify-center bg-tide", className)}
-      style={{ width: size, height: size, borderRadius: Math.round(size * 0.27) }}
+      style={{ width: size, height: size, borderRadius: Math.round(size * 0.28) }}
     >
       <svg viewBox="0 0 1024 1024" width={size} height={size}>
-        <path d={podiumPath(size < 48)} fill="#fff" />
+        <path d={podiumPath(size < 48)} fill="currentColor" className="text-on-grad" />
       </svg>
     </span>
   );
@@ -64,31 +64,32 @@ export function TkgMark({ height = 12, className, title = "TKG" }: { height?: nu
 }
 
 /**
- * Icon + "Scorecard" + "by TKG × <agency>" under it (owner, 2026-11-12: "you can still put 'by
+ * Icon + "Scorecard" (600) + "by TKG × <agency>" under it (the demo's sidebar lockup) (owner, 2026-11-12: "you can still put 'by
  * tkg' ... just needs to also say Lineage Financial"): the TKG letters as before, a thin "×", then
  * the agency's name. `size` is the icon size; the type scales with it. Pass `agency` from
  * `loadLook().agencyName` (or the snapshot's `agencyName`); without it the line reads "by TKG".
  */
 export function ScoreLockup({ size = 28, className, agency }: { size?: number; className?: string; agency?: string }) {
-  const name = Math.round(size * 0.56);
-  const mark = Math.max(8, Math.round(size * 0.3));
-  const sub = Math.max(10, Math.round(size * 0.34));
+  // The demo's proportions: a 34px tile beside a 15.5px "Scorecard" (600) over an 11px line.
+  const name = Math.max(14, Math.round(size * 0.46));
+  const sub = Math.max(10.5, Math.round(size * 0.33 * 2) / 2);
+  const mark = Math.max(8, Math.round(sub * 0.78));
   const label = agency?.trim();
   return (
-    <span className={cn("inline-flex min-w-0 items-center gap-2", className)}>
+    <span className={cn("inline-flex min-w-0 items-center gap-2.5", className)}>
       <ScoreMark size={size} />
-      <span className="flex min-w-0 flex-col text-left leading-none">
-        <span className="font-extrabold tracking-[-0.03em] text-gray-900" style={{ fontSize: name }}>
+      <span className="flex min-w-0 flex-col text-left leading-[1.2]">
+        <span className="font-semibold tracking-[-0.005em] text-fg" style={{ fontSize: name }}>
           Scorecard
         </span>
-        <span data-lockup-by className="mt-[3px] flex min-w-0 items-center gap-1 text-[10px] font-medium text-gray-500">
-          by <TkgMark height={mark} className="text-gray-700" />
+        <span data-lockup-by className="mt-px flex min-w-0 items-center gap-[0.3em] whitespace-nowrap text-fg-2" style={{ fontSize: sub }}>
+          by <TkgMark height={mark} className="text-fg" />
           {label && (
             <>
-              <span aria-hidden className="relative -top-[0.06em] text-gray-500" style={{ fontSize: sub + 1 }}>
+              <span aria-hidden className="relative -top-[0.04em]">
                 ×
               </span>
-              <span data-agency className="max-w-[13em] min-w-0 truncate font-semibold tracking-[0.01em] text-gray-700" style={{ fontSize: sub, lineHeight: 1.15 }}>
+              <span data-agency className="max-w-[14em] min-w-0 truncate" style={{ lineHeight: 1.2 }}>
                 {label}
               </span>
             </>

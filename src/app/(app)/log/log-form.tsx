@@ -8,7 +8,7 @@ import { Button, Input, Label, cn } from "@/components/ui";
 import { formatMoney, parseDollars } from "@/lib/money";
 import { todayInDetroit } from "@/lib/month";
 import { KIND_LABEL, SALE_KINDS, type PcCarrier, type SaleKind } from "@/lib/types";
-import { logSale, removeSale } from "../actions";
+import { logSale, removeSale } from "../sale-actions";
 import { toast } from "@/components/toaster";
 
 interface Person {

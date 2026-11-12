@@ -4,8 +4,8 @@
 // shared team password each do what their level allows; the Scoreboard, the teams and the office
 // group are checked against the sales the test logged; the TV's screens, its rotation and its
 // feed stamp; the owner's P&C switch (off by default: no screen may name P&C before it is turned
-// on or after it is turned off again); and last a full office, 46 people, on Home, the phone, the
-// Wrap (still one screenshot) and the TV. Along the way: the sign-in limits the way an office meets
+// on or after it is turned off again); and last a full office, 46 people, on Home, the phone and
+// the TV. Along the way: the sign-in limits the way an office meets
 // them (everybody behind one address: each form keeps its own count, and tries sent at the same
 // moment are counted), the join card's "Already on the board? Tap your name.", what ends with a
 // place on the board or an admin's level (sessions and one-time links), and a goal or an upline
@@ -80,18 +80,6 @@ const cssVar = (page, name) => page.evaluate((n) => getComputedStyle(document.do
 
 /** Today in Detroit as [year, month, day] (the sandbox's own clock may sit in another zone). */
 const detroitToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Detroit" }).split("-").map(Number);
-/** Detroit dates walked back from today in UTC arithmetic, so the sandbox's zone never shifts a weekday. */
-const daysBack = (stop) => {
-  const [y, m, d] = detroitToday();
-  const t = new Date(Date.UTC(y, m - 1, d));
-  do t.setUTCDate(t.getUTCDate() - 1);
-  while (!stop(t.getUTCDay()));
-  return t.toISOString().slice(0, 10);
-};
-/** The Detroit date of the last weekday before today. */
-const lastBusinessDay = () => daysBack((w) => w !== 0 && w !== 6);
-/** The Detroit date of the Sunday before this week's Monday: always an earlier week. */
-const lastSunday = () => daysBack((w) => w === 0);
 
 // Invented people. The first four work in the office; the last three do not. Three join by the
 // agency link: Dana (new, under Ivy, in the office), Ivy (claims her row by typing her name) and
@@ -1071,11 +1059,11 @@ try {
     const sheet = await openEditor(o, DANA);
     check((await sheet.textContent()).includes("(248) 555-0142"), "a manager's People page shows a person's cell number");
     let sent = "";
-    for (const path of ["/team", "/", "/scoreboard", "/log", "/wrap"]) {
+    for (const path of ["/team", "/", "/scoreboard", "/log"]) {
       await d.goto(`${APP}${path}`);
       sent += await d.content();
     }
-    check(sent.length > 50_000 && !numbers.test(sent), "nothing sent to a member's People, Home, Scoreboard, Log a sale or Wrap carries anybody's cell number");
+    check(sent.length > 50_000 && !numbers.test(sent), "nothing sent to a member's People, Home, Scoreboard or Log a sale carries anybody's cell number");
     const looker = await newVisitor();
     const lk = await looker.newPage();
     await lk.goto(`${APP}${joinPath}`);
@@ -1266,67 +1254,15 @@ try {
   check(await settles(p, () => document.querySelector("nav[data-tabbar]")?.offsetParent === null, 2000), "the tab bar hides while the premium box has focus (the keyboard is up)");
   await p.evaluate(() => document.activeElement.blur());
   check(await settles(p, () => document.querySelector("nav[data-tabbar]")?.offsetParent !== null, 2000), "the tab bar comes back once the keyboard goes");
-  // The Wrap: today's top producer, everybody, the carriers; one iPhone screenshot above the tab bar,
-  // measured on the fullest day: everyone who can sell today has sold.
+  // Three more sales through the Shortcut (the Scoreboard's numbers below count them).
   if (TOKEN) {
     for (const who of [LENA, IVY, WES]) {
       const r = await owner.request.post(`${APP}/api/sales`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { agent: who, premium: "1,250", carrier: "Royal", product: "Term" } });
-      check(r.ok(), `a sale for ${who} before the Wrap (${r.status()})`);
+      check(r.ok(), `a sale for ${who} through the Shortcut (${r.status()})`);
       if (r.ok()) sold(who, 1250);
     }
   }
-  await p.goto(`${APP}/wrap`);
-  await p.waitForSelector("text=Player of the day");
-  const wrapText = await p.textContent("body");
-  check(wrapText.includes(THEO) && wrapText.includes("$21,750"), "the Wrap names today's player of the day with the day's premium");
-  check(wrapText.includes("Everybody today") && wrapText.includes("Best deal"), "the Wrap lists everybody and the best deal");
-  check(wrapText.includes("Day won") || wrapText.includes("short of") || /(Saturday|Sunday)/.test(wrapText), "the Wrap judges the day against what the goal needed (or names the weekend)");
-  const fit = await p.evaluate(() => ({ bottom: document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom, pill: document.querySelector("nav[data-tabbar] > div").getBoundingClientRect().top, height: window.innerHeight }));
-  check(fit.bottom <= fit.pill - 8, `the Wrap fits one iPhone screenshot above the tab bar (ends at ${Math.round(fit.bottom)}px, the tab bar starts at ${Math.round(fit.pill)} of ${fit.height})`);
-  const wrapSign = await p.evaluate(() => ({ sign: document.querySelector("[data-wrap-sign]")?.textContent ?? "", foot: document.querySelector("[data-wrap-foot]")?.textContent ?? "" }));
-  check(`${wrapSign.sign} ${wrapSign.foot}`.includes(AGENCY), "the Wrap signs with the agency's name");
-  // Royal leads only once the token's three Royal sales landed; AHL is in the top three either way.
-  const square = TOKEN ? "Royal" : "AHL";
-  check(wrapText.includes("Top carriers") && new RegExp(`${square}\\s*\\d+\\s*polic`).test(wrapText), "the Wrap shows the month's top carriers with their policy counts");
-  check(wrapText.includes("Day") && wrapText.includes("Week") && wrapText.includes("Month"), "the Wrap offers Day, Week and Month");
-  const wrapOverflow = await p.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
-  check(!wrapOverflow, "the Wrap has no sideways scroll");
-  const tabs = await p.evaluate(() => {
-    const pill = document.querySelector("nav[data-tabbar] > div");
-    return { right: pill.getBoundingClientRect().right, links: [...pill.querySelectorAll("a")].map((l) => l.textContent.trim()), width: window.innerWidth };
-  });
-  check(tabs.links.join(",") === "This month,Scoreboard,Log a sale,Wrap,People" && tabs.right <= tabs.width, `the phone tab bar holds its five tabs inside the screen (${tabs.links.join(", ")}; ${Math.round(tabs.right)} of ${tabs.width}px)`);
-  await p.screenshot({ path: `${OUT}/14-phone-wrap.png`, fullPage: true });
-  // The week and the month: the same screen over a longer stretch, each still one screenshot
-  const fitOf = async () => p.evaluate(() => ({ bottom: document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom, pill: document.querySelector("nav[data-tabbar] > div").getBoundingClientRect().top, height: window.innerHeight }));
-  await p.goto(`${APP}/wrap?view=week`);
-  await p.waitForSelector("text=Player of the week");
-  const weekText = await p.textContent("body");
-  check(weekText.includes("Everybody this week") && weekText.includes(THEO), "the week view lists everybody this week with its player");
-  check(weekText.includes("Week won") || weekText.includes("short of") || weekText.includes("Weekend") || weekText.includes("Goal already hit"), "the week view judges the week against what the goal needed");
-  const fitWeek = await fitOf();
-  check(fitWeek.bottom <= fitWeek.pill - 8, `the week view fits one screenshot (ends at ${Math.round(fitWeek.bottom)}px, the tab bar starts at ${Math.round(fitWeek.pill)})`);
-  await p.screenshot({ path: `${OUT}/14b-phone-wrap-week.png`, fullPage: true });
-  await p.goto(`${APP}/wrap?view=month`);
-  await p.waitForSelector("text=Player of the month");
-  const monthText = await p.textContent("body");
-  check(monthText.includes("Everybody this month") && /Ahead by|Behind by|On the goal line|Goal hit/.test(monthText), "the month view lists everybody this month and reads the month against the goal line");
-  const fitMonth = await fitOf();
-  check(fitMonth.bottom <= fitMonth.pill - 8, `the month view fits one screenshot (ends at ${Math.round(fitMonth.bottom)}px, the tab bar starts at ${Math.round(fitMonth.pill)})`);
-  await p.screenshot({ path: `${OUT}/14c-phone-wrap-month.png`, fullPage: true });
-  // An earlier week (anchored on last Sunday, always before this week) shows the This week pill and a live later arrow
-  await p.goto(`${APP}/wrap?view=week&day=${lastSunday()}`);
-  await p.waitForSelector("text=Player of the week");
-  const earlierWeek = await p.evaluate(() => ({ text: document.body.textContent, later: document.querySelector("a[aria-label='Later week']")?.getAttribute("aria-disabled") }));
-  check(earlierWeek.text.includes("Everybody that week") && earlierWeek.text.includes("This week") && earlierWeek.later === "false", "an earlier week opens with the This week pill and a live later arrow");
-  // The last business day before today has no sales in this run
-  await p.goto(`${APP}/wrap?day=${lastBusinessDay()}`);
-  await p.waitForSelector("text=Player of the day");
-  check((await p.textContent("body")).includes("No sales"), "a day without sales says so");
   await p.emulateMedia({ colorScheme: "dark" });
-  await p.goto(`${APP}/wrap`);
-  await p.waitForSelector("text=Player of the day");
-  await p.screenshot({ path: `${OUT}/15-phone-wrap-dark.png`, fullPage: true });
   await p.goto(`${APP}/`);
   await p.waitForSelector("text=Leaderboard");
   await p.screenshot({ path: `${OUT}/09-phone-home-dark.png`, fullPage: true });
@@ -1642,8 +1578,6 @@ try {
       ["Log a sale", "/log", "#premium"],
       ["People", "/team", "#new-name"],
       ["Settings", "/settings", "input[name=goal]"],
-      ["the Wrap", "/wrap", "text=Player of the day"],
-      ["the Wrap's month", "/wrap?view=month", "text=Player of the month"],
       ["the Scoreboard", "/scoreboard", "[data-scoreboard]"],
       ["the Scoreboard's teams", "/scoreboard?who=teams", "[data-leaderboard=teams]"],
       ["Your profile", "/me", "h1"],
@@ -1888,33 +1822,6 @@ try {
       await pp.goto(`${APP}/`);
       await pp.waitForSelector("section[data-group]");
       await pp.screenshot({ path: `${OUT}/24b-phone-home-full-office.png`, fullPage: true });
-      // The Wrap at that size (owner, 2026-10-29: "tells you a lot on one screenshot"): past seven
-      // sellers the top six are rows and everybody else shares one line, the rest of the sellers
-      // with what they sold and the people with no sale as a count.
-      const sellers = ledger.size;
-      const quiet = ALL - sellers;
-      const ranked = [...ledger.keys()].sort((x, y) => centsOf(y) - centsOf(x));
-      const rowsWant = sellers > 7 ? 6 : sellers;
-      const lineWant = [sellers > 7 ? `and ${sellers - 6} more sold ${dollars(centsOf(...ranked.slice(6)))}` : "", quiet > 6 ? `${quiet} with no sale` : ""].filter(Boolean).join(" · ");
-      for (const [view, ready] of [
-        ["day", "text=Player of the day"],
-        ["week", "text=Player of the week"],
-        ["month", "text=Player of the month"],
-      ]) {
-        await pp.goto(`${APP}/wrap${view === "day" ? "" : `?view=${view}`}`);
-        await pp.waitForSelector(ready);
-        const w = await pp.evaluate(() => ({
-          rows: [...document.querySelectorAll("li[data-wrap-row]")].map((li) => li.innerText.replace(/\s+/g, " ").trim()),
-          line: document.querySelector("li[data-wrap-fold]")?.innerText.replace(/\s+/g, " ").trim() ?? "",
-          bottom: document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom,
-          pill: document.querySelector("nav[data-tabbar] > div").getBoundingClientRect().top,
-          wide: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
-        }));
-        check(w.rows.length === rowsWant && w.rows[0].includes(ranked[0]) && w.line === lineWant, `with ${ALL} people the Wrap's ${view} shows the top ${rowsWant} sellers as rows and the rest on one line ("${w.line}")`);
-        check(w.bottom <= w.pill - 8 && !w.wide, `and it is still one iPhone screenshot at 390x844 (ends at ${Math.round(w.bottom)}px, the tab bar starts at ${Math.round(w.pill)})`);
-        if (view === "day") await pp.screenshot({ path: `${OUT}/26-phone-wrap-full-office.png`, fullPage: true });
-        if (view === "week") await pp.screenshot({ path: `${OUT}/26b-phone-wrap-week-full-office.png`, fullPage: true });
-      }
       await ph.close();
     }
     // The TV at that size: the office group in three columns, a page at a time, the second page taking its turn

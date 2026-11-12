@@ -13,9 +13,10 @@ import { Said } from "./data";
  * Session checks. proxy.ts is only an optimistic gate (Next 16): every page calls pageViewer()
  * and every server action and route handler calls requireViewer() before touching data.
  *
- * Who is looking (src/lib/viewer.ts): the owner, an admin, a member (a person's own sign-in) or
- * the team (the shared team password: the TV, and phones that have not joined yet). The two
- * shared passwords work as they always did; the owner password signs in as the owner person.
+ * Who is looking (src/lib/viewer.ts): the owner, an admin, a manager or a member (a person's own
+ * sign-in: their row's role is their level), or the team (the shared team password: the TV, and
+ * phones that have not joined yet). The two shared passwords work as they always did; the owner
+ * password signs in as the owner person.
  */
 export const OWNER_NAME = "Anersi Koka";
 /** The Shortcut token must be at least this long (the route refuses shorter ones; Settings says so). */

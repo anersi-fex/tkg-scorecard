@@ -5,18 +5,21 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { endSession, requireViewer, startPersonSession } from "@/lib/auth";
 import { getAgent, getSettings, lineFor, listAgents, saveSettings, touchBoard } from "@/lib/data";
-import { bumpSession, checkOwnPassword, cleanName, getPerson, sameName, setInOffice, setName, setPersonPassword, setPhone, setRole, setUpline, type Person } from "@/lib/people";
+import { bumpSession, checkOwnPassword, cleanName, confirmUpline as confirmPickedUpline, declineUpline as declinePickedUpline, getPerson, sameName, setInOffice, setName, setPersonPassword, setPhone, setRole, setUpline, type Person } from "@/lib/people";
 import { agencyToken, createInvite, joinUrl, revokeAgencyInvites, revokeInvitesMadeBy, revokePersonInvites } from "@/lib/invites";
 import { decideApproval as decide, listApprovals, requestApproval, type Approval } from "@/lib/approvals";
 import { passwordProblem } from "@/lib/passwords";
 import { normalizePhone } from "@/lib/phone";
-import { isOwner, type Viewer } from "@/lib/viewer";
+import { isAdmin, isOwner, type Viewer } from "@/lib/viewer";
+import { canConfirmJoiner, canGetJoinLink, canManageAccess, ruleContext } from "@/lib/rules";
 import type { ActionResult } from "./actions";
 
 /**
  * People, join links, approvals and the owner's switches (owner, 2026-11-12). Every action
- * checks the level first, on the server (src/lib/viewer.ts): a manager is the owner or an admin.
- * A phone number or a link goes back only to a manager; nothing here is logged.
+ * checks the level first, on the server (src/lib/viewer.ts, src/lib/rules.ts): most need an admin
+ * (the owner or an admin); a manager confirms the people who picked them (or someone under them)
+ * and gets their own team's join link. A phone number or a link goes back only to whoever may
+ * have it; nothing here is logged.
  */
 export type LinkResult = { ok: true; url: string } | { ok: false; error: string };
 
@@ -66,24 +69,32 @@ export async function setPersonInOffice(id: string, on: boolean): Promise<Action
   }
 }
 
+const LEVEL_WORDS: Record<"admin" | "manager" | "member", string> = { admin: "an admin", manager: "a manager", member: "an agent" };
+
 /**
- * Makes someone an admin, or a member again. The owner: at once. An admin: the request goes to
- * the owner and nothing changes until the owner says yes. The owner's own level never changes.
+ * Sets someone's level: "member" (an agent), "manager" or "admin" (contract decision 7). An admin
+ * makes someone an agent or a manager at once. Making an admin, or taking an admin's level away,
+ * is the owner's: the owner does it at once, an admin's ask goes to the owner and nothing changes
+ * until the owner says yes. Nobody changes their own level; the owner's never changes.
  */
 export async function setPersonRole(id: string, role: string): Promise<ActionResult> {
   try {
     const viewer = await requireViewer("admin");
-    if (!Id.safeParse(id).success || (role !== "admin" && role !== "member")) return { ok: false, error: "That isn't one of the levels." };
+    if (!Id.safeParse(id).success || (role !== "admin" && role !== "manager" && role !== "member")) return { ok: false, error: "That isn't one of the levels." };
     const person = await getAgent(id);
     if (!person) return { ok: false, error: "That person isn't here." };
     if (person.role === "owner") return { ok: false, error: "The owner stays the owner." };
-    if ((person.role ?? "member") === role) return { ok: true, message: role === "admin" ? `${person.name} is already an admin.` : `${person.name} is not an admin.` };
+    if (viewer.agentId && person.id === viewer.agentId) return { ok: false, error: "Ask someone else to change your own level." };
+    const was = person.role ?? "member";
+    if (was === role) return { ok: true, message: `${person.name} is already ${LEVEL_WORDS[role]}.` };
     if (role === "admin" && !person.active) return { ok: false, error: `${person.name} is off the board. Bring them back first.` };
-    if (!isOwner(viewer)) {
+    const touchesAdmin = role === "admin" || was === "admin";
+    if (touchesAdmin && !isOwner(viewer)) {
       await requestApproval({
         kind: role === "admin" ? "make_admin" : "remove_admin",
-        payload: { agent_id: person.id },
-        summary: role === "admin" ? `Make ${person.name} an admin` : `Make ${person.name} a member again (not an admin)`,
+        // Taking an admin's level away lands on the level asked for (an agent, or a manager).
+        payload: role === "admin" ? { agent_id: person.id } : { agent_id: person.id, role },
+        summary: role === "admin" ? `Make ${person.name} an admin` : `Make ${person.name} ${LEVEL_WORDS[role]} (not an admin)`,
         requestedBy: viewer.agentId,
       });
       await refresh();
@@ -91,12 +102,47 @@ export async function setPersonRole(id: string, role: string): Promise<ActionRes
     }
     // The one-time links an admin made for others stop with the level. First, so a try that
     // fails halfway leaves the level as it was and the next try does both.
-    if (role === "member") await revokeInvitesMadeBy(person.id);
+    if (was === "admin") await revokeInvitesMadeBy(person.id);
     await setRole(person.id, role);
-    // A personal link made while they were a member must not hand out an admin's sign-in.
+    // A personal link made while they were an agent must not hand out an admin's sign-in.
     if (role === "admin") await revokePersonInvites(person.id);
     await refresh();
-    return { ok: true, message: role === "admin" ? `${person.name} is an admin now.` : `${person.name} is not an admin anymore.` };
+    if (role === "admin") return { ok: true, message: `${person.name} is an admin now.` };
+    if (was === "admin") return { ok: true, message: `${person.name} is not an admin anymore.` };
+    return { ok: true, message: `${person.name} is ${LEVEL_WORDS[role]} now.` };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}
+
+/**
+ * The upline a joiner picked is confirmed: they join that team (team numbers, My team) and the
+ * people above them see their clients. That upline, a manager above them, or an admin (rules.ts
+ * canConfirmJoiner, checked here on the server).
+ */
+export async function confirmUpline(id: string): Promise<ActionResult> {
+  return answerJoiner(id, true);
+}
+
+/** "Not on my team": the picked upline is cleared; the person stays on the board, on nobody's team. */
+export async function declineUpline(id: string): Promise<ActionResult> {
+  return answerJoiner(id, false);
+}
+
+async function answerJoiner(id: string, yes: boolean): Promise<ActionResult> {
+  try {
+    const viewer = await requireViewer();
+    if (!Id.safeParse(id).success) return { ok: false, error: "That person isn't here." };
+    const agents = await listAgents({ includeInactive: true });
+    const person = agents.find((a) => a.id === id);
+    if (!person) return { ok: false, error: "That person isn't here." };
+    if (person.upline_confirmed !== false || !person.upline_id) return { ok: true, message: `${person.name} isn't waiting anymore.` };
+    if (!canConfirmJoiner(viewer, person, ruleContext(agents))) return { ok: false, error: "Only their upline's managers or an admin can confirm them." };
+    const done = yes ? await confirmPickedUpline(person.id, person.upline_id) : await declinePickedUpline(person.id, person.upline_id);
+    if (!done) return { ok: true, message: `${person.name} isn't waiting anymore.` };
+    await refresh();
+    const upline = agents.find((a) => a.id === person.upline_id);
+    return { ok: true, message: yes ? `${person.name} is on ${upline ? `${upline.name.split(" ")[0]}'s` : "the"} team.` : `${person.name} isn't on a team now. An admin can set their upline.` };
   } catch (err) {
     return { ok: false, error: message(err) };
   }
@@ -104,12 +150,14 @@ export async function setPersonRole(id: string, role: string): Promise<ActionRes
 
 /**
  * The join link to send people (made the first time it is asked for, the same link after that).
- * With a leader's id: a link that puts whoever joins on that leader's team. The owner or an admin.
+ * With a leader's id: a link that puts whoever joins on that leader's team (confirmed at once).
+ * The owner or an admin: any; a manager: their own team's only (contract decision 7).
  */
 export async function getJoinLink(uplineId?: string | null): Promise<LinkResult> {
   try {
-    const viewer = await requireViewer("admin");
+    const viewer = await requireViewer();
     const leader = uplineId ?? null;
+    if (!canGetJoinLink(viewer, leader)) return { ok: false, error: isAdmin(viewer) || viewer.level !== "manager" ? "Only an admin can do that" : "You can share your own team's link." };
     if (leader !== null) {
       if (!Id.safeParse(leader).success) return { ok: false, error: "That person isn't here." };
       const person = await getAgent(leader);
@@ -134,14 +182,14 @@ export async function resetJoinLink(): Promise<LinkResult> {
   }
 }
 
-/** A person whose sign-in a manager may hand out: an admin only for members, the owner for anyone. */
+/** A person whose sign-in may be handed out: an admin for agents and managers, the owner for anyone (rules.ts canManageAccess). */
 async function linkTarget(id: string, viewer: Viewer): Promise<{ person: Person; error?: undefined } | { person?: undefined; error: string }> {
   if (!Id.safeParse(id).success) return { error: "That person isn't here." };
   const person = await getPerson(id);
   if (!person) return { error: "That person isn't here." };
   if (!person.active) return { error: `${person.name} is off the board. Bring them back first.` };
   // A link is a way to sign in as that person: an admin's or the owner's is the owner's to give.
-  if (!isOwner(viewer) && (person.role ?? "member") !== "member") return { error: "Only the owner can make a link for an admin." };
+  if (!canManageAccess(viewer, person)) return { error: "Only the owner can make a link for an admin." };
   return { person };
 }
 

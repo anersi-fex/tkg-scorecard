@@ -1,9 +1,9 @@
 import { cn } from "@/components/ui";
 
 /**
- * Tide initials avatars (the same as Sales Coach): a tinted circle with one or two letters. Each
- * person keeps the same tint everywhere, and every tint is a theme token pair, so it reads in
- * light and dark mode.
+ * Initials avatars. Since the CRM look (2026-11-12, the demo) every avatar is the same quiet circle:
+ * the raised color, a 1px line, the initials in the main text color (600). The tint helpers below
+ * (toneFor, teamTones) still exist for callers that pass a tone; the circle no longer shows it.
  */
 const TONES = [
   "bg-amber-100 text-amber-800",
@@ -13,7 +13,7 @@ const TONES = [
   "bg-red-100 text-red-800",
 ] as const;
 
-const NEUTRAL = "bg-gray-200 text-gray-700";
+const NEUTRAL = "border border-line-2 bg-surface-2 text-fg";
 
 /** "AK" from "Anersi Koka", "MA" from "Madonna". */
 export function initials(name: string): string {
@@ -76,11 +76,8 @@ export function Avatar({
   return (
     <span
       aria-hidden
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-full font-extrabold tracking-[-0.01em]",
-        neutral || (!tone && !toneKey) ? NEUTRAL : (tone ?? toneFor(toneKey!)),
-        className,
-      )}
+      data-toned={!neutral && Boolean(tone || toneKey) ? "" : undefined}
+      className={cn("inline-flex shrink-0 items-center justify-center rounded-full font-semibold tracking-[0.02em]", NEUTRAL, className)}
       style={{ width: size, height: size, fontSize: Math.max(10, Math.round(size * 0.36)) }}
     >
       {initials(name)}

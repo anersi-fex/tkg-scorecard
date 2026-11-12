@@ -23,15 +23,8 @@ const SPLASH_SCREENS: Array<[number, number, number]> = [
 const screenQuery = (w: number, h: number, ratio: number) =>
   `(device-width: ${w}px) and (device-height: ${h}px) and (-webkit-device-pixel-ratio: ${ratio}) and (orientation: portrait)`;
 
-// Light screens first with no color-scheme condition, then the dark ones: an iPhone keeps the
-// last link that matches.
-const startupImage = [
-  ...SPLASH_SCREENS.map(([w, h, ratio]) => ({ url: `/splash/splash-${w * ratio}x${h * ratio}.png`, media: screenQuery(w, h, ratio) })),
-  ...SPLASH_SCREENS.map(([w, h, ratio]) => ({
-    url: `/splash/splash-${w * ratio}x${h * ratio}-dark.png`,
-    media: `(prefers-color-scheme: dark) and ${screenQuery(w, h, ratio)}`,
-  })),
-];
+// Dark is the app's default for everyone (2026-11-12), so every iPhone opens on the dark screen.
+const startupImage = SPLASH_SCREENS.map(([w, h, ratio]) => ({ url: `/splash/splash-${w * ratio}x${h * ratio}-dark.png`, media: screenQuery(w, h, ratio) }));
 
 /** The live address for link previews; a malformed APP_URL never takes a page down. */
 function appBase(): URL {
@@ -58,7 +51,7 @@ export async function generateMetadata(): Promise<Metadata> {
       ],
       apple: "/apple-touch-icon.png",
     },
-    appleWebApp: { capable: true, title: "Scorecard", statusBarStyle: "default", startupImage },
+    appleWebApp: { capable: true, title: "Scorecard", statusBarStyle: "black", startupImage },
     // Next writes only the standard mobile-web-app-capable; iPhones read Apple's own tag before
     // they use the opening screens above.
     other: { "apple-mobile-web-app-capable": "yes" },
@@ -79,10 +72,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f2f3f7" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b0d12" },
-  ],
+  // The page color of the dark look, the default for everyone.
+  themeColor: "#141519",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
@@ -96,7 +87,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: INSTALL_OFFER_SCRIPT }} />
       </head>
-      <body className="flex min-h-full flex-col bg-ink text-gray-900">{children}</body>
+      <body className="flex min-h-full flex-col bg-ink text-fg">{children}</body>
     </html>
   );
 }

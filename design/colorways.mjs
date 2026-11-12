@@ -1,13 +1,17 @@
 // Scorecard colorway candidates (2026-10-27): the same Tide type, cards and layout as Sales Coach,
 // a different color story each. Every colorway gives light and dark values for the tokens the
 // screens use; neutrals are Tide's unless the colorway sets its own.
+// 2026-11-12 (the CRM look, "Agency dark" + the Scorecard gradient): Crimson's values are the
+// demo's (crimson #c42b32 to coral #ff6b57 in both modes; dark is the app's default). In the live
+// app every colorway only re-colors the accent (scripts/gen-colorway-css.mjs skips the neutrals:
+// page, card, raised, line, track, segment stay the app's own); the mockup renderer still uses them.
 export const COLORWAYS = [
   {
     key: "crimson",
     name: "Crimson",
     idea: "The Koka Group's own brand red, coral on dark. Sales-floor energy; the furthest from Sales Coach's cobalt.",
-    light: { accent: "#c42b32", accentText: "#a3242a", tint: "#fdecec", gradFrom: "#c42b32", gradTo: "#ff6b57", strongFrom: "#b8262d", strongTo: "#d1392c", glow: "rgba(196,43,50,0.32)", bar: "#f3a6a0", chipBg: "#fde3e1", chipText: "#9a1f26", chart1: "#c42b32", chart2: "#e59d26", down: "#b45309" },
-    dark: { accent: "#ff6b57", accentText: "#ff8a78", tint: "#3a1a1a", gradFrom: "#e5484d", gradTo: "#ff8a5c", strongFrom: "#c62f36", strongTo: "#d8503f", glow: "rgba(255,107,87,0.4)", bar: "#5a2a2d", chipBg: "#3d1a16", chipText: "#fca5a5", chart1: "#ff7a66", chart2: "#f5b942", down: "#fbbf24" },
+    light: { accent: "#c42b32", accentText: "#b0262d", tint: "#fbe9e8", gradFrom: "#c42b32", gradTo: "#ff6b57", strongFrom: "#b8262d", strongTo: "#e5493f", glow: "rgba(196,43,50,0.22)", bar: "#f0b3ad", chipBg: "#fbe3e1", chipText: "#9a1f26", chart1: "#c42b32", chart2: "#b8860b", down: "#9a6512" },
+    dark: { accent: "#e5493f", accentText: "#f37b6d", tint: "#3a2224", gradFrom: "#c42b32", gradTo: "#ff6b57", strongFrom: "#c42b32", strongTo: "#ff6b57", glow: "rgba(229,73,63,0.25)", bar: "#6a3431", chipBg: "#3a2224", chipText: "#f37b6d", chart1: "#f37b6d", chart2: "#d9b26a", down: "#d9b26a" },
   },
   {
     key: "emerald",
