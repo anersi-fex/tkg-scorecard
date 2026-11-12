@@ -134,7 +134,7 @@ export function Leaderboard({ who, field, columns, rows, teams, agencyName, scop
   /** One person's table row; `inside` marks a row opened under its team. */
   const agentRow = (r: ScoreRow, inside: boolean) => (
     <tr key={`${inside ? "in" : "a"}-${r.agentId}`} data-agent={r.agentId} className="group">
-      <td className={cn("sticky left-0 z-10 border-b border-line p-0", inside ? "bg-surface-2" : "bg-surface")}>
+      <td className={cn("sticky left-0 z-10 border-r border-b border-line p-0", inside ? "bg-surface-2" : "bg-surface")}>
         <div className={cn("relative flex h-10 w-[248px] items-center gap-1.5 pr-2 lg:w-[272px]", inside ? "pl-7" : "pl-2")}>
           <span aria-hidden className="absolute inset-y-1 left-0 rounded-r-lg bg-tint" style={{ width: `${share(r.totalCents, leadCents)}%` }} />
           <span className="relative w-6 shrink-0 text-right font-mono text-[13px] font-bold text-gray-600">{r.rank}</span>
@@ -228,7 +228,7 @@ export function Leaderboard({ who, field, columns, rows, teams, agencyName, scop
           <table className="w-full border-separate border-spacing-0">
             <thead>
               <tr>
-                {th("name", "Name", "left-0 z-30 pl-3 text-left")}
+                {th("name", "Name", "left-0 z-30 border-r pl-3 text-left")}
                 {th("policies", "Policies", "text-right")}
                 {columns.map((c) => th(`c:${c.key}`, c.label, "min-w-[68px] text-right"))}
                 {th("total", "Total", "right-0 z-30 border-l text-right")}
@@ -240,7 +240,7 @@ export function Leaderboard({ who, field, columns, rows, teams, agencyName, scop
                 shownTeams.map((t) => (
                   <Fragment key={t.leaderId}>
                     <tr data-team={t.leaderId}>
-                      <td className="sticky left-0 z-10 border-b border-line bg-surface p-0">
+                      <td className="sticky left-0 z-10 border-r border-b border-line bg-surface p-0">
                         <div className="relative flex h-10 w-[248px] items-center gap-1.5 pr-2 pl-1 lg:w-[272px]">
                           <span aria-hidden className="absolute inset-y-1 left-0 rounded-r-lg bg-tint" style={{ width: `${share(t.totalCents, leadTeamCents)}%` }} />
                           <button type="button" onClick={() => toggle(t.leaderId)} aria-expanded={isOpen(t)} aria-label={`${isOpen(t) ? "Hide" : "Show"} the people on ${t.name}'s team`} className="relative flex h-8 w-7 shrink-0 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100">

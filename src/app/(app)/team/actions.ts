@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { requireViewer } from "@/lib/auth";
 import { addAgent, listAgents, updateAgent } from "@/lib/data";
 import { cleanName, setInOffice, setUpline } from "@/lib/people";
 import type { ActionResult } from "../actions";
+
+// Any id Postgres holds (the same shape src/lib/people.ts accepts).
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * People > Add a person (owner, 2026-11-12): a name, whose team they are on and whether they
@@ -19,7 +21,7 @@ export async function addPersonToTeam(form: FormData): Promise<ActionResult> {
     if (!name) return { ok: false, error: "Type the person's first and last name." };
     const rawUpline = String(form.get("upline_id") ?? "").trim();
     const uplineId = rawUpline ? rawUpline : null;
-    if (uplineId !== null && !z.string().uuid().safeParse(uplineId).success) return { ok: false, error: "Pick the upline again." };
+    if (uplineId !== null && !UUID.test(uplineId)) return { ok: false, error: "Pick the upline again." };
     const inOffice = String(form.get("in_office") ?? "") === "1";
     const existing = await listAgents({ includeInactive: true });
     if (uplineId && !existing.some((a) => a.id === uplineId && a.active)) return { ok: false, error: "That upline isn't on the board." };

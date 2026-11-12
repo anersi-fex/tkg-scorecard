@@ -131,7 +131,7 @@ export default async function ScoreboardPage({ searchParams }: PageProps<"/score
     // Wider than the app's column on a computer: the table needs the room.
     <div className="lg:ml-[calc(50%_-_min(660px,_50vw_-_32px))] lg:w-[min(1320px,_100vw_-_64px)]" data-scoreboard={sb.scope}>
       <SearchProvider>
-        <Title sub={`${sb.scopeName} · ${sb.range.label}${whole ? " · the whole month" : ""}`} exportHref={`/api/scoreboard/export?${exportQuery.toString()}`} />
+        <Title sub={`${sb.scopeName} · ${sb.range.label}`} exportHref={`/api/scoreboard/export?${exportQuery.toString()}`} />
 
         <div className="mb-3 flex flex-wrap items-center gap-2">
           {myLeader && (

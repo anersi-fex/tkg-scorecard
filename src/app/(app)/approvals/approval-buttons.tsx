@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { toast } from "@/components/toaster";
+import { APPROVALS_CHANGED } from "@/components/nav-bar";
 import { decideApproval } from "../people-actions";
 
 /** Approve or Decline one request. The server checks it is the owner and that nobody answered it first. */
@@ -16,6 +17,8 @@ export function ApprovalButtons({ id }: { id: string }) {
         const r = await decideApproval(id, approve);
         toast(r.ok ? (r.message ?? (approve ? "Approved." : "Declined.")) : r.error, r.ok);
         router.refresh();
+        // The badge on the initials counts again.
+        window.dispatchEvent(new Event(APPROVALS_CHANGED));
       } catch {
         toast("Couldn't reach the server. Try again.", false);
       }

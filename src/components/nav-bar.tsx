@@ -116,19 +116,28 @@ export interface NavBarProps {
   approvals?: number;
 }
 
+/** Sent on `window` when the owner answers a request (the Approvals page), so the badge counts again. */
+export const APPROVALS_CHANGED = "sc-approvals-changed";
+
 /** The owner's waiting requests (the badge on the initials): asked once the bar shows and again on each page change. Nobody else asks. */
 function useApprovalCount(isOwner: boolean, pathname: string, initial: number): number {
   const [count, setCount] = useState(initial);
   useEffect(() => {
     if (!isOwner) return;
     let live = true;
-    pendingApprovalCount()
-      .then((n) => {
-        if (live) setCount(n);
-      })
-      .catch(() => {});
+    const ask = () => {
+      pendingApprovalCount()
+        .then((n) => {
+          if (live) setCount(n);
+        })
+        .catch(() => {});
+    };
+    ask();
+    // The Approvals page says so when the owner answers one, so the badge follows at once.
+    window.addEventListener(APPROVALS_CHANGED, ask);
     return () => {
       live = false;
+      window.removeEventListener(APPROVALS_CHANGED, ask);
     };
   }, [isOwner, pathname]);
   return isOwner ? count : 0;
@@ -272,7 +281,7 @@ function AccountMenu({ role, person, level, approvals }: { role: Role; person: s
           {badge}
         </span>
         {waiting > 0 && (
-          <span data-approvals-badge aria-hidden className="absolute top-0.5 right-0 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 font-mono text-[11px] leading-none font-bold text-white ring-2 ring-ink">
+          <span data-approvals-badge aria-hidden className="absolute -top-0.5 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-danger px-1 font-mono text-[11px] leading-none font-bold text-white ring-2 ring-ink">
             {waiting > 9 ? "9+" : waiting}
           </span>
         )}

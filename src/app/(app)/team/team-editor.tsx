@@ -352,7 +352,8 @@ function Sheet({ label, onClose, children }: { label: string; onClose: () => voi
   }, [onClose]);
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/70 p-3 sm:items-center"
+      // Over the header and the tab bar (z-30), under the toasts (z-40): "Saved." and "Sent to Anersi" show over the sheet.
+      className="fixed inset-0 z-[35] flex items-end justify-center bg-ink/70 p-3 sm:items-center"
       role="dialog"
       aria-modal="true"
       aria-label={label}
@@ -654,6 +655,8 @@ function PersonEditor({
     setInOffice(person.inOffice);
   }
   const [signIn, setSignIn] = useState<string | null>(null);
+  // What the server said about the admin change (an admin's request waits for the owner): kept on the row.
+  const [roleNote, setRoleNote] = useState<string | null>(null);
   const first = firstName(person.name);
   const deskLink = `${base}/log?agent=${person.id}`;
   // The owner's row is the owner's; an admin's sign-in, name and place on the board too.
@@ -831,8 +834,8 @@ function PersonEditor({
         <div className={cn(SECTION, "flex items-center justify-between gap-3")} data-admin-row>
           <div className="min-w-0">
             <p className="text-[14px] font-bold text-gray-900">{person.role === "admin" ? "Admin" : "Not an admin"}</p>
-            <p className="text-[12.5px] font-medium text-gray-500">
-              {owner ? "An admin runs goals, people, this month's sales and the board." : "Anersi gets a quick OK request first."}
+            <p className={cn("text-[12.5px] font-medium", roleNote ? "text-accent-text" : "text-gray-500")} data-role-note={roleNote ? "" : undefined}>
+              {roleNote ?? (owner ? "An admin runs goals, people, this month's sales and the board." : "Anersi gets a quick OK request first.")}
             </p>
           </div>
           <Button
@@ -843,7 +846,16 @@ function PersonEditor({
             onClick={() => {
               const makeAdmin = person.role !== "admin";
               if (owner && !window.confirm(makeAdmin ? `Make ${person.name} an admin? They can change goals, people, this month's sales and the board.` : `Remove ${person.name} as an admin?`)) return;
-              run(() => setPersonRole(person.id, makeAdmin ? "admin" : "member"));
+              start(async () => {
+                try {
+                  const r = await setPersonRole(person.id, makeAdmin ? "admin" : "member");
+                  toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+                  // An admin's request changes nothing yet: the server's words stay on the row.
+                  if (r.ok && !owner) setRoleNote(r.message ?? "Sent to Anersi for a quick OK.");
+                } catch {
+                  toast("Couldn't reach the server. Try again.", false);
+                }
+              });
             }}
           >
             {person.role === "admin" ? "Remove admin" : "Make admin"}
