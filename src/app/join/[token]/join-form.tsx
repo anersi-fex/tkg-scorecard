@@ -50,7 +50,7 @@ export function JoinForm({ token, kind, people, leaderId, needsPhone, inOffice }
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4" data-join={kind}>
+    <form method="post" onSubmit={onSubmit} className="space-y-4" data-join={kind}>
       <input type="hidden" name="token" value={token} />
       <input type="hidden" name="in_office" value={office ? "1" : "0"} />
       <input type="hidden" name="upline_id" value={unsure ? "" : (upline ?? "")} />

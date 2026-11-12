@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     const names = agents.map((a) => a.name);
     return NextResponse.json({ ok: false, error: byFirst.length > 1 ? "Two people share that first name; send the full name" : "No such person", people: names }, { status: 404 });
   }
-  if (kind === "pc" && !match.pc_licensed) return NextResponse.json({ ok: false, error: `${match.name} isn't marked P&C licensed (Team page)` }, { status: 400 });
+  if (kind === "pc" && !match.pc_licensed) return NextResponse.json({ ok: false, error: `${match.name} isn't marked P&C licensed (People page)` }, { status: 400 });
   try {
     const sale = await insertSale({
       agent_id: match.id,

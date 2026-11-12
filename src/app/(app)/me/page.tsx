@@ -42,7 +42,7 @@ export default async function MePage() {
         <div className="space-y-4">
           <Card>
             <p className="text-[15px] leading-snug text-gray-900" data-me="shared">
-              {viewer.via === "owner-password" ? "You're on the owner password. Add yourself on the Team page to get a profile." : "You're on the team password. Ask for a join link to get your own sign-in."}
+              {viewer.via === "owner-password" ? "You're on the owner password. Add yourself on the People page to get a profile." : "You're on the team password. Ask for a join link to get your own sign-in."}
             </p>
           </Card>
           <InstallRow />

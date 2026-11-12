@@ -176,11 +176,13 @@ test("the Production table shows the most recent days that fit, and prints them 
   assert.equal(compactDollars(950_00), "$950");
   // $999.50 and up rounds to a thousand: never "$1000".
   assert.equal(compactDollars(999_49), "$999");
-  assert.equal(compactDollars(999_50), "$1.0K");
-  assert.equal(compactDollars(999_99), "$1.0K");
-  assert.equal(compactDollars(1_000_00), "$1.0K");
+  assert.equal(compactDollars(999_50), "$1K");
+  assert.equal(compactDollars(999_99), "$1K");
+  assert.equal(compactDollars(1_000_00), "$1K");
+  // A zero tenth is dropped, as on the Scoreboard page.
+  assert.equal(compactDollars(57_000_00), "$57K");
   assert.equal(compactDollars(1_234_567_00), "$1.2M");
-  assert.equal(compactDollars(999_960_00), "$1.0M");
+  assert.equal(compactDollars(999_960_00), "$1M");
   assert.equal(compactDollars(0), "$0");
   assert.equal(compactDollars(-2_100_00), "−$2.1K");
 });

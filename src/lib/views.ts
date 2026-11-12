@@ -147,8 +147,10 @@ export function shortDay(date: string): string {
 export function compactDollars(cents: number): string {
   const dollars = Math.abs(cents) / 100;
   const sign = cents < 0 ? "−" : "";
-  if (dollars >= 999_950) return `${sign}$${(dollars / 1_000_000).toFixed(1)}M`;
-  if (Math.round(dollars) >= 1000) return `${sign}$${(dollars / 1000).toFixed(1)}K`;
+  // One decimal, dropped when it is zero ("$57K", "$91.6K"): the same spelling as the Scoreboard page's shortMoney.
+  const one = (n: number) => n.toFixed(1).replace(/\.0$/, "");
+  if (dollars >= 999_950) return `${sign}$${one(dollars / 1_000_000)}M`;
+  if (Math.round(dollars) >= 1000) return `${sign}$${one(dollars / 1000)}K`;
   return `${sign}$${Math.round(dollars)}`;
 }
 

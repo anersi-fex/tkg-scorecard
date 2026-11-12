@@ -22,6 +22,8 @@ Vercel builds the `main` branch, and right now `main` holds only a one-line READ
 4. Do the same with `0002_carrier.sql` (the carrier a sale was written with; added 2026-10-27). Done already on the live project if Log a sale shows the carrier chips.
 5. Do the same with `0003_pc.sql` (P&C next to life, added 2026-11-04: a sale's kind and who is P&C licensed). Then, on the Team page, tap Edit on yourself, Moe and Maira and switch on **P&C licensed**: Log a sale then offers Life or P&C for the three of you.
 6. Do the same with `0004_pc_goals.sql` (P&C goals, added 2026-11-04). Then Settings > **P&C goal** takes the team's P&C goal for the month, and Team > Edit takes each P&C licensed person's own.
+7. Do the same with `0005_lineage.sql` (the Lineage Financial update, added 2026-11-12: everyone's own sign-in, uplines and teams, the office group, admins, join links, approvals). Run it before that update is merged: the app that is live keeps working with it in, and running it twice is safe. It makes your row (the one named exactly Anersi Koka) the owner and Jack Gariglio's an admin, the first time only. NOT applied on the live project yet (2026-11-12). Claude can run this one for you if you say yes; then there is nothing to paste.
+8. Once the Lineage update is live the app is life insurance only: the P&C switches and goals of steps 5 and 6 show only after you turn on Settings > **Other lines of business** > **P&C board** (the last row, yours alone), and Team is called **People**, with a pencil on each person where Edit was.
 
 ### Step 4. Copy two values
 1. **Project Settings** (gear) > **Data API**: copy the **Project URL** (it looks like `https://abcd.supabase.co`, nothing after `.co`).
@@ -46,29 +48,71 @@ Vercel builds the `main` branch, and right now `main` holds only a one-line READ
 
 ### Step 7. Your team and your goal
 1. Open the address on your phone, sign in with the **owner** password.
-2. Tap **Team** and add each person (first and last name). All seven, you included.
+2. Tap **Team** (called **People** once the Lineage update is live) and add each person (first and last name). All seven, you included. With the Lineage update you can send one join link instead and people add themselves: see Getting everyone on, below.
 3. Tap your initials (top right) > **Settings** > type the month's team goal in dollars of annual premium > **Save**.
 4. Tap **Log a sale**, log one real sale. You should see "Logged" with a check mark.
 
 ### Step 8. The TV (Mac mini)
 1. On the Mac mini, open Safari or Chrome and go to the address + `/board` (for example `https://tkg-scorecard-xxxx.vercel.app/board`).
 2. Sign in with the **team** password. The board opens dark. It stays signed in for 180 days.
-3. Full screen: press **Control+Command+F** (the Mac's own full screen, which stays on when the page reloads itself after an update; the page's **F** key also works, but drops after a reload). Light or dark, the colorway, P&C's color, and which screens it shows (Rotate: Life for a minute, then P&C and Agency total for 15 seconds each, once the month has a P&C sale; or one screen kept on) are set on your phone under Settings (TV look, Colorway, P&C color, TV screens); the TV follows within 5 seconds.
+3. Full screen: press **Control+Command+F** (the Mac's own full screen, which stays on when the page reloads itself after an update; the page's **F** key also works, but drops after a reload). Light or dark, the colorway, P&C's color, and which screens it shows (Rotate: Life for a minute, then P&C and Agency total for 15 seconds each, once the month has a P&C sale; or one screen kept on) are set on your phone under Settings (TV look, Colorway, P&C color, TV screens); the TV follows within 5 seconds. Once the Lineage update is live, Rotate is the Leaderboard for 40 seconds (the office group on top), then Scoreboard, Production and Teams for 20 seconds each (a screen with nothing to show is skipped), and P&C's color and screens are there only while the P&C board is on.
 4. System Settings > **Lock Screen**: set "Turn display off" to **Never** while the board is up. The page also asks the Mac to keep the screen awake.
 5. Plug the HDMI transmitter into the Mac mini, the receiver into the TV. The board refreshes itself every 5 seconds; a new sale gets confetti.
 6. Sound: the board plays the sale sound you pick on your phone under Settings > Sale sound. Browsers hold sound back until someone clicks the page, so once: in **Safari**, Safari > Settings > Websites > **Auto-Play**, find the board's address and pick **Allow All Auto-Play** (it then plays after every reload too); in **Chrome**, click the board once after it opens. While a browser holds the sound back, the board's footer says "Click or press a key once for sound".
 
 ### Step 9. Everyone's phone
+Once the Lineage update is live, do this the new way: each person gets their own sign-in from one join link, and a guide puts the app on their phone (Getting everyone on, below). Until then:
 1. Each person opens the address in Safari, signs in with the **team** password.
 2. **Share** button > **Add to Home Screen** > **Add**. The icon is the podium.
 3. They log their own sales from **Log a sale** (the app remembers who they picked last time).
 
 That is release 1. Send Claude a photo of the TV: that is the proof.
 
+## Getting everyone on (Lineage Financial, added 2026-11-12)
+
+NOT live yet: this part works once the Lineage update is merged and `0005_lineage.sql` (Phase 1, Step 3.7) is in.
+
+Everyone gets their own sign-in: their cell number and a password they pick. No text message, no email. The two passwords you already have keep working, so the TV and the phones stay signed in.
+
+### Step 1. Send the join link
+1. Sign in with the **owner** password and tap **People** (the last tab).
+2. At the top is **Join link**: "Send this to everyone. They sign up themselves." Tap **Copy** (or **Share**) and put it in the agency's group chat.
+3. For one leader's team only: tap **Link for one team, or a new link**, pick the leader, and send that link instead. Whoever uses it lands on that leader's team.
+4. If a link ever gets out: **Make a new link**. Every link sent before stops working.
+
+### What a new person sees
+1. They tap the link. One card: **Join Lineage Financial on Scorecard**.
+2. They type their first and last name and their cell number, pick their upline from the list (**I'm not sure** is fine: you or an admin put them on the right team later), switch on **I work in the office** if they do, and pick a password (8 characters or more). Then **Join**.
+3. They are signed in, and the next screen is the install guide (below), which puts Scorecard on their phone.
+4. Someone who is already on the board types their name the way the board has it: they get their own row, with the sales already on it.
+5. From then on they sign in with that cell number and password. They log their own sales, and can take one back for 15 minutes.
+
+### Step 2. Jack's admin sign-in
+The database step makes Jack Gariglio an admin. An admin's sign-in never comes from the join link: you send it.
+1. **People** > the pencil on **Jack Gariglio**. Under his name it should say **Admin**. If it does not, tap **Make admin** first.
+2. **Send a sign-in link** > **Make their sign-in link**, then **Copy** or **Share**, and text it to Jack only. It works once, for 7 days, and it is shown once (making another turns this one off).
+3. Jack opens it, types his cell number and picks a password. He is in as an admin.
+
+What Jack can do: goals, people, any sale of this month, the board and TV settings, the join links. What waits for your yes (your initials > **Approvals**, with a count on your initials): making or removing an admin, and changing a sale of a past month. What he never sees: the passwords, the Shortcut card, the P&C switch.
+
+The same pencil works on your own name if you want to sign in with your own number. The owner password keeps working either way.
+
+### Step 3. The office group, uplines, goals
+1. **People** > the pencil on a person: **Upline** (whose team they are on), **In the office** (the office group is at the top of the boards), and their goal.
+2. People can set both themselves as they join, and the office switch later under their initials > **Your profile**.
+3. Forgot a password: the pencil on that person > **Reset sign-in** > **Make a reset link**, and send it to them. It works once.
+
+### The install guide
+Everyone lands on it right after joining; later it is under their initials > **Put Scorecard on your phone**. It sees which phone and browser they are on, says how many taps it takes, and shows one picture per tap. On an iPhone in Safari: the Share button (a square with an arrow pointing up; if it is not there, the three dots first), **Add to Home Screen**, **Add**. Try it once on your own iPhone and tell Claude if a word on the screen does not match: it was written without a phone in hand.
+
+### What the two shared passwords are for now
+- **Owner password**: still signs you in as the owner, anywhere. Once anyone has their own sign-in, the sign-in screen opens asking for a cell number: tap **Use the team password** under it, and type the owner password in that box (it takes both passwords).
+- **Team password**: the TV, and a phone that has not joined yet. It can still log sales, as before. Once people have their own sign-ins: **Settings** > **Sign-ins** > switch off **The shared team password can log sales**. Then the team password only looks (the TV keeps working) and people log with their own sign-in.
+
 ## Phase 2: desk tags and a Shortcut (optional, after release 1 works)
 
 ### Option A, no Shortcut: a tag that opens Log a sale
-1. On your phone, **Team** > a person > **Edit** > **Copy** their desk link.
+1. On your phone, **Team** > a person > **Edit** > **Copy** their desk link. (Once the Lineage update is live: **People** > the pencil on a person > **Desk link** > **Copy**.)
 2. Write that link to an NFC tag with any NFC writer app (NFC Tools is fine). When a phone touches the tag, Log a sale opens with that person already picked. Two taps left: the amount, then **Log it**.
 
 ### Option B: a Shortcut that asks and posts (confetti without opening the app)
@@ -90,4 +134,6 @@ That is release 1. Send Claude a photo of the TV: that is the proof.
 - Optional: `LOG_TOKEN` (Shortcut endpoint), `SESSION_SECRET` (32+ characters; otherwise made from the Supabase key).
 - Changing a password signs out every device that used it. The owner password also opens Settings and can fix or remove any sale; the team password can log sales and take one back within 15 minutes.
 - Ten wrong passwords in 15 minutes lock that one phone or computer out for 15 minutes; everyone else is unaffected.
+- Once the Lineage update (built 2026-11-12) is live: each person also has their own sign-in (cell number and password, made through a join link; see Getting everyone on). Four levels: you (the owner password, or your own sign-in), admins (goals, people, this month's sales, the board; two things wait for your yes under Approvals), members (their own sales and profile), and the team password (the TV and phones that have not joined yet; whether it can still log sales is your switch under Settings > Sign-ins). A person's own password is theirs to change under their initials > Your profile; Sign out everywhere is there too.
+- With that update the ten wrong tries are counted per address, and an office Wi-Fi is one address: ten wrong passwords in 15 minutes close the sign-in screens for everyone on it until they age out, 15 minutes at most. Phones already signed in, the TV and the join link keep working.
 - No cron jobs, no email, no AI in release 1.

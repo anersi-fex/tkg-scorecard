@@ -67,7 +67,7 @@ function AboutForm({ name, phone, inOffice, upline }: Pick<Props, "name" | "phon
 
   return (
     <Card className="space-y-4">
-      <form onSubmit={onSubmit} className="space-y-4" data-me="about">
+      <form method="post" onSubmit={onSubmit} className="space-y-4" data-me="about">
         <div>
           <Label htmlFor="me-name" className="font-semibold">
             First and last name
@@ -123,7 +123,7 @@ function PasswordForm({ hasLogin }: { hasLogin: boolean }) {
 
   return (
     <Card>
-      <form ref={formRef} onSubmit={onSubmit} className="space-y-4" data-me="password">
+      <form ref={formRef} method="post" onSubmit={onSubmit} className="space-y-4" data-me="password">
         <h2 className="text-[18px] leading-tight font-extrabold tracking-[-0.02em] text-gray-900">{hasLogin ? "Change password" : "Set a password"}</h2>
         {hasLogin && (
           <div>

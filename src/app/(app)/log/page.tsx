@@ -36,7 +36,7 @@ export default async function LogPage({ searchParams }: PageProps<"/log">) {
               Add your people first.
             </Link>
           ) : (
-            "Ask Anersi to add the team."
+            "Ask an admin to add people."
           )}
         </Notice>
       ) : viewer.level === "team" && !settings.teamPasswordLogs ? (

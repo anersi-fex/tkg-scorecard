@@ -49,7 +49,7 @@ export function LoginForm({ next, start }: { next: string; start: LoginWay }) {
   }
 
   return (
-    <form ref={formRef} onSubmit={onSubmit} className="space-y-4" data-way={way}>
+    <form ref={formRef} method="post" onSubmit={onSubmit} className="space-y-4" data-way={way}>
       {error && <Notice tone="red">{error}</Notice>}
       <input type="hidden" name="next" value={next} />
       {way === "person" ? (

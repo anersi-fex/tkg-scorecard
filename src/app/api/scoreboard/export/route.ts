@@ -32,7 +32,11 @@ export async function GET(req: NextRequest) {
     const sb = await loadScoreboard({ month, leaderId: team, today });
     // An id that is nobody's would be an empty file with no reason given.
     if (team && sb.scopeName === "This team") return bad("That team was not found");
-    const name = `scoreboard${who === "teams" ? "-teams" : ""}${view === "dates" ? "" : `-by-${view}`}-${month}.csv`;
+    // A team's file says whose it is, so it never shares a name with the agency's.
+    const leader = sb.scopeName.replace(/['’]s team$/, "").toLowerCase();
+    const slug = leader.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    const whose = team && slug ? `-${slug}-team` : "";
+    const name = `scoreboard${whose}${who === "teams" ? "-teams" : ""}${view === "dates" ? "" : `-by-${view}`}-${month}.csv`;
     // The mark at the start tells a spreadsheet the file is UTF-8 (names with accents stay right).
     return new NextResponse(`﻿${scoreboardCsv(sb, who, view)}`, {
       headers: {

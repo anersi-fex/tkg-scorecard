@@ -93,7 +93,7 @@ export function SaleRowMenu({
               {pending ? "Removing..." : role === "owner" ? "Remove" : "Undo (just logged)"}
             </button>
           ) : (
-            <p className="px-3 py-2 text-[13px] leading-snug text-gray-500">Only Anersi can remove a sale after 15 minutes.</p>
+            <p className="px-3 py-2 text-[13px] leading-snug text-gray-500">Only an admin can remove a sale after 15 minutes.</p>
           )}
         </div>
       )}

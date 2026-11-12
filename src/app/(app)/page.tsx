@@ -626,7 +626,7 @@ function NobodyYet({ show, role }: { show: boolean; role: string }) {
           Add your team
         </Link>
       ) : (
-        "Ask Anersi to add the team."
+        "Ask an admin to add people."
       )}
     </li>
   );

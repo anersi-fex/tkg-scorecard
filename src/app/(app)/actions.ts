@@ -91,7 +91,7 @@ export async function logSale(form: FormData): Promise<ActionResult> {
     const agents = await listAgents();
     const agent = agents.find((a) => a.id === input.agent_id);
     if (!agent) return { ok: false, error: "That person isn't on the team anymore." };
-    if (input.kind === "pc" && !agent.pc_licensed) return { ok: false, error: `${agent.name} isn't marked P&C licensed. Anersi can change that on the Team page.` };
+    if (input.kind === "pc" && !agent.pc_licensed) return { ok: false, error: `${agent.name} isn't marked P&C licensed. The owner can change that on the People page.` };
     // The carrier must be on the list for the kind (a screen left on the other kind cannot slip one through),
     // and a P&C line must be one the carrier writes.
     const wanted = input.carrier.toLowerCase();
@@ -202,7 +202,15 @@ export async function editSale(id: string, form: FormData): Promise<ActionResult
       if (inPastMonth(sale.sold_on) || inPastMonth(input.sold_on)) {
         const was = `${sale.agent_name}'s ${formatDollars(sale.premium_cents)} sale of ${dayLabel(sale.sold_on)}`;
         const now = `${sale.agent_id === agent.id ? "" : `${agent.name}, `}${formatDollars(cents)}, ${dayLabel(input.sold_on)}`;
-        await requestApproval({ kind: "edit_past_sale", payload: { sale_id: sale.id, patch }, summary: `Fix ${was} to ${now}`, requestedBy: viewer.agentId });
+        // The owner approves one sentence: it names everything the fix changes, not only the amount and the day.
+        const more = [
+          input.policies !== sale.policies ? `${input.policies} ${input.policies === 1 ? "policy" : "policies"}` : "",
+          (input.carrier ?? "") !== (sale.carrier ?? "") ? `carrier ${input.carrier ?? "none"}` : "",
+          (input.product ?? "") !== (sale.product ?? "") ? `product ${input.product ?? "none"}` : "",
+          (input.note ?? "") !== (sale.note ?? "") ? "a new note" : "",
+        ].filter(Boolean);
+        const summary = `Fix ${was} to ${now}${more.length ? ` (${more.join(", ")})` : ""}`.slice(0, 200);
+        await requestApproval({ kind: "edit_past_sale", payload: { sale_id: sale.id, patch }, summary, requestedBy: viewer.agentId });
         refresh();
         return { ok: true, message: SENT_FOR_OK };
       }
