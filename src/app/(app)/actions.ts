@@ -302,8 +302,9 @@ export async function setPersonActive(id: string, active: boolean): Promise<Acti
     if (!Id.safeParse(id).success) return { ok: false, error: "That person isn't here." };
     const person = await getAgent(id);
     if (!person) return { ok: false, error: "That person isn't here." };
-    // Off the board ends a person's sign-in and back on the board returns it, so for the owner's
-    // row or an admin's both ways are the owner's call (making an admin always waits for the owner).
+    // Off the board ends a person's sign-in, and back on the board lets their number and password
+    // sign in again, so for the owner's row or an admin's both ways are the owner's call (making
+    // an admin always waits for the owner).
     if (!isOwner(viewer) && (person.role === "owner" || person.role === "admin")) return { ok: false, error: "Only the owner can take an admin off the board or bring one back." };
     if (!active) {
       // Off the board ends more than today's access: the one-time links they made for others and
