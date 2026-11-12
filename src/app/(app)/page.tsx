@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requirePage } from "@/lib/auth";
+import { currentViewer, requirePage } from "@/lib/auth";
 import { dbConfigured } from "@/lib/supabase";
 import { loadMonthSnapshot, type AgentLine, type MonthSnapshot } from "@/lib/board";
-import { getSettings } from "@/lib/data";
+import { getSettings, listAgents } from "@/lib/data";
 import { addMonths, dayLabel, daysLeftLabel, isMonthKey, monthKeyOf, monthLabel, todayInDetroit, type MonthClock, type Pace } from "@/lib/month";
 import { isView, lifeDaily, linesSummary, pcDaily, type View } from "@/lib/views";
 import { formatDollars, formatMoney } from "@/lib/money";
+import { buildOrg } from "@/lib/org";
 import { Avatar } from "@/components/avatar";
 import { GoalBar } from "@/components/goal-bar";
 import { KindDot, KindSplit, PcTag } from "@/components/kind";
@@ -44,11 +45,12 @@ function paceLine(clock: MonthClock, pace: Pace, productionCents: number, goalCe
 const toneClass = (tone: ReturnType<typeof paceLine>["tone"]) =>
   tone === "green" ? "text-green-700" : tone === "amber" ? "text-amber-800" : tone === "red" ? "text-red-700" : tone === "blue" ? "text-accent-text" : "text-gray-600";
 
-/** "/?view=pc&month=2026-10": the switch and the month arrows keep each other. Life and this month are the defaults. */
-function homeHref(view: View, month: string, current: string): string {
+/** "/?view=pc&month=2026-10&team=mine": the switch, the month arrows and the My team filter keep each other. Life, this month and everyone are the defaults. */
+function homeHref(view: View, month: string, current: string, mine = false): string {
   const q = new URLSearchParams();
   if (view !== "life") q.set("view", view);
   if (month !== current) q.set("month", month);
+  if (mine) q.set("team", "mine");
   const qs = q.toString();
   return qs ? `/?${qs}` : "/";
 }
@@ -62,11 +64,22 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   // Life first (owner, 2026-11-04: the goal is life). The other two views exist only while the owner
   // has the P&C board on (Settings > Other lines of business); off, Home is the life board alone.
   const asked: View = isView(params.view) ? params.view : "life";
+  const askedMine = params.team === "mine";
   if (!dbConfigured()) return <PageHeader month={month} current={current} view="life" />;
 
   let s: MonthSnapshot;
+  // "My team" (owner, 2026-11-12): the viewer's own people when they lead some, else the team they
+  // are on. The shared team password names nobody, so it has no filter to offer.
+  let myTeam: { leaderName: string; ids: Set<string> } | null = null;
   try {
-    s = await loadMonthSnapshot(month, { today });
+    const [snapshot, everyone, viewer] = await Promise.all([loadMonthSnapshot(month, { today }), listAgents({ includeInactive: true }), currentViewer()]);
+    s = snapshot;
+    const me = viewer?.agentId && everyone.some((a) => a.id === viewer.agentId) ? viewer.agentId : null;
+    if (me) {
+      const org = buildOrg(everyone);
+      const leader = org.isLeader(me) ? me : org.uplineOf(me);
+      if (leader) myTeam = { leaderName: org.nameOf(leader) ?? "", ids: new Set(org.teamOf(leader)) };
+    }
   } catch (err) {
     return (
       <>
@@ -84,13 +97,22 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   // The sales list is where a sale is fixed or taken back: everything on Life and the total, P&C alone on P&C.
   const listed = view === "pc" ? s.sales.filter((r) => r.kind === "pc") : s.sales;
   const top = s.agents[0];
+  const mine = askedMine && myTeam !== null && view === "life";
 
   return (
     <>
-      <PageHeader month={month} current={current} view={view} daysLeft={s.clock.position === "current" ? { text: daysLeftLabel(s.clock), amber: s.clock.remaining <= 2 } : null} />
+      <PageHeader month={month} current={current} view={view} mine={mine} daysLeft={s.clock.position === "current" ? { text: daysLeftLabel(s.clock), amber: s.clock.remaining <= 2 } : null} />
       {pcOn && <ViewSwitch view={view} month={month} current={current} />}
 
-      {view === "life" && <LifeView s={s} role={role} goalLine={tick !== null && (s.team.goalCents > 0 || s.agents.some((a) => a.goalCents > 0)) ? tick : null} today={today} />}
+      {view === "life" && (
+        <LifeView
+          s={s}
+          role={role}
+          goalLine={tick !== null && (s.team.goalCents > 0 || s.agents.some((a) => a.goalCents > 0)) ? tick : null}
+          today={today}
+          team={myTeam ? { ...myTeam, on: mine, allHref: homeHref("life", month, current), mineHref: homeHref("life", month, current, true) } : null}
+        />
+      )}
       {view === "pc" && <PcView s={s} role={role} goalLine={tick !== null && (s.team.pcGoalCents > 0 || s.agents.some((a) => a.pcGoalCents > 0)) ? tick : null} today={today} />}
       {view === "total" && <TotalView s={s} role={role} goalLine={tick !== null && (s.team.totalGoalCents > 0 || s.agents.some((a) => a.totalGoalCents > 0)) ? tick : null} today={today} />}
 
@@ -181,13 +203,36 @@ function ViewSwitch({ view, month, current }: { view: View; month: string; curre
 }
 
 /** The life view: the goal card and the leaderboard measure life alone (owner, 2026-11-04). */
-function LifeView({ s, role, goalLine, today }: { s: MonthSnapshot; role: string; goalLine: number | null; today: string }) {
+function LifeView({
+  s,
+  role,
+  goalLine,
+  today,
+  team,
+}: {
+  s: MonthSnapshot;
+  role: string;
+  goalLine: number | null;
+  today: string;
+  /** The viewer's team, when they have one: the filter chips over the leaderboard. */
+  team: { leaderName: string; ids: Set<string>; on: boolean; allHref: string; mineHref: string } | null;
+}) {
   const line = paceLine(s.clock, s.team.pace, s.team.lifeCents, s.team.goalCents);
   const width = s.team.goalCents > 0 ? Math.min(100, s.team.goalPct) : 0;
   // The people on the board and anyone with life this month (someone off it with only P&C is on the P&C view)
   const people = s.agents.filter((a) => a.active || a.lifeCents > 0);
   const maxLife = Math.max(1, ...people.map((a) => a.lifeCents));
   const current = s.clock.position === "current";
+  // In the office first (owner, 2026-11-12: "their numbers should be showing at the top"): each
+  // group ranked among itself (groupRank). One list while nobody is marked in the office.
+  const shown = [...(team?.on ? people.filter((a) => team.ids.has(a.id)) : people)].sort((x, y) => x.groupRank - y.groupRank);
+  const split = people.some((a) => a.inOffice);
+  const groups: Array<{ title: string | null; people: AgentLine[] }> = split
+    ? [
+        { title: "In the office", people: shown.filter((a) => a.inOffice) },
+        { title: "Everyone else", people: shown.filter((a) => !a.inOffice) },
+      ].filter((g) => g.people.length > 0)
+    : [{ title: null, people: shown }];
   return (
     <>
       <Card className="relative overflow-hidden p-5">
@@ -221,7 +266,7 @@ function LifeView({ s, role, goalLine, today }: { s: MonthSnapshot; role: string
       {/* One track per person: the share of their own goal in life (of the leader's life without one), a gray tick at the goal line today. */}
       <div className="mt-6">
         <div className="flex items-end justify-between gap-3">
-          <ListTitle count={people.length}>{s.pcEnabled ? "Life leaderboard" : "Leaderboard"}</ListTitle>
+          <ListTitle count={shown.length}>{s.pcEnabled ? "Life leaderboard" : "Leaderboard"}</ListTitle>
           {goalLine !== null && (
             <p className="flex shrink-0 items-center gap-1.5 pr-1 pb-0.5 text-[11px] font-semibold text-gray-500">
               <span aria-hidden className="inline-block h-3 w-0.5 rounded-[1px] bg-gray-500" />
@@ -229,25 +274,54 @@ function LifeView({ s, role, goalLine, today }: { s: MonthSnapshot; role: string
             </p>
           )}
         </div>
-        <ListCard className="mt-2">
-          <NobodyYet show={people.length === 0} role={role} />
-          {people.map((a) => {
-            const hasGoal = a.goalCents > 0;
-            const width = hasGoal ? Math.min(100, a.goalPct) : Math.round((a.lifeCents / maxLife) * 100);
-            return (
-              <Row
-                key={a.id}
-                a={a}
-                rank={a.rank}
-                amount={a.lifeCents}
-                today={current ? a.todayLifeCents : 0}
-                bar={<GoalBar width={width} lifeShare={width} goalLine={hasGoal ? goalLine : null} />}
-                pct={hasGoal ? a.goalPct : null}
-                small={`${a.lifePolicies} ${a.lifePolicies === 1 ? "policy" : "policies"}${hasGoal ? "" : " · no goal"}`}
-              />
-            );
-          })}
-        </ListCard>
+        {team && (
+          <nav aria-label="Whose leaderboard" className="mt-2 flex flex-wrap gap-2" data-filter="team">
+            {[
+              { label: "Everyone", href: team.allHref, on: !team.on },
+              { label: "My team", href: team.mineHref, on: team.on },
+            ].map((chip) => (
+              <Link
+                key={chip.label}
+                href={chip.href}
+                scroll={false}
+                aria-current={chip.on ? "true" : undefined}
+                className={cn("flex h-10 items-center rounded-full px-4 text-[13px] font-bold transition", chip.on ? "bg-chip text-chip-text" : "bg-surface text-gray-600 shadow-card hover:text-gray-900")}
+              >
+                {chip.label}
+              </Link>
+            ))}
+            {team.on && team.leaderName && <p className="flex items-center px-1 text-[13px] font-medium text-gray-500">{team.leaderName}&rsquo;s team</p>}
+          </nav>
+        )}
+        {shown.length === 0 && (
+          <ListCard className="mt-2">
+            <NobodyYet show role={role} />
+          </ListCard>
+        )}
+        {groups.map((g) => (
+          <BoardGroup
+            key={g.title ?? "all"}
+            title={g.title}
+            people={g.people}
+            noSaleWord={current ? "with no sale yet" : "with no sale"}
+            render={(a) => {
+              const hasGoal = a.goalCents > 0;
+              const width = hasGoal ? Math.min(100, a.goalPct) : Math.round((a.lifeCents / maxLife) * 100);
+              return (
+                <Row
+                  key={a.id}
+                  a={a}
+                  rank={a.groupRank}
+                  amount={a.lifeCents}
+                  today={current ? a.todayLifeCents : 0}
+                  bar={<GoalBar width={width} lifeShare={width} goalLine={hasGoal ? goalLine : null} />}
+                  pct={hasGoal ? a.goalPct : null}
+                  small={`${a.lifePolicies} ${a.lifePolicies === 1 ? "policy" : "policies"}${hasGoal ? "" : " · no goal"}`}
+                />
+              );
+            }}
+          />
+        ))}
       </div>
     </>
   );
@@ -478,6 +552,46 @@ function TotalView({ s, role, goalLine, today }: { s: MonthSnapshot; role: strin
   );
 }
 
+/** A long group folds its people without a sale behind "Show everyone" once there are more than a handful. */
+const FOLD_AFTER = 10;
+const FOLD_AT_LEAST = 4;
+
+/**
+ * One group of the leaderboard ("In the office", "Everyone else", or the only list): the people
+ * who sold, then the long tail without a sale folded behind "Show everyone", so 70 people stay a
+ * short page. A small team is listed whole, as before.
+ */
+function BoardGroup({ title, people, noSaleWord, render }: { title: string | null; people: AgentLine[]; noSaleWord: string; render: (a: AgentLine) => React.ReactNode }) {
+  const quiet = people.filter((a) => a.lifeCents <= 0);
+  const fold = people.length > FOLD_AFTER && quiet.length >= FOLD_AT_LEAST;
+  const head = fold ? people.filter((a) => a.lifeCents > 0) : people;
+  return (
+    <section className="mt-3" data-group={title ?? "all"}>
+      {title && (
+        <h3 className="flex items-baseline gap-2 px-1 pb-1.5 text-[12px] font-bold tracking-[0.07em] text-gray-500 uppercase">
+          {title}
+          <span className="font-mono tracking-normal">{people.length}</span>
+        </h3>
+      )}
+      <div className="rounded-[22px] bg-surface shadow-card">
+        {head.length > 0 && <ul>{head.map(render)}</ul>}
+        {fold && (
+          <details className={cn("group", head.length > 0 && "border-t border-line")}>
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-[14px] font-bold text-accent-text [&::-webkit-details-marker]:hidden">
+              <span className="group-open:hidden">Show everyone</span>
+              <span className="hidden group-open:inline">Show less</span>
+              <span className="text-[12px] font-semibold text-gray-500">
+                {quiet.length} {noSaleWord}
+              </span>
+            </summary>
+            <ul className="border-t border-line">{quiet.map(render)}</ul>
+          </details>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function NobodyYet({ show, role }: { show: boolean; role: string }) {
   if (!show) return null;
   return (
@@ -531,7 +645,7 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
-function PageHeader({ month, current, view, daysLeft }: { month: string; current: string; view: View; daysLeft?: { text: string; amber: boolean } | null }) {
+function PageHeader({ month, current, view, mine = false, daysLeft }: { month: string; current: string; view: View; mine?: boolean; daysLeft?: { text: string; amber: boolean } | null }) {
   const prev = addMonths(month, -1);
   const next = addMonths(month, 1);
   const isCurrent = month === current;
@@ -545,18 +659,18 @@ function PageHeader({ month, current, view, daysLeft }: { month: string; current
         </p>
       </div>
       <nav aria-label="Month" className="flex shrink-0 items-center gap-1">
-        <Link href={homeHref(view, prev, current)} aria-label={`${monthLabel(prev)}`} className="flex h-11 w-11 items-center justify-center rounded-full bg-surface text-gray-700 shadow-card hover:bg-gray-50">
+        <Link href={homeHref(view, prev, current, mine)} aria-label={`${monthLabel(prev)}`} className="flex h-11 w-11 items-center justify-center rounded-full bg-surface text-gray-700 shadow-card hover:bg-gray-50">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M15 6l-6 6 6 6" />
           </svg>
         </Link>
         {!isCurrent && (
-          <Link href={homeHref(view, current, current)} className="flex h-11 items-center rounded-full bg-surface px-3.5 text-[13px] font-bold text-accent-text shadow-card hover:bg-gray-50">
+          <Link href={homeHref(view, current, current, mine)} className="flex h-11 items-center rounded-full bg-surface px-3.5 text-[13px] font-bold text-accent-text shadow-card hover:bg-gray-50">
             Now
           </Link>
         )}
         <Link
-          href={homeHref(view, next, current)}
+          href={homeHref(view, next, current, mine)}
           aria-label={`${monthLabel(next)}`}
           aria-disabled={month >= current}
           className={cn("flex h-11 w-11 items-center justify-center rounded-full bg-surface text-gray-700 shadow-card hover:bg-gray-50", month >= current && "pointer-events-none opacity-40")}

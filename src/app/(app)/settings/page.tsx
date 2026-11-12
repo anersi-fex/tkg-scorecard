@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { currentViewer, requirePage } from "@/lib/auth";
+import { pageViewer } from "@/lib/auth";
+import { isOwner } from "@/lib/viewer";
 import { dbConfigured } from "@/lib/supabase";
 import { getSettings, goalsForMonth } from "@/lib/data";
 import { addMonths, monthKeyOf, monthLabel, todayInDetroit } from "@/lib/month";
@@ -10,26 +11,35 @@ import { SettingsForms } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Settings" };
 
+/**
+ * Settings by level (owner, 2026-11-12): the owner and the admins run the goals, the board, the
+ * look, the TV and the agency's name. The sign-ins, the Shortcut and the last row are the
+ * owner's alone, and what they would show is not even sent to an admin's screen. A member and
+ * the team password cannot open this page.
+ */
 export default async function SettingsPage() {
-  await requirePage("owner");
+  const viewer = await pageViewer("manager");
+  const owner = isOwner(viewer);
   if (!dbConfigured()) return <PageTitle>Settings</PageTitle>;
   const month = monthKeyOf(todayInDetroit());
   const next = addMonths(month, 1);
-  const [settings, goals, nextGoals, viewer] = await Promise.all([getSettings(), goalsForMonth(month), goalsForMonth(next), currentViewer()]);
+  const [settings, goals, nextGoals] = await Promise.all([getSettings(), goalsForMonth(month), goalsForMonth(next)]);
+  const token = owner ? (process.env.LOG_TOKEN ?? "") : "";
   return (
     <>
-      <PageTitle sub="Only you see this screen.">Settings</PageTitle>
+      <PageTitle sub={owner ? "You and the admins see this screen." : "Only the admins and Anersi see this screen."}>Settings</PageTitle>
       <SettingsForms
-        settings={settings}
+        // The P&C carriers are the owner's to see and change.
+        settings={owner ? settings : { ...settings, pcCarriers: [] }}
         months={[
           { key: month, label: monthLabel(month), cents: goals.teamCents, pcCents: goals.pcTeamCents, current: true },
           { key: next, label: monthLabel(next), cents: nextGoals.teamCents, pcCents: nextGoals.pcTeamCents, current: false },
         ]}
-        shortcutReady={(process.env.LOG_TOKEN?.length ?? 0) >= LOG_TOKEN_MIN}
-        shortcutTooShort={!!process.env.LOG_TOKEN && process.env.LOG_TOKEN.length < LOG_TOKEN_MIN}
-        teamPasswordSet={!!process.env.TEAM_PASSWORD}
-        base={await appBase()}
-        owner={viewer?.level === "owner"}
+        shortcutReady={owner && token.length >= LOG_TOKEN_MIN}
+        shortcutTooShort={owner && token.length > 0 && token.length < LOG_TOKEN_MIN}
+        teamPasswordSet={owner && !!process.env.TEAM_PASSWORD}
+        base={owner ? await appBase() : ""}
+        owner={owner}
       />
     </>
   );

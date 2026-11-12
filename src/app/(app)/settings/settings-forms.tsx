@@ -10,7 +10,7 @@ import { SOUNDS, type SoundKey } from "@/lib/sounds";
 import { Button, Input, Label, Notice, Textarea } from "@/components/ui";
 import { ListCard, ListTitle, ROW_INSET } from "@/components/tide";
 import { saveBoardSettings, saveBoardTheme, saveColorway, savePcColor, saveSaleSound, saveTeamGoal, saveTeamPcGoal, saveTvScreens } from "../actions";
-import { savePcEnabled } from "../people-actions";
+import { saveAgencyName, savePcEnabled, saveTeamPasswordLogs } from "../people-actions";
 import { Switch } from "@/components/switch";
 import { toast } from "@/components/toaster";
 import { KindDot } from "@/components/kind";
@@ -40,7 +40,7 @@ export function SettingsForms({
   shortcutTooShort: boolean;
   teamPasswordSet: boolean;
   base: string;
-  /** The owner alone gets the "Other lines of business" row at the bottom (an admin never sees it). */
+  /** The owner alone gets Sign-ins, the Shortcut card and the "Other lines of business" row at the bottom (an admin never sees them). */
   owner?: boolean;
 }) {
   // Life only (owner, 2026-11-12): with the P&C board off, nothing on this screen names P&C
@@ -60,7 +60,7 @@ export function SettingsForms({
         </ListCard>
       </section>
 
-      {pcOn && (
+      {pcOn && owner && (
         <section>
           <ListTitle>P&amp;C goal</ListTitle>
           <p className="mt-1 px-1 text-[13px] text-gray-500">P&amp;C annual premium for the P&amp;C team. The P&amp;C screen measures it; the agency total adds both goals up.</p>
@@ -74,13 +74,19 @@ export function SettingsForms({
         </section>
       )}
 
+      <section data-agency-name>
+        <ListTitle>Agency name</ListTitle>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">The agency&apos;s name on every screen and the TV, beside the Scorecard mark.</p>
+        <AgencyNameForm name={settings.agencyName} />
+      </section>
+
       <section>
         <ListTitle>Colorway</ListTitle>
         <p className="mt-1 px-1 text-[13px] text-gray-500">The color story on every phone and the TV. Crimson is the default; the app icon stays Crimson.</p>
         <ColorwayPicker current={settings.colorway} />
       </section>
 
-      {pcOn && (
+      {pcOn && owner && (
         <section>
           <ListTitle>P&amp;C color</ListTitle>
           <p className="mt-1 px-1 text-[13px] text-gray-500">P&amp;C&apos;s own color on the bars, rings and tags, next to life&apos;s. Dusty blue is the default.</p>
@@ -108,11 +114,13 @@ export function SettingsForms({
 
       <section>
         <ListTitle>The board</ListTitle>
-        <BoardForm settings={settings} />
+        <BoardForm settings={settings} owner={owner} />
       </section>
 
-      <section>
+      {owner && (
+      <section data-sign-ins>
         <ListTitle>Sign-ins</ListTitle>
+        <p className="mt-1 px-1 text-[13px] text-gray-500">Only you see this part. Everyone else signs in with their own cell number and password; the join link is on the People page.</p>
         <ListCard className="mt-2">
           <li className="px-4 py-3 text-[14px] text-gray-700">
             <p className="font-bold text-gray-900">Owner password</p>
@@ -126,10 +134,13 @@ export function SettingsForms({
                 : "Add TEAM_PASSWORD in Vercel so the team can sign in on their phones and the TV without your password."}
             </p>
           </li>
+          <TeamPasswordLogsRow on={settings.teamPasswordLogs} />
         </ListCard>
       </section>
+      )}
 
-      <section>
+      {owner && (
+      <section data-shortcut>
         <ListTitle>iPhone Shortcut and NFC tags</ListTitle>
         <ListCard className="mt-2">
           <li className="px-4 py-3 text-[14px] text-gray-700">
@@ -149,12 +160,13 @@ export function SettingsForms({
             ) : (
               <>
                 <p className="font-bold text-gray-900">Not set up yet</p>
-                <p className="mt-0.5 text-gray-600">Add LOG_TOKEN in Vercel (any long random text) to let a Shortcut log sales. Until then, a tag can simply open each person&apos;s desk link from the Team page.</p>
+                <p className="mt-0.5 text-gray-600">Add LOG_TOKEN in Vercel (any long random text) to let a Shortcut log sales. Until then, a tag can simply open each person&apos;s desk link from the People page.</p>
               </>
             )}
           </li>
         </ListCard>
       </section>
+      )}
 
       {owner && (
         <section data-other-lines>
@@ -163,6 +175,79 @@ export function SettingsForms({
         </section>
       )}
     </div>
+  );
+}
+
+/** The agency's name (the owner or an admin): typed, then Save; every screen shows it on its next load. */
+function AgencyNameForm({ name }: { name: string }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const form = new FormData(e.currentTarget);
+        start(async () => {
+          try {
+            const r = await saveAgencyName(form);
+            toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+            if (r.ok) router.refresh();
+          } catch {
+            toast("Couldn't reach the server. Try again.", false);
+          }
+        });
+      }}
+      className="mt-2 flex items-end gap-2 rounded-[22px] bg-surface p-4 shadow-card"
+    >
+      <div className="min-w-0 flex-1">
+        <Label htmlFor="agency_name">Name</Label>
+        <Input id="agency_name" name="agency_name" defaultValue={name} maxLength={40} placeholder="Lineage Financial" autoComplete="off" required />
+      </div>
+      <Button type="submit" className="h-11 rounded-xl" disabled={pending}>
+        {pending ? "Saving..." : "Save"}
+      </Button>
+    </form>
+  );
+}
+
+/** The owner's switch for the shared team password: on, it logs sales as it always did; off, it only looks. */
+function TeamPasswordLogsRow({ on }: { on: boolean }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [checked, setChecked] = useState(on);
+  const [seen, setSeen] = useState(on);
+  if (seen !== on) {
+    setSeen(on);
+    setChecked(on);
+  }
+  return (
+    <li className="flex items-center justify-between gap-3 border-t border-line px-4 py-3" data-team-password-logs>
+      <div className="min-w-0">
+        <p className="text-[14px] font-bold text-gray-900">The shared team password can log sales</p>
+        <p className="mt-0.5 text-[13px] text-gray-600">
+          {checked ? "On: a phone on the team password logs for anyone, as before. Turn it off once people have their own sign-ins." : "Off: the team password only looks (the TV). People log with their own sign-in."}
+        </p>
+      </div>
+      <Switch
+        checked={checked}
+        disabled={pending}
+        label="The shared team password can log sales"
+        onChange={(next) => {
+          setChecked(next);
+          start(async () => {
+            try {
+              const r = await saveTeamPasswordLogs(next);
+              toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+              if (r.ok) router.refresh();
+              else setChecked(!next);
+            } catch {
+              toast("Couldn't reach the server. Try again.", false);
+              setChecked(!next);
+            }
+          });
+        }}
+      />
+    </li>
   );
 }
 
@@ -615,9 +700,10 @@ function GoalForm({ month, pc = false }: { month: MonthGoal; pc?: boolean }) {
   );
 }
 
-function BoardForm({ settings }: { settings: AppSettings }) {
+function BoardForm({ settings, owner }: { settings: AppSettings; owner: boolean }) {
   const [pending, start] = useTransition();
-  const pcOn = settings.pcEnabled === true;
+  // The P&C carriers are the owner's (saveBoardSettings keeps the stored ones for an admin).
+  const pcOn = settings.pcEnabled === true && owner;
   return (
     <form
       onSubmit={(e) => {

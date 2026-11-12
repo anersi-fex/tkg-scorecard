@@ -274,7 +274,12 @@ export interface JoinInput {
   uplineId: string | null;
   inOffice: boolean;
 }
-export type JoinResult = { ok: true; agentId: string; sessionVersion: number } | { ok: false; error: string };
+/**
+ * `counts` marks a refusal that says something about who is on Scorecard (a dead link, a number or
+ * a name that already has a sign-in): the join screen counts those toward the address's throttle.
+ * A typo (a short password, a number that is not one) never counts.
+ */
+export type JoinResult = { ok: true; agentId: string; sessionVersion: number } | { ok: false; error: string; counts?: boolean };
 
 type Roster = { id: string; name: string; active: boolean; role: AgentRole; upline_id: string | null; phone: string | null; session_version: number }[];
 async function roster(): Promise<Roster> {
@@ -293,7 +298,7 @@ async function roster(): Promise<Roster> {
  */
 export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
   const invite = await readInvite(input.token);
-  if (!invite) return { ok: false, error: BAD_LINK };
+  if (!invite) return { ok: false, error: BAD_LINK, counts: true };
   const problem = passwordProblem(input.password);
   if (problem) return { ok: false, error: problem };
   const people = await roster();
@@ -303,25 +308,25 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
 
   if (invite.kind === "reset" || invite.kind === "person") {
     const person = people.find((p) => p.id === invite.agent_id);
-    if (!person || !person.active) return { ok: false, error: BAD_LINK };
+    if (!person || !person.active) return { ok: false, error: BAD_LINK, counts: true };
     // A reset keeps the number they have; a person link (and a reset for someone with no number) asks for it.
     let phone = person.phone;
     if (invite.kind === "person" || !phone) {
       if (!typedPhone) return { ok: false, error: PHONE_HELP };
-      if (people.some((p) => p.id !== person.id && p.phone === typedPhone)) return { ok: false, error: PHONE_TAKEN };
+      if (people.some((p) => p.id !== person.id && p.phone === typedPhone)) return { ok: false, error: PHONE_TAKEN, counts: true };
       phone = typedPhone;
     } else if (phoneTyped && typedPhone && typedPhone !== phone) {
       // Typed a different number on a reset: the link is for one person, so their number stays.
-      return { ok: false, error: "That isn't the number this link is for." };
+      return { ok: false, error: "That isn't the number this link is for.", counts: true };
     }
-    if (!(await consumeInvite(invite))) return { ok: false, error: BAD_LINK };
+    if (!(await consumeInvite(invite))) return { ok: false, error: BAD_LINK, counts: true };
     const next = person.session_version + 1;
     const patch: Record<string, unknown> = { phone, pass_hash: await hashPassword(input.password), session_version: next, updated_at: new Date().toISOString() };
     if (invite.kind === "person") patch.in_office = input.inOffice === true;
     if (!logins.has(person.id)) patch.joined_at = new Date().toISOString();
     const { error } = await db().from("agents").update(patch).eq("id", person.id);
     if (error) {
-      if ((error as { code?: string }).code === "23505") return { ok: false, error: PHONE_TAKEN };
+      if ((error as { code?: string }).code === "23505") return { ok: false, error: PHONE_TAKEN, counts: true };
       fail("people.join", error);
     }
     await clearAccountFailures(person.id);
@@ -332,7 +337,7 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
   const name = cleanName(input.name);
   if (!name) return { ok: false, error: "Type your first and last name." };
   if (!typedPhone) return { ok: false, error: PHONE_HELP };
-  if (people.some((p) => p.phone === typedPhone)) return { ok: false, error: PHONE_TAKEN };
+  if (people.some((p) => p.phone === typedPhone)) return { ok: false, error: PHONE_TAKEN, counts: true };
   // The upline they picked, when it is a real person on the board; else the leader this link belongs to.
   const picked = isUuid(input.uplineId) ? people.find((p) => p.id === input.uplineId && p.active) : undefined;
   const linkLeader = invite.upline_id ? people.find((p) => p.id === invite.upline_id && p.active) : undefined;
@@ -343,8 +348,8 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
   const matches = people.filter((p) => sameName(p.name, name));
   const match = matches.find((p) => p.active) ?? matches[0];
   if (match) {
-    if (!match.active) return { ok: false, error: `${match.name} was taken off the board. Ask an admin to bring you back, then open this link again.` };
-    if (logins.has(match.id) || match.role !== "member") return { ok: false, error: `${match.name} is already on Scorecard. Sign in, or ask an admin for your own link.` };
+    if (!match.active) return { ok: false, error: `${match.name} was taken off the board. Ask an admin to bring you back, then open this link again.`, counts: true };
+    if (logins.has(match.id) || match.role !== "member") return { ok: false, error: `${match.name} is already on Scorecard. Sign in, or ask an admin for your own link.`, counts: true };
     // The claim: only while the row still has no sign-in (two phones at once: one wins).
     const next = match.session_version + 1;
     const patch: Record<string, unknown> = { phone: typedPhone, pass_hash, session_version: next, in_office: input.inOffice === true, joined_at: now, updated_at: now };
@@ -353,10 +358,10 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
     else if (!match.upline_id && upline && upline.id !== match.id && !(await wouldLoop(match.id, upline.id))) patch.upline_id = upline.id;
     const { data, error } = await db().from("agents").update(patch).eq("id", match.id).is("pass_hash", null).eq("role", "member").eq("active", true).select("id");
     if (error) {
-      if ((error as { code?: string }).code === "23505") return { ok: false, error: PHONE_TAKEN };
+      if ((error as { code?: string }).code === "23505") return { ok: false, error: PHONE_TAKEN, counts: true };
       fail("people.claim", error);
     }
-    if (!data?.length) return { ok: false, error: `${match.name} is already on Scorecard. Sign in, or ask an admin for your own link.` };
+    if (!data?.length) return { ok: false, error: `${match.name} is already on Scorecard. Sign in, or ask an admin for your own link.`, counts: true };
     await consumeInvite(invite);
     return { ok: true, agentId: match.id, sessionVersion: next };
   }
@@ -369,7 +374,7 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
     .select("id, session_version")
     .single();
   if (error) {
-    if ((error as { code?: string }).code === "23505") return { ok: false, error: PHONE_TAKEN };
+    if ((error as { code?: string }).code === "23505") return { ok: false, error: PHONE_TAKEN, counts: true };
     fail("people.join", error);
   }
   await consumeInvite(invite);

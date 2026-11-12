@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requirePage } from "@/lib/auth";
+import { pageViewer } from "@/lib/auth";
+import { isManager } from "@/lib/viewer";
 import { dbConfigured } from "@/lib/supabase";
 import { getSettings, listAgents } from "@/lib/data";
 import { teamTones } from "@/components/avatar";
@@ -11,7 +12,7 @@ import { LogForm } from "./log-form";
 export const metadata: Metadata = { title: "Log a sale" };
 
 export default async function LogPage({ searchParams }: PageProps<"/log">) {
-  const role = await requirePage();
+  const viewer = await pageViewer();
   const params = await searchParams;
   const preset = typeof params.agent === "string" ? params.agent : null;
   // A desk tag can open the form set to P&C (?kind=pc) on the owner's P&C days, while P&C is on.
@@ -29,7 +30,7 @@ export default async function LogPage({ searchParams }: PageProps<"/log">) {
       {agents.length === 0 ? (
         <Notice tone="amber">
           Nobody is on the team yet.{" "}
-          {role === "owner" ? (
+          {isManager(viewer) ? (
             <Link href="/team" className="font-semibold underline">
               Add your people first.
             </Link>
@@ -37,9 +38,23 @@ export default async function LogPage({ searchParams }: PageProps<"/log">) {
             "Ask Anersi to add the team."
           )}
         </Notice>
+      ) : viewer.level === "team" && !settings.teamPasswordLogs ? (
+        // The owner turned logging off for the shared password (Settings > Sign-ins): it only looks now.
+        <Notice tone="amber">
+          The team password only looks now. To log a sale, sign in with your own cell number and password.{" "}
+          <Link href="/login" className="font-semibold underline">
+            Go to sign in
+          </Link>
+          . No sign-in yet? Ask an admin for the join link.
+        </Notice>
+      ) : viewer.level === "member" && !agents.some((a) => a.id === viewer.agentId) ? (
+        <Notice tone="amber">You are not on the board right now. Ask an admin to put you back, then you can log a sale.</Notice>
       ) : (
         <LogForm
-          agents={agents.map((a) => ({ id: a.id, name: a.name, tone: tones[a.id], pcLicensed: pcOn && a.pc_licensed }))}
+          agents={agents.map((a) => ({ id: a.id, name: a.name, tone: tones[a.id], pcLicensed: pcOn && a.pc_licensed, inOffice: a.in_office === true }))}
+          // A member logs for themselves only (the server holds them to it); the owner, an admin and the team password pick the person.
+          self={viewer.level === "member" ? viewer.agentId : null}
+          me={viewer.agentId}
           products={settings.products}
           carriers={settings.carriers}
           pcCarriers={pcOn ? settings.pcCarriers : []}

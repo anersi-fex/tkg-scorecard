@@ -49,7 +49,7 @@ export function ProductionScreen({ snap, onPages }: { snap: MonthSnapshot; onPag
         </p>
       </div>
       <div className="mt-[0.5em] grid shrink-0 items-end border-b border-line pb-[0.3em] font-bold tracking-[0.04em] text-gray-500 uppercase [&>p]:text-[0.8em]" style={{ gridTemplateColumns: columns }}>
-        <p className="pl-[9.4em]">Name</p>
+        <p className="pl-[8.8em]">Name</p>
         <p className="text-center">Policies</p>
         {days.map((d) => (
           <p key={d} className={cn("text-right whitespace-nowrap", d === snap.clock.today && "text-accent-text")}>
@@ -75,7 +75,7 @@ export function ChangeChip({ change, className }: { change: number | null; class
     <span
       className={cn(
         "inline-flex items-center justify-center rounded-full px-[0.45em] font-mono text-[0.78em] leading-[1.55] font-bold whitespace-nowrap",
-        change === null ? "bg-tint text-accent-text" : change > 0 ? "bg-green-100 text-green-800" : change < 0 ? "bg-red-100 text-red-800" : "bg-track text-gray-500",
+        change === null ? "bg-blue-100 text-blue-800" : change > 0 ? "bg-green-100 text-green-800" : change < 0 ? "bg-red-100 text-red-800" : "bg-track text-gray-500",
         className,
       )}
     >

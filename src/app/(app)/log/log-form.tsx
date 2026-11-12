@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import { Avatar } from "@/components/avatar";
 import { KindDot } from "@/components/kind";
@@ -17,9 +17,14 @@ interface Person {
   tone: string;
   /** P&C licensed (Team page): the Life / P&C switch shows for them. */
   pcLicensed: boolean;
+  /** Works in the office: the office group leads the picker. */
+  inOffice?: boolean;
 }
 
 const WHO_KEY = "scorecard:who";
+/** The last few people picked on this phone, newest first (ids, as JSON): they lead the picker. */
+const RECENT_KEY = "scorecard:recent";
+const RECENT_MAX = 6;
 
 // The last person picked on this phone (a rep logs their own sales); null on the server.
 const noSubscribe = () => () => {};
@@ -31,9 +36,30 @@ function readSavedWho(): string | null {
   }
 }
 
+function readRecentRaw(): string | null {
+  try {
+    return localStorage.getItem(RECENT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function parseRecent(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const list: unknown = JSON.parse(raw);
+    return Array.isArray(list) ? list.filter((v): v is string => typeof v === "string").slice(0, RECENT_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+
 /**
- * Four taps: who, how much, which carrier, Log it. The person a desk tag opens (`?agent=`) or the
- * last person picked on this phone is preselected. A P&C licensed person (Team page) gets a
+ * Four taps: who, how much, which carrier, Log it. A member logs for themselves, so there is no
+ * person to pick (`self`: their own name heads the form). For the owner, an admin and the team
+ * password the person a desk tag opens (`?agent=`) or the
+ * last person picked on this phone is preselected, and the picker searches as they type, with
+ * the people picked lately first, then the office group, then everyone else. A P&C licensed person (Team page) gets a
  * Life / P&C switch (owner, 2026-11-04); P&C mode brings the P&C carriers and the lines the picked
  * carrier writes (`?kind=pc` on a desk tag opens it that way). After logging, the screen offers
  * Undo for a bit, Log another, and the board.
@@ -46,7 +72,13 @@ export function LogForm({
   today,
   preset,
   presetKind,
+  self = null,
+  me = null,
 }: {
+  /** A member's own id: they log for themselves and see no picker. */
+  self?: string | null;
+  /** The signed-in person (the owner or an admin too): preselected on a phone that has not picked anyone yet. */
+  me?: string | null;
   agents: Person[];
   products: string[];
   carriers: string[];
@@ -57,9 +89,16 @@ export function LogForm({
 }) {
   const saved = useSyncExternalStore(noSubscribe, readSavedWho, () => null);
   const [picked, setPicked] = useState<string | null>(null);
-  // A desk tag's person wins, then the last one picked on this phone, then whoever taps.
-  const who = picked ?? (preset && agents.some((a) => a.id === preset) ? preset : saved && agents.some((a) => a.id === saved) ? saved : null);
+  const recentRaw = useSyncExternalStore(noSubscribe, readRecentRaw, () => null);
+  const recent = useMemo(() => parseRecent(recentRaw), [recentRaw]);
+  const onBoard = (id: string | null): id is string => !!id && agents.some((a) => a.id === id);
+  // A member is always themselves. Otherwise a desk tag's person wins, then the last one picked on
+  // this phone, then the person signed in, then whoever taps.
+  const who = self ?? picked ?? (onBoard(preset) ? preset : onBoard(saved) ? saved : onBoard(me) ? me : null);
   const setWho = setPicked;
+  // The picker is open while nobody is picked, or after a tap on Change.
+  const [choosing, setChoosing] = useState(false);
+  const [search, setSearch] = useState("");
   const [premium, setPremium] = useState("");
   const [policies, setPolicies] = useState(1);
   const [product, setProduct] = useState<string | null>(null);
@@ -94,7 +133,7 @@ export function LogForm({
   const ready = !!who && cents != null && cents > 0 && !!carrier && carrierChoices.includes(carrier);
 
   const submit = () => {
-    if (!who) return setError("Tap who sold it.");
+    if (!who) return setError(self ? "Sign in again to log a sale." : "Tap who sold it.");
     if (cents == null || cents === 0) return setError("Type the annual premium, like 1250.");
     if (!carrier) return setError("Tap the carrier it was written with.");
     setError(null);
@@ -114,7 +153,10 @@ export function LogForm({
         return;
       }
       try {
-        localStorage.setItem(WHO_KEY, who);
+        if (!self) {
+          localStorage.setItem(WHO_KEY, who);
+          localStorage.setItem(RECENT_KEY, JSON.stringify([who, ...recent.filter((id) => id !== who)].slice(0, RECENT_MAX)));
+        }
       } catch {
         /* private mode */
       }
@@ -135,6 +177,25 @@ export function LogForm({
     setDateTouched(false);
     setError(null);
   };
+
+  const whoPerson = agents.find((a) => a.id === who);
+  // The picker's groups: with a name typed, the matches; otherwise the people picked lately on
+  // this phone, then the office group, then everyone else (each by name).
+  const typed = search.trim().toLowerCase();
+  const byName = (a: Person, b: Person) => a.name.localeCompare(b.name);
+  const groups: { title: string; people: Person[] }[] = [];
+  if (typed) {
+    const found = agents.filter((a) => a.name.toLowerCase().includes(typed)).sort(byName);
+    if (found.length) groups.push({ title: "Matches", people: found });
+  } else {
+    const lately = recent.map((id) => agents.find((a) => a.id === id)).filter((a): a is Person => !!a);
+    const rest = agents.filter((a) => !lately.includes(a));
+    const office = rest.filter((a) => a.inOffice).sort(byName);
+    const others = rest.filter((a) => !a.inOffice).sort(byName);
+    if (lately.length) groups.push({ title: "Picked lately", people: lately });
+    if (office.length) groups.push({ title: "In the office", people: office });
+    if (others.length) groups.push({ title: office.length ? "Everyone else" : "Everyone", people: others });
+  }
 
   if (done) {
     return (
@@ -176,40 +237,75 @@ export function LogForm({
         </p>
       )}
 
-      <section>
-        <h2 className="mb-2 px-1 text-[13px] font-bold tracking-[0.06em] text-gray-500 uppercase">Who sold it</h2>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Who sold it">
-          {agents.map((a) => {
-            const on = who === a.id;
-            return (
-              <button
-                key={a.id}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                onClick={() => {
-                  setWho(a.id);
-                  // The kind this person lands on; a change in either direction drops a carrier or line from the other list.
-                  const nextKind: SaleKind = a.pcLicensed ? (kindPicked ?? presetKind ?? "life") : "life";
-                  if (nextKind !== kind) {
-                    setCarrier(null);
-                    setProduct(null);
-                  }
-                  setError(null);
-                  premiumRef.current?.focus();
-                }}
-                className={cn(
-                  "flex min-h-14 items-center gap-3 rounded-2xl bg-surface px-3 text-left shadow-card transition",
-                  on ? "outline-2 outline-accent" : "hover:bg-gray-50",
-                )}
-              >
-                <Avatar name={a.name} tone={a.tone} size={36} />
-                <span className={cn("truncate text-[15px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{a.name}</span>
+      {self ? (
+        <section data-logging-for className="flex items-center gap-3 rounded-[22px] bg-surface px-4 py-3 shadow-card">
+          <Avatar name={whoPerson?.name ?? "You"} tone={whoPerson?.tone} neutral={!whoPerson} size={40} />
+          <p className="min-w-0 flex-1 truncate text-[15px] font-medium text-gray-600">
+            Logging for <span className="font-bold text-gray-900">{whoPerson?.name ?? "you"}</span>
+          </p>
+        </section>
+      ) : (
+        <section data-who>
+          <h2 className="mb-2 px-1 text-[13px] font-bold tracking-[0.06em] text-gray-500 uppercase">Who sold it</h2>
+          {whoPerson && !choosing ? (
+            <div className="flex items-center gap-3 rounded-[22px] bg-surface py-2 pr-2 pl-4 shadow-card outline-2 outline-accent">
+              <Avatar name={whoPerson.name} tone={whoPerson.tone} size={40} />
+              <p className="min-w-0 flex-1 truncate text-[16px] font-bold text-accent-text">{whoPerson.name}</p>
+              <button type="button" onClick={() => setChoosing(true)} className="min-h-11 shrink-0 rounded-full px-3 text-[14px] font-bold text-accent-text hover:bg-tint">
+                Change
               </button>
-            );
-          })}
-        </div>
-      </section>
+            </div>
+          ) : (
+            <div className="rounded-[22px] bg-surface p-3 shadow-card">
+              <div className="relative">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-gray-400">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-3.5-3.5" />
+                </svg>
+                <Input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Type a name" aria-label="Find who sold it" autoComplete="off" className="rounded-full pl-9" />
+              </div>
+              <div className="mt-2 max-h-[19rem] space-y-2 overflow-y-auto overscroll-contain pr-0.5" role="radiogroup" aria-label="Who sold it">
+                {groups.length === 0 && <p className="px-1 py-3 text-[14px] text-gray-600">Nobody by that name.</p>}
+                {groups.map((g) => (
+                  <div key={g.title}>
+                    {groups.length > 1 && <p className="px-1 pb-1 text-[11.5px] font-bold tracking-[0.06em] text-gray-500 uppercase">{g.title}</p>}
+                    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                      {g.people.map((a) => {
+                        const on = who === a.id;
+                        return (
+                          <button
+                            key={a.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={on}
+                            onClick={() => {
+                              setWho(a.id);
+                              setChoosing(false);
+                              setSearch("");
+                              // The kind this person lands on; a change in either direction drops a carrier or line from the other list.
+                              const nextKind: SaleKind = a.pcLicensed ? (kindPicked ?? presetKind ?? "life") : "life";
+                              if (nextKind !== kind) {
+                                setCarrier(null);
+                                setProduct(null);
+                              }
+                              setError(null);
+                              premiumRef.current?.focus();
+                            }}
+                            className={cn("flex min-h-12 items-center gap-2 rounded-2xl bg-surface-2 px-2.5 text-left transition", on ? "outline-2 -outline-offset-2 outline-accent" : "hover:bg-gray-100")}
+                          >
+                            <Avatar name={a.name} tone={a.tone} size={30} />
+                            <span className={cn("truncate text-[14px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{a.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {canPc && (
         <section>

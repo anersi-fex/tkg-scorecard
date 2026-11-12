@@ -20,10 +20,10 @@ import { PageDots, PlaceMark, RightSide, useBoxEm, usePager, useReportPages } fr
 type Ranked = AgentLine & { place: number };
 
 /** The smallest row of each block, in the board's em; rows grow from there when there is room. */
-const MAIN_ROW = 3;
+const MAIN_ROW = 2.85;
 const SMALL_ROW = 2.5;
 /** The row heights the two blocks share out between them (about what a 16:9 screen has). */
-const ROOM = 40;
+const ROOM = 38;
 
 /** One column up to ten people, two up to twenty, three from there. */
 function columnsFor(count: number): number {
@@ -62,7 +62,7 @@ export function LifeScreen({ snap, tones, flash, onPages }: { snap: MonthSnapsho
               people={office}
               cols={mainCols}
               rowEm={MAIN_ROW}
-              weight={mainRows * MAIN_ROW + 3.4}
+              weight={mainRows * MAIN_ROW + 3.6}
               maxScale={mainCols === 1 ? 1.5 : mainCols === 2 ? 1.3 : 1.06}
               max={max}
               today={current}
@@ -170,10 +170,10 @@ function DenseRow({ line, max, today, goalLine, scale, roomy, tight }: { line: R
   const width = hasGoal ? Math.min(100, line.goalPct) : Math.round((line.lifeCents / max) * 100);
   const done = hasGoal && line.goalPct >= 100;
   const first = sold && line.place === 1;
-  const name = line.name.length > (roomy ? 24 : tight ? 13 : 15) ? shortName(line.name) : line.name;
+  const name = line.name.length > (roomy ? 24 : tight ? 12 : 15) ? shortName(line.name) : line.name;
   return (
     <li className="flex min-h-0 min-w-0 items-center" data-person={line.id} data-place={line.place}>
-      <div className={cn("flex w-full min-w-0 items-center gap-[0.5em] rounded-[0.8em] px-[0.4em] py-[0.28em]", first && "bg-tint/60", !sold && "opacity-50")} style={{ fontSize: `${scale}em` }}>
+      <div className={cn("flex w-full min-w-0 items-center gap-[0.5em] rounded-[0.8em] px-[0.4em] py-[0.2em]", first && "bg-tint/60", !sold && "opacity-50")} style={{ fontSize: `${scale}em` }}>
         <PlaceMark place={line.place} sold={sold} className="w-[1.45em] text-[1.15em]" />
         <Avatar name={line.name} tone={line.tone} size={36} className="!h-[1.9em] !w-[1.9em] !text-[0.74em]" />
         <div className="min-w-0 flex-1">
