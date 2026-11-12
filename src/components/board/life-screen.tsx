@@ -111,7 +111,7 @@ function Group({
   const columns = Array.from({ length: cols }, (_, c) => shown.slice(c * rows, c * rows + rows));
   const moves = change !== undefined && people.some((a) => a.lifeCents > 0 && (change.get(a.id) ?? 0) !== 0);
   return (
-    <section data-group={name} data-pages={pages} aria-label={title} className={cn("tvb-card tvb-lb", small && "small", cols === 1 && "one", cols === 2 && "two")} style={{ flex: `${weight} 1 0%` }}>
+    <section data-group={name} data-pages={pages} aria-label={title} className={cn("tvb-card tvb-lb", small && "tvb-small", cols === 1 && "tvb-one", cols === 2 && "tvb-two")} style={{ flex: `${weight} 1 0%` }}>
       <div className="tvb-lb-head">
         <div className="min-w-0">
           <h2 className="tvb-title">{title}</h2>

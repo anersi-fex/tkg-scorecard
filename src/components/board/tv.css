@@ -256,20 +256,20 @@
 
 /* the leaderboard's two groups (In the office over Everyone else), or one ("Leaderboard") */
 .tvb-left { display: flex; flex-direction: column; gap: calc(20 * var(--u)); min-height: 0; }
-.tvb-lb.small { padding: calc(18 * var(--u)) calc(30 * var(--u)) calc(14 * var(--u)); }
-.tvb-lb.small .tvb-title { font-size: calc(22 * var(--u)); line-height: calc(28 * var(--u)); }
-.tvb-lb.small .tvb-cols { margin-top: calc(10 * var(--u)); }
-.tvb-lb.small .tvb-row { grid-template-rows: calc(23 * var(--u)) calc(19 * var(--u)) calc(6 * var(--u)); padding-bottom: calc(3 * var(--u)); }
-.tvb-lb.small .tvb-rank, .tvb-lb.small .tvb-name { font-size: calc(19 * var(--u)); line-height: calc(23 * var(--u)); }
-.tvb-lb.small .tvb-amt { font-size: calc(20 * var(--u)); line-height: calc(23 * var(--u)); }
-.tvb-lb.small .tvb-rsub { font-size: calc(15 * var(--u)); line-height: calc(19 * var(--u)); }
-.tvb-lb.small .tvb-bar { height: calc(5 * var(--u)); }
+.tvb-lb.tvb-small { padding: calc(18 * var(--u)) calc(30 * var(--u)) calc(14 * var(--u)); }
+.tvb-lb.tvb-small .tvb-title { font-size: calc(22 * var(--u)); line-height: calc(28 * var(--u)); }
+.tvb-lb.tvb-small .tvb-cols { margin-top: calc(10 * var(--u)); }
+.tvb-lb.tvb-small .tvb-row { grid-template-rows: calc(23 * var(--u)) calc(19 * var(--u)) calc(6 * var(--u)); padding-bottom: calc(3 * var(--u)); }
+.tvb-lb.tvb-small .tvb-rank, .tvb-lb.tvb-small .tvb-name { font-size: calc(19 * var(--u)); line-height: calc(23 * var(--u)); }
+.tvb-lb.tvb-small .tvb-amt { font-size: calc(20 * var(--u)); line-height: calc(23 * var(--u)); }
+.tvb-lb.tvb-small .tvb-rsub { font-size: calc(15 * var(--u)); line-height: calc(19 * var(--u)); }
+.tvb-lb.tvb-small .tvb-bar { height: calc(5 * var(--u)); }
 /* the columns fill the block's room exactly (the block measures it to know how many rows fit) */
 .tvb-lb .tvb-cols { grid-template-rows: minmax(0, 1fr); }
 .tvb-lb .tvb-col { height: 100%; }
-.tvb-lb.small .medal { width: calc(24 * var(--u)) !important; height: calc(24 * var(--u)) !important; }
-.tvb-lb.one .tvb-cols { grid-template-columns: minmax(0, 1fr); max-width: calc(760 * var(--u)); }
-.tvb-lb.two .tvb-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tvb-lb.tvb-small .medal { width: calc(24 * var(--u)) !important; height: calc(24 * var(--u)) !important; }
+.tvb-lb.tvb-one .tvb-cols { grid-template-columns: minmax(0, 1fr); max-width: calc(760 * var(--u)); }
+.tvb-lb.tvb-two .tvb-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .tvb-row .tvb-bar { width: auto; }
 .tvb-row.flash { animation: board-flash 2.4s ease-out both; border-radius: calc(10 * var(--u)); }
 .tvb-goal-none { margin-top: calc(14 * var(--u)); font-size: calc(17 * var(--u)); color: var(--t-text-2); }
