@@ -18,6 +18,8 @@ import { daysBetween } from "./format";
 export interface PolicyRowView {
   id: string;
   client: string;
+  /** The client's age ("Age 66" under the name); never the birthday. */
+  age: number | null;
   isImport: boolean;
   agentId: string;
   agentName: string;
@@ -105,6 +107,7 @@ export async function loadPolicyList(viewer: Viewer, params: Params): Promise<Po
   const rows: PolicyRowView[] = result.shown.map((p) => ({
     id: p.id,
     client: clientNameOf(p),
+    age: isImportRow(p) ? null : p.age,
     isImport: isImportRow(p),
     agentId: p.agentId,
     agentName: p.agentName,

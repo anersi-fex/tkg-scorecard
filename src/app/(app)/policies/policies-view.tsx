@@ -337,8 +337,8 @@ export function PoliciesView(p: PoliciesViewProps) {
         </div>
         <div className="pol-fbs" role="group" aria-label="Filters">
           {MULTI_FILTERS.filter((f) => !f.more && (!f.team || p.withAgent)).map((f) => (
-            <Pop key={f.key} id={f.key} open={pop === f.key} setOpen={(o) => setPop(o ? f.key : null)} width={f.key === "agent" ? 290 : 260} n={q[f.key].length} anchor={<span>{f.key === "agent" ? "Sold by" : f.label}</span>}>
-              <MultiBody label={f.key === "agent" ? "Sold by" : f.label} k={f.key} options={p.facets[f.key] ?? []} selected={q[f.key]} go={go} />
+            <Pop key={f.key} id={f.key} open={pop === f.key} setOpen={(o) => setPop(o ? f.key : null)} width={f.key === "agent" ? 290 : 260} n={q[f.key].length} anchor={<span>{f.label}</span>}>
+              <MultiBody label={f.label} k={f.key} options={p.facets[f.key] ?? []} selected={q[f.key]} go={go} />
             </Pop>
           ))}
           {(["sub", "eff"] as const).map((k) => (
@@ -365,7 +365,10 @@ export function PoliciesView(p: PoliciesViewProps) {
               {p.rows.map((r) => (
                 <Link key={r.id} href={`/policies/${r.id}`} className="card pol-cardrow" data-policy={r.id}>
                   <span className="pol-cr-top">
-                    <span className="pol-cr-name">{hl(r.client || "No client yet", words)}</span>
+                    <span className="pol-cr-name">
+                      {hl(r.client || "No client yet", words)}
+                      {r.age != null && <span className="pv-age">Age {r.age}</span>}
+                    </span>
                     {r.isImport ? <span className="pill sm">{policiesWord(r.policies)}</span> : <StatusPill status={r.status} small />}
                   </span>
                   <span className="pol-cr-line">
@@ -706,7 +709,7 @@ function ActiveChips({ p, go }: { p: PoliciesViewProps; go: Go }) {
     const ls = vals.map((v) => label(k, v));
     return ls.length <= 2 ? ls.join(", ") : `${ls[0]} +${ls.length - 1}`;
   };
-  for (const f of MULTI_FILTERS) if (q[f.key].length) chips.push({ key: f.key, text: `${f.key === "agent" ? "Sold by" : f.label}: ${names(f.key, q[f.key])}`, clear: { [f.key]: [] } as Partial<PolicyQuery> });
+  for (const f of MULTI_FILTERS) if (q[f.key].length) chips.push({ key: f.key, text: `${f.label}: ${names(f.key, q[f.key])}`, clear: { [f.key]: [] } as Partial<PolicyQuery> });
   for (const k of ["sub", "eff"] as const) {
     const cur = q[k];
     if (!cur) continue;
@@ -757,6 +760,7 @@ function Table({ p, cols, words, onSort }: { p: PoliciesViewProps; cols: typeof 
                 {hl(r.client || "No client yet", words)}
               </Link>
             </div>
+            {r.age != null && <span className="pv-age">Age {r.age}</span>}
             {r.isImport && <div className="pol-cl-sub">{policiesWord(r.policies)}</div>}
             {r.fresh && <span className="pill pill-accent sm pol-new">Just logged</span>}
           </>
@@ -945,7 +949,7 @@ function FilterSheet({ p, go, onClose }: { p: PoliciesViewProps; go: Go; onClose
           )}
           {MULTI_FILTERS.filter((f) => !f.team || p.withAgent).map((f) =>
             group(
-              f.key === "agent" ? "Sold by" : f.label,
+              f.label,
               (p.facets[f.key] ?? []).map((o) => tog(q[f.key].includes(o.value), o.label, o.n, () => go({ [f.key]: q[f.key].includes(o.value) ? q[f.key].filter((x) => x !== o.value) : [...q[f.key], o.value] } as Partial<PolicyQuery>), o.value)),
               q[f.key].length > 0,
               { [f.key]: [] } as Partial<PolicyQuery>,

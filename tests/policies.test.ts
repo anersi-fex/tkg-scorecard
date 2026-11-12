@@ -194,6 +194,29 @@ test("take it back in the first 15 minutes; an admin's past-month change waits f
   assertNoClientValue();
 });
 
+test("only an admin dates a sale into a past month: not when logging, not in the first 15 minutes", async () => {
+  reset();
+  const lastMonth = `${month.addMonths(today().slice(0, 7), -1)}-15`;
+  const PAST = "A sale in a past month needs an admin.";
+  const before = tables.sales.length;
+  assert.deepEqual(await as(ann, () => sales.logPolicy(sale({ soldOn: lastMonth }))), { ok: false, error: "Fill in the field marked below.", errors: { soldOn: PAST } });
+  assert.deepEqual(await as(mia, () => sales.logPolicy(sale({ agentId: id(ann), soldOn: lastMonth }))), { ok: false, error: "Fill in the field marked below.", errors: { soldOn: PAST } });
+  assert.equal(tables.sales.length, before, "nothing written");
+  // Inside the first 15 minutes the seller fixes the day, but never into a past month.
+  const sid = ((await as(ann, () => sales.logPolicy(sale()))) as { id: string }).id;
+  assert.deepEqual(await as(ann, () => sales.updatePolicyAction(sid, form({ soldOn: lastMonth }))), { ok: false, error: "Fill in the field marked below.", errors: { soldOn: PAST } });
+  assert.equal(saleRow(sid).sold_on, today());
+  // A sale that is already in a past month (logged just before the month turned): its board fields are locked.
+  saleRow(sid).sold_on = lastMonth;
+  assert.deepEqual(await as(ann, () => sales.updatePolicyAction(sid, form({ monthly: "120" }))), { ok: false, error: types.LOCK.pastMonth });
+  assert.deepEqual(await as(ann, () => sales.updatePolicyAction(sid, form({ rateClass: "Preferred" }))), { ok: true, message: "Saved." }, "tracking fields still save");
+  assert.equal(saleRow(sid).monthly_cents, 10_000);
+  // An admin's past-month change still goes to the owner; the owner's saves.
+  assert.deepEqual(await as(admin, () => sales.updatePolicyAction(sid, form({ monthly: "120" }))), { ok: true, message: "Sent to Anersi for a quick OK." });
+  assert.deepEqual(await as("owner", () => sales.updatePolicyAction(sid, form({ monthly: "120" }))), { ok: true, message: "Saved." });
+  assert.equal(saleRow(sid).monthly_cents, 12_000);
+});
+
 test("an AgentSpace day total: nothing editable, an admin may remove it", async () => {
   reset();
   const sid = randomUUID();
@@ -245,6 +268,29 @@ test("joiners and levels: who confirms, Not on my team, a manager's own team lin
   assert.equal(mine.ok, true);
   assert.equal(tables.invites.at(-1)?.upline_id, id(mia));
   assert.equal(tables.invites.at(-1)?.kind, "agency");
+  // Back to an agent: the team link Mia made for her own team stops; one an admin made for her stays.
+  const adminMade: Row = { ...tables.invites.at(-1)!, id: randomUUID(), token_hash: "x", token: null, created_by: id(admin) };
+  tables.invites.push(adminMade);
+  assert.equal((await as(admin, () => people.setPersonRole(id(mia), "member"))).ok, true);
+  assert.ok(tables.invites.find((i) => i.upline_id === id(mia) && i.created_by === id(mia))?.revoked_at, "her own link is off");
+  assert.equal(adminMade.revoked_at ?? null, null, "an admin's link for her team stays");
+});
+
+test("a team link made by a manager who is an agent now places joiners waiting, not confirmed", async () => {
+  reset();
+  const peopleLib = req("../src/lib/people") as typeof import("../src/lib/people");
+  const invites = req("../src/lib/invites") as typeof import("../src/lib/invites");
+  const miaLink = await invites.createInvite({ kind: "agency", uplineId: id(mia), createdBy: id(mia) });
+  const adminLink = await invites.createInvite({ kind: "agency", uplineId: id(mia), createdBy: id(admin) });
+  mia.role = "member"; // demoted by a path that left the link on
+  const late = await peopleLib.joinWithInvite({ token: miaLink.token, name: "Lou Late", phone: "248 555 0141", password: "a long password", uplineId: id(mia), inOffice: false });
+  assert.ok(late.ok);
+  const lou = tables.agents.find((a) => a.id === late.agentId)!;
+  assert.equal(lou.upline_id, id(mia));
+  assert.equal(lou.upline_confirmed, false, "she can't hand out a team link as an agent");
+  const viaAdmin = await peopleLib.joinWithInvite({ token: adminLink.token, name: "Vi Admin", phone: "248 555 0142", password: "a long password", uplineId: id(mia), inOffice: false });
+  assert.ok(viaAdmin.ok);
+  assert.equal(tables.agents.find((a) => a.id === viaAdmin.agentId)!.upline_confirmed, true, "an admin's link for her team is confirmed");
 });
 
 test("joining: a picked upline waits to be confirmed; a leader's own link is confirmed at once; a claimed row keeps its own", async () => {
@@ -274,18 +320,37 @@ test("joining: a picked upline waits to be confirmed; a leader's own link is con
   assert.ok(alone.ok);
   assert.equal(row(alone.agentId).upline_confirmed, true, "nothing to confirm");
 
-  // A manager's row with no sign-in is claimable; it keeps its upline and its confirmed state.
+  // A manager's row with no sign-in is never claimed by a typed name: it would open the team's clients.
   const roy = person("Roy Rowkeeper", { role: "manager", upline_id: id(admin), pass_hash: null });
   tables.agents.push(roy);
-  const claimed = await join(agency.token, "roy rowkeeper", "248 555 0135", null);
+  const asManager = await join(agency.token, "roy rowkeeper", "248 555 0135", null);
+  assert.equal(asManager.ok, false);
+  assert.equal(roy.pass_hash, null);
+  // Nor an agent's row with people under it, nor one that already holds a CRM policy.
+  const lea = person("Lea Leader", { pass_hash: null });
+  tables.agents.push(lea, person("Tim Underlea", { upline_id: id(lea) }));
+  assert.equal((await join(agency.token, "Lea Leader", "248 555 0137", null)).ok, false);
+  assert.equal(lea.pass_hash, null);
+  const pam = person("Pam Policyrow", { pass_hash: null });
+  tables.agents.push(pam);
+  tables.sales.push({ id: randomUUID(), agent_id: id(pam), status: "Submitted", premium_cents: 120_000, policies: 1, sold_on: today(), created_at: new Date().toISOString(), deleted_at: null });
+  assert.equal((await join(agency.token, "Pam Policyrow", "248 555 0138", null)).ok, false);
+  assert.equal(pam.pass_hash, null);
+  // An agent's row with no team and no policies is claimed, and keeps its upline and its confirmed state.
+  const ray = person("Ray Rowkeeper", { upline_id: id(admin), pass_hash: null });
+  tables.agents.push(ray);
+  const claimed = await join(agency.token, "ray rowkeeper", "248 555 0139", null);
   assert.ok(claimed.ok);
-  assert.equal(claimed.agentId, id(roy));
-  assert.equal(roy.upline_id, id(admin));
-  assert.equal(roy.upline_confirmed, true);
+  assert.equal(claimed.agentId, id(ray));
+  assert.equal(ray.upline_id, id(admin));
+  assert.equal(ray.upline_confirmed, true);
+  // The card's names: only the rows a typed name may claim.
+  const names = await peopleLib.claimableNames();
+  for (const n of ["Roy Rowkeeper", "Lea Leader", "Pam Policyrow", "Ray Rowkeeper", "Ada Adminrow"]) assert.ok(!names.includes(n), n);
   // An admin's row is never claimed by its name.
   tables.agents.push(person("Ada Adminrow", { role: "admin", pass_hash: null }));
   const refused = await join(agency.token, "Ada Adminrow", "248 555 0136", null);
   assert.equal(refused.ok, false);
-  assert.equal(peopleLib.claimableRole("manager"), true);
+  assert.equal(peopleLib.claimableRole("manager"), false);
   assert.equal(peopleLib.claimableRole("admin"), false);
 });

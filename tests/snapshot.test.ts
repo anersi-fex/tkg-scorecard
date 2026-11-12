@@ -235,3 +235,10 @@ test("the snapshot carries the agency's name, the upline and the Scoreboard, and
   const text = JSON.stringify(s);
   assert.ok(!text.includes("5550001111") && !text.includes("scrypt") && !text.includes("pass_hash") && !text.includes("phone"));
 });
+
+test("the board's feed never carries a sale's free-text note (it reaches the TV and the team password)", () => {
+  const s = snap([sale(ak, "2026-11-18", 1_200, { note: "Mary Jones 248-555-0000" })]);
+  const text = JSON.stringify([s.recent, s.lifeRecent, s.sales]);
+  assert.ok(!text.includes("Mary Jones") && !text.includes("555-0000"));
+  assert.ok(s.recent.every((x) => !("note" in x)));
+});

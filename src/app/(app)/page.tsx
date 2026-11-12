@@ -116,10 +116,10 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const clock = snap.clock;
   const isCurrent = clock.position === "current";
   const lifeSales: Array<HomeSale & (typeof snap.sales)[number]> = snap.sales.filter((x) => x.kind !== "pc");
-  // A joiner whose picked upline waits to be confirmed is not on the board yet (the demo's "Wants to
-  // join"): listed only once they have a sale, which counts like anyone's (contract decision 6).
-  const waiting = (id: string) => ctx.byId.get(id)?.upline_confirmed === false && !!ctx.byId.get(id)?.upline_id;
-  const persons: HomePerson[] = snap.agents.map((a) => ({ id: a.id, name: a.name, active: a.active && !waiting(a.id), inOffice: a.inOffice }));
+  // A joiner whose picked upline waits to be confirmed counts on the agency board like anyone, and
+  // is on nobody's team until it is confirmed (contract decision 6: the team scopes read the
+  // confirmed tree), so Home, People, the Scoreboard and the TV print the same head count.
+  const persons: HomePerson[] = snap.agents.map((a) => ({ id: a.id, name: a.name, active: a.active, inOffice: a.inOffice }));
   const goals = Object.fromEntries(snap.agents.map((a) => [a.id, a.goalCents]));
   const agencyBoard = homeBoard({ people: persons, sales: lifeSales, month, today });
   const teamIds = sc.id === "team" && sc.leaderId ? new Set(ctx.org.teamOf(sc.leaderId)) : null;

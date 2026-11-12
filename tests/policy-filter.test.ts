@@ -52,6 +52,7 @@ const row = (extra: Partial<PolicyListRow> = {}): PolicyListRow => ({
   clientLast: "Johnson",
   clientEmail: "mary.johnson@example.com",
   clientPhone: "(248) 555-0123",
+  age: 66,
   beneficiaryCount: 1,
   ...extra,
 });

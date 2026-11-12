@@ -109,6 +109,7 @@ export const MSG = {
   coverage: "Enter an amount like 10,000",
   future: "Can't be in the future",
   tooOld: "Can't be more than a year ago",
+  pastMonth: "A sale in a past month needs an admin.",
   date: "Enter a date",
   numbers: "Enter at least one.",
   dobPast: "Pick a date in the past",
@@ -133,6 +134,8 @@ export interface ValidateContext {
    * since left Settings still passes while it is unchanged.
    */
   keep?: Partial<PolicyForm>;
+  /** The earliest submitted date this viewer may pick (the 1st of this month for anyone but an admin: rules.ts earliestSoldOn). */
+  earliest?: string;
 }
 
 const t = (s: unknown) => String(s ?? "").trim();
@@ -197,6 +200,7 @@ export function validatePolicyForm(f: PolicyForm, ctx: ValidateContext, keys?: r
     if (!isDateKey(sold)) e.soldOn = MSG.date;
     else if (sold > ctx.today) e.soldOn = MSG.future;
     else if (sold < addDays(ctx.today, -400)) e.soldOn = MSG.tooOld;
+    else if (ctx.earliest && sold < ctx.earliest && !kept("soldOn", sold)) e.soldOn = MSG.pastMonth;
   }
 
   if (f.ss !== "yes" && f.ss !== "no") e.ss = MSG.required;

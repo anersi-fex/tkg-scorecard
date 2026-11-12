@@ -75,7 +75,8 @@ export interface FeedSale {
   product: string | null;
   carrier: string | null;
   kind: SaleKind;
-  note: string | null;
+  // No note: a sale's free text can hold a client's name or number (the Shortcut takes one), and
+  // this feed reaches the TV and the shared team password (/api/board). Nothing on a board shows it.
   soldOn: string;
   createdAt: string;
 }
@@ -180,7 +181,6 @@ function toFeed(s: SaleWithAgent): FeedSale {
     product: s.product,
     carrier: s.carrier,
     kind: s.kind,
-    note: s.note,
     soldOn: s.sold_on,
     createdAt: s.created_at,
   };

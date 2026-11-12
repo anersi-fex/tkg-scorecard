@@ -68,6 +68,7 @@ export function LogForm({
   today,
   month,
   board,
+  earliest,
   anyone = false,
 }: {
   /** An admin logs for anyone on the board (the note under the picker says so). */
@@ -83,6 +84,8 @@ export function LogForm({
   month: string;
   /** The month's board as it stands (life premium per person): the side's "On the board" line. */
   board: BoardLine[];
+  /** The earliest submitted date this viewer may pick (rules.ts earliestSoldOn; none for an admin). */
+  earliest?: string;
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(() => ({ f: blankForm(preset ?? "", today), billingTouched: false }));
@@ -95,7 +98,7 @@ export function LogForm({
   const [focusError, setFocusError] = useState(0);
   const formRef = useRef<HTMLFormElement | null>(null);
   const f = draft.f;
-  const ctx = useMemo(() => ({ today, ...lists }), [today, lists]);
+  const ctx = useMemo(() => ({ today, earliest, ...lists }), [today, earliest, lists]);
   const picker = choices.length > 1;
   const seller = choices.find((c) => c.id === f.agentId) ?? null;
 
@@ -229,7 +232,7 @@ export function LogForm({
           )}
           {step === 1 && (picker ? <WhoPicker choices={choices} anyone={anyone} me={me} value={f.agentId} error={errors.agentId} onPick={(id) => change("agentId", id)} /> : <LoggingFor name={seller?.name ?? choices[0]?.name ?? ""} />)}
           <form ref={formRef} className="log-form" method="post" noValidate onSubmit={submit}>
-            {step === 1 && <PolicyFields f={f} onChange={change} errors={errors} idp="" lists={lists} today={today} autoDay billingTouched={draft.billingTouched} withNotes uwHelp="Starts the policy in Underwriting." />}
+            {step === 1 && <PolicyFields f={f} onChange={change} errors={errors} idp="" lists={lists} today={today} earliest={earliest} autoDay billingTouched={draft.billingTouched} withNotes uwHelp="Starts the policy in Underwriting." />}
             {step === 2 && (
               <>
                 <ClientFields f={f} onChange={change} errors={errors} idp="" lists={lists} today={today} />

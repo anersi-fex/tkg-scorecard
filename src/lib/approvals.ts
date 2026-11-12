@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "./supabase";
 import { DataError, Said, getAgent, getSale, getSettings } from "./data";
 import { personForSession, setRole } from "./people";
-import { revokeInvitesMadeBy, revokePersonInvites } from "./invites";
+import { revokeInvitesMadeBy, revokeOwnTeamLinks, revokePersonInvites } from "./invites";
 import { applyApprovedFix, applyApprovedRemove, parseBoardPatch } from "./policies";
 import { APPROVAL_KINDS, isOwner, type ApprovalKind, type Viewer } from "./viewer";
 
@@ -140,6 +140,7 @@ async function carryOut(a: Approval, viewer: Viewer): Promise<string> {
     // halfway leaves the level as it was and the next try does both. They land on the level asked
     // for (a manager, or an agent: every request before 0006 asked for an agent).
     await revokeInvitesMadeBy(person.id);
+    if (a.payload.role !== "manager") await revokeOwnTeamLinks(person.id);
     await setRole(person.id, a.payload.role === "manager" ? "manager" : "member");
     return `${person.name} is not an admin anymore.`;
   }

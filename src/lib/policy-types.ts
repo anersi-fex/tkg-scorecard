@@ -159,6 +159,8 @@ export interface PolicyListRow {
   clientLast: string;
   clientEmail: string;
   clientPhone: string;
+  /** The client's age today in Detroit, from their birthday (null without one); the birthday itself stays on the record. */
+  age: number | null;
   beneficiaryCount: number;
 }
 
@@ -221,6 +223,7 @@ export const FIELD_LABEL: Record<PolicyField, string> = {
 export const LOCK = {
   board: "These count on the board. After 15 minutes, ask an admin to change them.",
   seller: "Only an admin can move a policy to someone else.",
+  pastMonth: "This sale is in a past month. Ask an admin to change these.",
   none: "You can't change this policy.",
   importRow: "A day total from AgentSpace can't be changed. An admin can remove it.",
   /** For a manager on a teammate's policy: "Only Roman or an admin can change this." */

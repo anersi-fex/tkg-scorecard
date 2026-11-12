@@ -64,7 +64,6 @@ export default async function PeoplePage() {
   const ctx = ruleContext(everyone);
   const org = ctx.org;
   const activeIds = new Set(everyone.filter((a) => a.active).map((a) => a.id));
-  const waiting = (a: Agent) => a.active && a.upline_confirmed === false && !!a.upline_id;
   const weekAgo = addDays(today, -7);
   // What an admin asked the owner about a person's level, still waiting.
   const pendingRole = new Map<string, string>();
@@ -72,9 +71,13 @@ export default async function PeoplePage() {
     const id = typeof ap.payload?.agent_id === "string" ? ap.payload.agent_id : null;
     if (id && (ap.kind === "make_admin" || ap.kind === "remove_admin")) pendingRole.set(id, ap.kind === "make_admin" ? "Waiting for Anersi: making them an admin." : "Waiting for Anersi: taking away their admin role.");
   }
+  // A joiner waiting for their upline is on the board (contract decision 6) and on nobody's team:
+  // under "Wants to join" for whoever can confirm them, in the directory (no team) for everyone else.
+  const waitingRows = joinersFor(viewer, ctx);
+  const waitingIds = new Set(waitingRows.map((a) => a.id));
   const people: PersonRow[] = everyone
-    // Someone off the board is listed only for an admin (to put them back); a waiting joiner is under "Wants to join".
-    .filter((a) => (a.active || admin) && !waiting(a))
+    // Someone off the board is listed only for an admin (to put them back).
+    .filter((a) => (a.active || admin) && !waitingIds.has(a.id))
     .map((a) => {
       const leader = a.active && org.isLeader(a.id);
       const team = leader ? org.teamOf(a.id) : [];
@@ -110,7 +113,7 @@ export default async function PeoplePage() {
         pendingRole: pendingRole.get(a.id) ?? null,
       };
     });
-  const joiners: JoinerRow[] = joinersFor(viewer, ctx).map((a) => {
+  const joiners: JoinerRow[] = waitingRows.map((a) => {
     const up = a.upline_id ? ctx.byId.get(a.upline_id) : undefined;
     return {
       id: a.id,
@@ -139,10 +142,12 @@ export default async function PeoplePage() {
     })
     .sort((a, b) => b.cents - a.cents || b.people - a.people || a.name.localeCompare(b.name));
   const listed = people.filter((p) => p.active);
-  const sold = listed.filter((p) => p.policies > 0).length;
+  // The head counts everyone on the board: the directory and the joiners under "Wants to join".
+  const onBoard = [...listed.map((p) => p.id), ...waitingRows.filter((a) => a.active).map((a) => a.id)];
+  const sold = onBoard.filter((id) => (totals.get(id)?.policies ?? 0) > 0).length;
   const notJoined = admin ? listed.filter((p) => !p.hasLogin).length : 0;
-  const totalCents = listed.reduce((n, p) => n + p.cents, 0);
-  const totalPolicies = listed.reduce((n, p) => n + p.policies, 0);
+  const totalCents = onBoard.reduce((n, id) => n + (totals.get(id)?.cents ?? 0), 0);
+  const totalPolicies = onBoard.reduce((n, id) => n + (totals.get(id)?.policies ?? 0), 0);
   const base = admin ? await appBase() : "";
   // The shared team password sees names and teams only, no numbers (contract decision 2): none are sent.
   const shared = viewer.level === "team";
@@ -150,7 +155,7 @@ export default async function PeoplePage() {
   return (
     <div className="page">
       <TeamEditor
-        head={{ people: listed.length, sold: shared ? 0 : sold, notJoined, cents: shared ? "" : formatDollars(totalCents), policies: shared ? 0 : totalPolicies }}
+        head={{ people: onBoard.length, sold: shared ? 0 : sold, notJoined, cents: shared ? "" : formatDollars(totalCents), policies: shared ? 0 : totalPolicies }}
         people={quiet(people, ["cents", "policies", "goalCents", "teamCents", "teamPolicies", "pcCents", "pcGoalCents"])}
         joiners={joiners}
         teams={quiet(teams, ["sold", "policies", "cents"])}

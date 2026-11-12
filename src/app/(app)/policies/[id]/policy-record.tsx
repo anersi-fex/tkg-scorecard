@@ -83,6 +83,8 @@ export function PolicyRecordView(props: {
   soldByChoices: { id: string; name: string }[];
   lists: Lists;
   today: string;
+  /** The earliest submitted date this viewer may pick (rules.ts earliestSoldOn; none for an admin). */
+  earliest?: string;
   seen: string;
   history: { key: number; what: string; meta: string }[];
   startEdit: Section | null;
@@ -98,7 +100,7 @@ export function PolicyRecordView(props: {
   const [focusError, setFocusError] = useState(0);
   const root = useRef<HTMLDivElement | null>(null);
   const orig = formOf(p);
-  const ctx = { today: props.today, ...props.lists, keep: orig };
+  const ctx = { today: props.today, ...props.lists, keep: orig, earliest: props.earliest };
 
   useEffect(() => {
     if (!focusError) return;
@@ -239,7 +241,7 @@ export function PolicyRecordView(props: {
           </Field>
         ) : null;
       const uwOff = p.status && p.status !== "Submitted" && p.status !== "Underwriting" ? `Follows the status. It's ${p.status} now.` : undefined;
-      body = <PolicyFields f={f} onChange={change} errors={errs} lockOf={lockOf} idp="pe-" lists={props.lists} today={props.today} soldBy={soldBy} uwHelp="Moves the status to Underwriting; unticked, back to Submitted." uwDisabled={uwOff} />;
+      body = <PolicyFields f={f} onChange={change} errors={errs} lockOf={lockOf} idp="pe-" lists={props.lists} today={props.today} earliest={props.earliest} soldBy={soldBy} uwHelp="Moves the status to Underwriting; unticked, back to Submitted." uwDisabled={uwOff} />;
     } else if (s === "client") body = <ClientFields f={f} onChange={change} errors={errs} lockOf={lockOf} idp="pe-" lists={props.lists} today={props.today} />;
     else if (s === "beneficiaries") body = <BensFields title={false} bens={f.bens} idp="pe-" error={errs.bens} onBens={(bens) => setDraft((d) => ({ ...d, f: { ...d.f, bens } }))} />;
     else

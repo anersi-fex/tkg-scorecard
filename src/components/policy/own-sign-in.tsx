@@ -18,7 +18,7 @@ export function OwnSignIn({ title }: { title: string }) {
           title={NEEDS_OWN_SIGN_IN}
           body="Sales and policies carry client details, so they open only with your own cell number and password. No sign-in yet? Ask an admin for the join link."
           action={
-            <form action={signInWithOwnNumber} method="post">
+            <form action={signInWithOwnNumber}>
               <button type="submit" className="btn btn-primary">
                 <Icon name="user" size={18} />
                 <span>Sign in with your own number</span>

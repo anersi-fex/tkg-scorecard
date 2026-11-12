@@ -5,7 +5,7 @@ import { pageViewer } from "@/lib/auth";
 import { getSettings } from "@/lib/data";
 import { getPolicyFor, loadRuleContext, policyHistory } from "@/lib/policies";
 import { IMPORT_LABEL, LOCK_MINUTES } from "@/lib/policy-types";
-import { canChangeStatus, canUsePolicies, clientSeers, editRights, logForChoices, nav, removeRights } from "@/lib/rules";
+import { canChangeStatus, canUsePolicies, clientSeers, earliestSoldOn, editRights, logForChoices, nav, removeRights } from "@/lib/rules";
 import { isAdmin } from "@/lib/viewer";
 import { todayInDetroit } from "@/lib/month";
 import { OwnSignIn } from "@/components/policy/own-sign-in";
@@ -62,6 +62,7 @@ export default async function PolicyPage({ params, searchParams }: PageProps<"/p
       soldByChoices={isAdmin(viewer) ? logForChoices(viewer, ctx).map((a) => ({ id: a.id, name: a.name })) : []}
       lists={{ carrierProducts: settings.carrierProducts, rateClasses: settings.rateClasses, leadSources: settings.leadSources }}
       today={todayInDetroit()}
+      earliest={earliestSoldOn(viewer, ctx)}
       seen={seen}
       history={history.map((h) => ({ key: h.id, what: h.what, meta: `by ${byWho(h.byName)} · ${stamp(h.at)}` }))}
       startEdit={sp.edit === "policy" && rights.fields.size > 0 ? "policy" : null}

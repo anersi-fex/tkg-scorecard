@@ -6,7 +6,7 @@ import { z } from "zod";
 import { endSession, requireViewer, startPersonSession } from "@/lib/auth";
 import { getAgent, getSettings, lineFor, listAgents, saveSettings, touchBoard } from "@/lib/data";
 import { bumpSession, checkOwnPassword, cleanName, confirmUpline as confirmPickedUpline, declineUpline as declinePickedUpline, getPerson, sameName, setInOffice, setName, setPersonPassword, setPhone, setRole, setUpline, type Person } from "@/lib/people";
-import { agencyToken, createInvite, joinUrl, revokeAgencyInvites, revokeInvitesMadeBy, revokePersonInvites } from "@/lib/invites";
+import { agencyToken, createInvite, joinUrl, revokeAgencyInvites, revokeInvitesMadeBy, revokeOwnTeamLinks, revokePersonInvites } from "@/lib/invites";
 import { decideApproval as decide, listApprovals, requestApproval, type Approval } from "@/lib/approvals";
 import { passwordProblem } from "@/lib/passwords";
 import { normalizePhone } from "@/lib/phone";
@@ -103,6 +103,9 @@ export async function setPersonRole(id: string, role: string): Promise<ActionRes
     // The one-time links an admin made for others stop with the level. First, so a try that
     // fails halfway leaves the level as it was and the next try does both.
     if (was === "admin") await revokeInvitesMadeBy(person.id);
+    // An agent hands out no team link: the ones they made for their own team as a manager or an
+    // admin stop (contract decision 7).
+    if (role === "member") await revokeOwnTeamLinks(person.id);
     await setRole(person.id, role);
     // A personal link made while they were an agent must not hand out an admin's sign-in.
     if (role === "admin") await revokePersonInvites(person.id);

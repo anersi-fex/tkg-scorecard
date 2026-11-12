@@ -21,6 +21,7 @@ import {
   type PolicyStatus,
 } from "./policy-types";
 import {
+  ageOn,
   annualOf,
   errorLine,
   formOf,
@@ -31,7 +32,7 @@ import {
   type PolicyForm,
   type PolicyValues,
 } from "./policy-validate";
-import { canLogFor, canSeeClient, editRights, isPastMonth, policyAgentIds, policyScopes, removeRights, ruleContext, type RuleContext, type RulePolicy } from "./rules";
+import { canLogFor, canSeeClient, earliestSoldOn, editRights, isPastMonth, policyAgentIds, policyScopes, removeRights, ruleContext, type RuleContext, type RulePolicy } from "./rules";
 import { isSaleKind, type LoggedBy, type SaleKind } from "./types";
 import { isAdmin, isOwner, type Viewer } from "./viewer";
 
@@ -56,7 +57,7 @@ const isUuid = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{
 
 const BOARD_COLUMNS = "id, agent_id, premium_cents, policies, product, carrier, kind, note, sold_on, logged_by, logged_by_agent, created_at, updated_at, source";
 const TRACK_COLUMNS = "status, monthly_cents, effective_date, rate_class, coverage_cents, ss_benefit, billing_cycle, billing_day, policy_number, application_number, lead_source, underwriting";
-const LIST_CLIENT_COLUMNS = "client_first, client_last, client_email, client_phone, beneficiaries";
+const LIST_CLIENT_COLUMNS = "client_first, client_last, client_dob, client_email, client_phone, beneficiaries";
 const RECORD_CLIENT_COLUMNS = "notes, client_first, client_last, client_dob, client_email, client_no_email, client_phone, client_address, beneficiaries";
 const LIST_COLUMNS = `${BOARD_COLUMNS}, ${TRACK_COLUMNS}, ${LIST_CLIENT_COLUMNS}, agents!agent_id(name)`;
 const RECORD_COLUMNS = `${BOARD_COLUMNS}, ${TRACK_COLUMNS}, ${RECORD_CLIENT_COLUMNS}, agents!agent_id(name)`;
@@ -80,7 +81,7 @@ function benList(v: unknown): Beneficiary[] {
 }
 const LOGGED_BY: LoggedBy[] = ["owner", "team", "shortcut"];
 
-function toListRow(r: Row): PolicyListRow {
+function toListRow(r: Row, today: string = todayInDetroit()): PolicyListRow {
   const source = isPolicySource(r.source) ? r.source : "scorecard";
   return {
     id: String(r.id),
@@ -110,6 +111,7 @@ function toListRow(r: Row): PolicyListRow {
     clientLast: str(r.client_last) ?? "",
     clientEmail: str(r.client_email) ?? "",
     clientPhone: str(r.client_phone) ?? "",
+    age: str(r.client_dob) ? ageOn(String(r.client_dob), today) : null,
     beneficiaryCount: benList(r.beneficiaries).length,
   };
 }
@@ -185,6 +187,7 @@ export async function listPoliciesFor(viewer: Viewer, scope: PolicyScope, teamLe
   const ids = policyAgentIds(viewer, use, teamLeaderId ?? null, ctx);
   if (ids && ids.size === 0) return [];
   const out: PolicyListRow[] = [];
+  const today = todayInDetroit();
   for (let page = 0; page < MAX_PAGES; page++) {
     let q = db().from("sales").select(LIST_COLUMNS).is("deleted_at", null);
     if (ids) q = q.in("agent_id", [...ids]);
@@ -197,7 +200,7 @@ export async function listPoliciesFor(viewer: Viewer, scope: PolicyScope, teamLe
     if (error) fail("policies.list", error);
     const rows = (data ?? []) as unknown as Row[];
     for (const r of rows) {
-      const row = toListRow(r);
+      const row = toListRow(r, today);
       if (canSeeClient(viewer, row, ctx)) out.push(row);
     }
     if (rows.length < PAGE) break;
@@ -439,7 +442,7 @@ export async function createPolicy(viewer: Viewer, form: PolicyForm): Promise<Po
   const today = todayInDetroit();
   const f: PolicyForm = { ...form, agentId: viewer.level === "member" ? (viewer.agentId ?? "") : form.agentId };
   if (!f.agentId && viewer.agentId) f.agentId = viewer.agentId;
-  const errors = validatePolicyForm(f, { today, carrierProducts: settings.carrierProducts, rateClasses: settings.rateClasses, leadSources: settings.leadSources });
+  const errors = validatePolicyForm(f, { today, carrierProducts: settings.carrierProducts, rateClasses: settings.rateClasses, leadSources: settings.leadSources, earliest: earliestSoldOn(viewer, ctx) });
   const n = Object.keys(errors).length;
   if (n) return { ok: false, error: errorLine(n), errors };
   if (!canLogFor(viewer, f.agentId, ctx)) return { ok: false, error: "You can only log a sale for someone you're allowed to." };
@@ -721,7 +724,7 @@ export async function updatePolicy(viewer: Viewer, id: string, input: { form: Po
     else if (!rights.fields.has("status")) return { ok: false, error: rights.locked.status ?? LOCK.none };
   }
   const keys = [...new Set(changed.flatMap((f) => FORM_KEYS_OF[f]))];
-  const errors = validatePolicyForm(merged, { today: todayInDetroit(), carrierProducts: settings.carrierProducts, rateClasses: settings.rateClasses, leadSources: settings.leadSources, keep: current }, keys);
+  const errors = validatePolicyForm(merged, { today: todayInDetroit(), carrierProducts: settings.carrierProducts, rateClasses: settings.rateClasses, leadSources: settings.leadSources, keep: current, earliest: earliestSoldOn(viewer, ctx) }, keys);
   const n = Object.keys(errors).length;
   if (n) return { ok: false, error: errorLine(n), errors };
   if (changed.includes("agentId")) {

@@ -7,6 +7,7 @@ import {
   canManageAccess,
   canSeeClient,
   clientSeers,
+  earliestSoldOn,
   editRights,
   homeScopes,
   joinLinkChoices,
@@ -177,6 +178,21 @@ test("an admin changes anything; a past month asks the owner unless it is the ow
   assert.deepEqual(removeRights(v("olive"), lastMonth, ctx), { can: true, label: "Remove policy", asksOwner: false });
   assert.equal(editRights(TEAM, thisMonth, ctx).fields.size, 0);
   assert.equal(removeRights(TEAM, thisMonth, ctx).can, false);
+});
+
+test("a past month is an admin's: nobody else dates a sale into one, and a fresh sale already in one keeps its board fields", () => {
+  assert.equal(earliestSoldOn(v("ann"), ctx), "2026-11-01");
+  assert.equal(earliestSoldOn(v("mia"), ctx), "2026-11-01");
+  assert.equal(earliestSoldOn(v("adam"), ctx), undefined, "an admin's past-month change asks the owner instead");
+  assert.equal(earliestSoldOn(OWNER_PASSWORD, ctx), undefined);
+  // Logged at 11:55 PM on the 31st, fixed at 12:05 AM: in its first 15 minutes, but in a past month.
+  const turned = policy("ann", { soldOn: "2026-10-31", createdAt: minutesAgo(10) });
+  for (const who of ["ann", "mia"]) {
+    const r = editRights(v(who), { ...turned, loggedByAgent: who }, ctx);
+    assert.deepEqual([...r.fields].sort(), [...TRACKING_FIELDS].sort(), who);
+    for (const f of ["monthlyCents", "soldOn", "carrier", "product"] as const) assert.equal(r.locked[f], LOCK.pastMonth);
+  }
+  assert.equal(removeRights(v("ann"), turned, ctx).label, "Take it back", "taking it back is still the seller's");
 });
 
 test("an AgentSpace day total: nothing editable; an admin may remove it", () => {

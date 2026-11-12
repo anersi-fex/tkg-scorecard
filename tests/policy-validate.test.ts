@@ -104,6 +104,14 @@ test("fixing a policy: a value that left Settings still passes while it is uncha
   assert.equal(validatePolicyForm({ ...stored, leadSource: "Other Old" }, { ...ctx, keep }).leadSource, MSG.list);
 });
 
+test("the earliest day a viewer may pick: a past month says it needs an admin; a day the policy already has still passes", () => {
+  const early = { ...ctx, earliest: "2026-11-01" };
+  assert.equal(validatePolicyForm(filled({ soldOn: "2026-10-31" }), early).soldOn, MSG.pastMonth);
+  assert.equal(validatePolicyForm(filled({ soldOn: "2026-11-01" }), early).soldOn, undefined);
+  assert.equal(validatePolicyForm(filled({ soldOn: "2026-10-31" }), ctx).soldOn, undefined, "no earliest: an admin");
+  assert.equal(validatePolicyForm(filled({ soldOn: "2026-10-31" }), { ...early, keep: { soldOn: "2026-10-31" } }).soldOn, undefined);
+});
+
 test("the form from a FormData: the names as sent, the fields it carried, beneficiaries as pairs", () => {
   const fd = new FormData();
   fd.set("carrier", "Americo");

@@ -5,7 +5,7 @@ import { dbConfigured } from "@/lib/supabase";
 import { getSettings } from "@/lib/data";
 import { loadMonthSnapshot } from "@/lib/board";
 import { loadRuleContext } from "@/lib/policies";
-import { canUsePolicies, logForChoices, roleLabel } from "@/lib/rules";
+import { canUsePolicies, earliestSoldOn, logForChoices, roleLabel } from "@/lib/rules";
 import { isAdmin } from "@/lib/viewer";
 import { monthKeyOf, todayInDetroit } from "@/lib/month";
 import { EmptyState, PageHead } from "@/components/ui/kit";
@@ -71,6 +71,7 @@ export default async function LogPage({ searchParams }: PageProps<"/log">) {
         today={today}
         month={month}
         board={board}
+        earliest={earliestSoldOn(viewer, ctx)}
       />
     </div>
   );

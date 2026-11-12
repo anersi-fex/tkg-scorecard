@@ -69,6 +69,8 @@ export function PolicyFields(
     uwHelp?: string;
     /** Why the underwriter box can't change now (it follows the status), not a lock. */
     uwDisabled?: string;
+    /** The earliest submitted date this viewer may pick (rules.ts earliestSoldOn; none for an admin). */
+    earliest?: string;
   },
 ) {
   const { f, onChange } = p;
@@ -143,8 +145,8 @@ export function PolicyFields(
             </SelectBox>,
           )}
           {field("coverage", <MoneyInput id={id("coverage")} name="coverage" value={f.coverage} disabled={!!lock("coverage")} onChange={(e) => onChange("coverage", e.target.value)} />)}
-          {field("soldOn", <DateInput id={id("soldOn")} name="soldOn" value={f.soldOn} max={p.today} disabled={!!lock("soldOn")} onChange={(e) => onChange("soldOn", e.target.value)} />, {
-            help: lock("soldOn") ? undefined : "The day it counts on the board. Never later than today.",
+          {field("soldOn", <DateInput id={id("soldOn")} name="soldOn" value={f.soldOn} min={p.earliest} max={p.today} disabled={!!lock("soldOn")} onChange={(e) => onChange("soldOn", e.target.value)} />, {
+            help: lock("soldOn") ? undefined : p.earliest ? "The day it counts on the board: this month, never later than today. A past month needs an admin." : "The day it counts on the board. Never later than today.",
           })}
         </FormGrid>
       </FormSection>

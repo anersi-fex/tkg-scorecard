@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireViewer } from "@/lib/auth";
 import { addAgent, getAgent, lineFor, listAgents, saveSettings, setAgentGoal, setAgentPcGoal, setTeamGoal, setTeamPcGoal, touchBoard, updateAgent, getSettings } from "@/lib/data";
 import { bumpSession, sameName } from "@/lib/people";
-import { revokeInvitesMadeBy, revokePersonInvites } from "@/lib/invites";
+import { revokeInvitesMadeBy, revokeOwnTeamLinks, revokePersonInvites } from "@/lib/invites";
 import { isOwner } from "@/lib/viewer";
 import { isMonthKey } from "@/lib/month";
 import { parseDollars } from "@/lib/money";
@@ -112,6 +112,7 @@ export async function setPersonActive(id: string, active: boolean): Promise<Acti
       // them on the board and the next try does all of it.
       await revokeInvitesMadeBy(id);
       await revokePersonInvites(id);
+      await revokeOwnTeamLinks(id);
       await bumpSession(id);
     }
     await updateAgent(id, { active });

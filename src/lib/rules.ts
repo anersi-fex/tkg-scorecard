@@ -192,10 +192,20 @@ export function inFirstMinutes(p: Pick<RulePolicy, "createdAt">, ctx: Pick<RuleC
 }
 /** The policy's submitted date is in a month before this one (Detroit). */
 export const isPastMonth = (p: Pick<RulePolicy, "soldOn">, ctx: Pick<RuleContext, "month">): boolean => p.soldOn < `${ctx.month}-01`;
+
+/**
+ * The earliest submitted date this viewer may give a sale (logging it, or fixing its day): an admin
+ * any (a past month asks the owner, unless it is the owner); anyone else the 1st of this month, so a
+ * past month's board never changes without the owner's OK (decision 4).
+ */
+export const earliestSoldOn = (v: RuleViewer, ctx: Pick<RuleContext, "month">): string | undefined => (isAdmin(v) ? undefined : `${ctx.month}-01`);
 const isOwnPolicy = (v: RuleViewer, p: RulePolicy) => !!personOf(v) && p.agentId === personOf(v);
 const loggedIt = (v: RuleViewer, p: RulePolicy) => !!personOf(v) && p.loggedByAgent === personOf(v);
 /** A manager above the seller on the confirmed tree. */
 export const managesPolicy = (v: RuleViewer, p: RulePolicy, ctx: RuleContext): boolean => isManagerLevel(v) && !!personOf(v) && isAbove(personOf(v)!, p.agentId, ctx);
+
+/** The board fields a seller may change in the first 15 minutes (all but who sold it). */
+const SALE_FIELDS = ["monthlyCents", "soldOn", "carrier", "product"] as const;
 
 export interface EditRights {
   /** The fields this viewer may change on this policy. */
@@ -225,16 +235,18 @@ export function editRights(v: RuleViewer, p: RulePolicy, ctx: RuleContext): Edit
   if (p.source === "import") return lockAll(LOCK.importRow);
   if (isAdmin(v)) return { fields: new Set(ALL_POLICY_FIELDS), locked, asksOwner: isPastMonth(p, ctx) && !isOwner(v) };
   const notSeller = ALL_POLICY_FIELDS.filter((f) => f !== "agentId");
-  if (loggedIt(v, p) && inFirstMinutes(p, ctx)) {
+  // The first 15 minutes: everything but who sold it, unless the sale is already in a past month
+  // (logged just before the month turned): then its board fields wait for an admin.
+  const firstMinutes = () => {
     locked.agentId = LOCK.seller;
-    return { fields: new Set(notSeller), locked, asksOwner: false };
-  }
+    if (!isPastMonth(p, ctx)) return { fields: new Set(notSeller), locked, asksOwner: false };
+    for (const f of SALE_FIELDS) locked[f] = LOCK.pastMonth;
+    return { fields: new Set<PolicyField>(TRACKING_FIELDS), locked, asksOwner: false };
+  };
+  if (loggedIt(v, p) && inFirstMinutes(p, ctx)) return firstMinutes();
   if (isOwnPolicy(v, p)) {
-    if (inFirstMinutes(p, ctx)) {
-      locked.agentId = LOCK.seller;
-      return { fields: new Set(notSeller), locked, asksOwner: false };
-    }
-    for (const f of ["monthlyCents", "soldOn", "carrier", "product"] as const) locked[f] = LOCK.board;
+    if (inFirstMinutes(p, ctx)) return firstMinutes();
+    for (const f of SALE_FIELDS) locked[f] = LOCK.board;
     locked.agentId = LOCK.seller;
     return { fields: new Set<PolicyField>(TRACKING_FIELDS), locked, asksOwner: false };
   }
