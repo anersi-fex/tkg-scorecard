@@ -115,12 +115,12 @@ export function InstallGuide({ welcome, firstName, address }: { welcome: boolean
       <header className="mb-4">
         {welcome ? (
           <>
-            <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.035em] text-gray-900">{firstName ? `Welcome, ${firstName}.` : "Welcome."}</h1>
+            <h1 className="text-[27px] leading-tight font-medium tracking-[-0.01em] text-gray-900">{firstName ? `Welcome, ${firstName}.` : "Welcome."}</h1>
             {kind !== "installed" && !added && <p className="mt-1 text-[16px] font-semibold text-gray-700">One last step: put Scorecard on your phone.</p>}
           </>
         ) : (
           <>
-            <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.035em] text-gray-900">Put Scorecard on your phone</h1>
+            <h1 className="text-[27px] leading-tight font-medium tracking-[-0.01em] text-gray-900">Put Scorecard on your phone</h1>
             <p className="mt-0.5 text-[14px] font-medium text-gray-500">It gets its own icon and opens like any other app.</p>
           </>
         )}
@@ -158,7 +158,7 @@ export function InstallGuide({ welcome, firstName, address }: { welcome: boolean
       )}
       {device && kind !== "installed" && !added && (
         <div className="mt-5 rounded-2xl border border-line px-3.5 py-3">
-          <p className="text-[13px] font-bold text-gray-700">Not your phone?</p>
+          <p className="text-[13px] font-medium text-gray-700">Not your phone?</p>
           <div role="group" aria-label="Pick your phone" className="mt-2 grid grid-cols-3 gap-1 rounded-xl bg-track p-1">
             {(
               [
@@ -172,7 +172,7 @@ export function InstallGuide({ welcome, firstName, address }: { welcome: boolean
                 type="button"
                 aria-pressed={lit === value}
                 onClick={() => setPicked(value)}
-                className={cn("min-h-11 rounded-[10px] text-[14px] transition-colors", lit === value ? "bg-segment font-bold text-gray-900 shadow-card" : "font-semibold text-gray-600")}
+                className={cn("min-h-11 rounded-[10px] text-[14px] transition-colors", lit === value ? "bg-segment font-medium text-gray-900 shadow-card" : "font-semibold text-gray-600")}
               >
                 {label}
               </button>
@@ -189,11 +189,11 @@ export function InstallGuide({ welcome, firstName, address }: { welcome: boolean
 function Count({ taps, where }: { taps: number; where: string }) {
   return (
     <div className="mb-3 flex items-center gap-3 px-1">
-      <span data-taps className="font-mono text-[44px] leading-none font-bold tracking-[-0.04em] text-accent-text">
+      <span data-taps className="font-mono text-[44px] leading-none font-medium tracking-[-0.04em] text-accent-text">
         {taps}
       </span>
       <span className="min-w-0">
-        <span className="block text-[17px] leading-tight font-extrabold tracking-[-0.02em] text-gray-900">{taps === 1 ? "tap" : "taps"}</span>
+        <span className="block text-[17px] leading-tight font-medium text-gray-900">{taps === 1 ? "tap" : "taps"}</span>
         <span className="block truncate text-[13px] font-medium text-gray-500">{where}</span>
       </span>
     </div>
@@ -204,7 +204,7 @@ function NumberBadge({ n, state }: { n: ReactNode; state: "now" | "done" | "next
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-full font-mono font-bold",
+        "flex shrink-0 items-center justify-center rounded-full font-mono font-medium",
         state === "now" ? "h-12 w-12 bg-tide-strong text-[24px] text-white shadow-glow" : "h-9 w-9 text-[16px]",
         state === "done" && "bg-green-100 text-green-800",
         state === "next" && "bg-gray-100 text-gray-600",
@@ -266,7 +266,7 @@ function PhoneSteps({
         <Card>
           <div className="flex items-start gap-3">
             <NumberBadge n={1} state="now" />
-            <p className="pt-2.5 text-[18px] leading-snug font-bold tracking-[-0.02em] text-gray-900">Tap the button below.</p>
+            <p className="pt-2.5 text-[18px] leading-snug font-medium tracking-[-0.02em] text-gray-900">Tap the button below.</p>
           </div>
           <Button type="button" data-install-button onClick={install} disabled={asking} className="mt-4 min-h-14 w-full rounded-2xl text-[17px]">
             Add Scorecard to my phone
@@ -308,10 +308,10 @@ function PhoneSteps({
                 <div className="flex items-start gap-3">
                   <NumberBadge n={i + 1} state="now" />
                   <div className="min-w-0 pt-0.5">
-                    <p className="text-[11px] font-bold tracking-[0.09em] text-gray-500 uppercase">
+                    <p className="text-[11px] font-medium tracking-[0.09em] text-gray-500 uppercase">
                       Tap {i + 1} of {steps.length}
                     </p>
-                    <p className="mt-0.5 text-[18px] leading-snug font-bold tracking-[-0.02em] text-gray-900">{s.text}</p>
+                    <p className="mt-0.5 text-[18px] leading-snug font-medium tracking-[-0.02em] text-gray-900">{s.text}</p>
                     {s.hint && <p className="mt-1 text-[14px] font-medium text-gray-600">{s.hint}</p>}
                   </div>
                 </div>
@@ -335,7 +335,7 @@ function PhoneSteps({
         <li data-step="done" aria-current={at === last ? "step" : undefined}>
           {at === last ? (
             <Card className="outline-2 outline-accent">
-              <p className="text-[18px] leading-snug font-bold tracking-[-0.02em] text-gray-900">Done? Open Scorecard from your Home Screen.</p>
+              <p className="text-[18px] leading-snug font-medium tracking-[-0.02em] text-gray-900">Done? Open Scorecard from your Home Screen.</p>
               <p className="mt-1 text-[14px] font-medium text-gray-600">Look for the podium. If it asks you to sign in, sign in once more: it stays signed in after that.</p>
               <div className="mt-3.5">
                 <Art name="home" />
@@ -412,7 +412,7 @@ function Installed({ fresh }: { fresh: boolean }) {
           <path d="m5 12.5 4.5 4.5L19 7.5" />
         </svg>
       </span>
-      <p className="mt-3 text-[20px] leading-tight font-extrabold tracking-[-0.03em] text-gray-900">You&apos;re all set.</p>
+      <p className="mt-3 text-[20px] leading-tight font-medium tracking-[-0.01em] text-gray-900">You&apos;re all set.</p>
       <p className="mt-1 text-[15px] font-medium text-gray-600">{fresh ? "Scorecard is on your Home Screen now. Open it from there next time." : "Scorecard is on your Home Screen."}</p>
       <LinkButton href="/" className="mt-4 w-full">
         Go to Home
@@ -424,7 +424,7 @@ function Installed({ fresh }: { fresh: boolean }) {
 function Computer({ address, detected }: { address: string; detected: boolean }) {
   return (
     <Card>
-      <p className="text-[18px] leading-snug font-bold tracking-[-0.02em] text-gray-900">This guide is for your phone.</p>
+      <p className="text-[18px] leading-snug font-medium tracking-[-0.02em] text-gray-900">This guide is for your phone.</p>
       <p className="mt-1 text-[15px] font-medium text-gray-600">Open this address on your phone:</p>
       <AddressBox address={address} />
       <div className="mt-3">
@@ -456,12 +456,12 @@ function InApp({ device, address }: { device: Device; address: string }) {
   return (
     <>
       <Card>
-        <p className="text-[20px] leading-tight font-extrabold tracking-[-0.03em] text-gray-900">Open this in {browser}</p>
+        <p className="text-[20px] leading-tight font-medium tracking-[-0.01em] text-gray-900">Open this in {browser}</p>
         <p className="mt-1 text-[15px] font-medium text-gray-600">
           You opened this inside {app}. It can&apos;t put Scorecard on your phone from here. {browser} can.
         </p>
         {jump && (
-          <a href={jump} data-jump className="mt-4 inline-flex min-h-14 w-full items-center justify-center rounded-2xl bg-tide-strong px-4 text-[17px] font-bold text-white shadow-glow">
+          <a href={jump} data-jump className="mt-4 inline-flex min-h-14 w-full items-center justify-center rounded-2xl bg-tide-strong px-4 text-[17px] font-medium text-white shadow-glow">
             Open in {browser}
           </a>
         )}
@@ -470,7 +470,7 @@ function InApp({ device, address }: { device: Device; address: string }) {
         </div>
         <p className="mt-2 text-[13px] font-medium text-gray-500">You will sign in once more in {browser}. Then this guide shows the taps.</p>
       </Card>
-      <p className="mt-4 mb-2 px-1 text-[13px] font-bold text-gray-700">Nothing happened? 2 taps do the same:</p>
+      <p className="mt-4 mb-2 px-1 text-[13px] font-medium text-gray-700">Nothing happened? 2 taps do the same:</p>
       <ol className="space-y-2.5">
         {steps.map((s, i) => (
           <li key={i}>
@@ -478,7 +478,7 @@ function InApp({ device, address }: { device: Device; address: string }) {
               <div className="flex items-start gap-3">
                 <NumberBadge n={i + 1} state="now" />
                 <div className="min-w-0 pt-0.5">
-                  <p className="text-[17px] leading-snug font-bold tracking-[-0.02em] text-gray-900">{s.text}</p>
+                  <p className="text-[17px] leading-snug font-medium tracking-[-0.02em] text-gray-900">{s.text}</p>
                   {s.hint && <p className="mt-1 text-[14px] font-medium text-gray-600">{s.hint}</p>}
                 </div>
               </div>

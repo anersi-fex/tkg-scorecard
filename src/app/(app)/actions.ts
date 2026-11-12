@@ -320,3 +320,67 @@ export async function saveBoardSettings(form: FormData): Promise<ActionResult> {
     return { ok: false, error: message(err) };
   }
 }
+
+/** "Americo: WL/FEX, TERM, IUL", one carrier per line, into each carrier with its products (up to 30 carriers, 12 products each). */
+function carrierLines(raw: FormDataEntryValue | null): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const line of String(raw ?? "").split(/\n/)) {
+    const at = line.indexOf(":");
+    const name = (at >= 0 ? line.slice(0, at) : line).trim().slice(0, 40);
+    if (!name || Object.keys(out).some((k) => k.toLowerCase() === name.toLowerCase())) continue;
+    const products = (at >= 0 ? line.slice(at + 1) : "")
+      .split(",")
+      .map((x) => x.trim().slice(0, 40))
+      .filter(Boolean)
+      .filter((x, i, all) => all.findIndex((q) => q.toLowerCase() === x.toLowerCase()) === i)
+      .slice(0, 12);
+    out[name] = products.length ? products : ["WL/FEX"];
+    if (Object.keys(out).length === 30) break;
+  }
+  return out;
+}
+
+/** One per line, each cut to `max` characters, no repeats, up to 20. */
+function lineList(raw: FormDataEntryValue | null, max: number): string[] {
+  return String(raw ?? "")
+    .split(/\n/)
+    .map((x) => x.trim().slice(0, max))
+    .filter(Boolean)
+    .filter((x, i, all) => all.findIndex((q) => q.toLowerCase() === x.toLowerCase()) === i)
+    .slice(0, 20);
+}
+
+/**
+ * Settings > Carriers and products, Rate classes, Lead sources (the owner or an admin; contract
+ * decision 15): the lists Log a sale offers. Each box changes only when the form sends it; an
+ * empty box keeps what is stored. The carriers on the board follow the carriers listed here.
+ */
+export async function saveSaleLists(form: FormData): Promise<ActionResult> {
+  try {
+    await requireViewer("admin");
+    const current = await getSettings();
+    const next = { ...current };
+    if (form.has("carrier_products")) {
+      const cp = carrierLines(form.get("carrier_products"));
+      if (!Object.keys(cp).length) return { ok: false, error: "List at least one carrier, like \"Americo: WL/FEX, TERM\"." };
+      next.carrierProducts = cp;
+      next.carriers = Object.keys(cp).slice(0, 20);
+      next.products = [...new Set(Object.values(cp).flat())].slice(0, 20);
+    }
+    if (form.has("rate_classes")) {
+      const list = lineList(form.get("rate_classes"), 40);
+      if (!list.length) return { ok: false, error: "List at least one rate class." };
+      next.rateClasses = list;
+    }
+    if (form.has("lead_sources")) {
+      const list = lineList(form.get("lead_sources"), 60);
+      if (!list.length) return { ok: false, error: "List at least one lead source." };
+      next.leadSources = list;
+    }
+    await saveSettings(next);
+    await refresh();
+    return { ok: true, message: "Saved. Log a sale offers it now." };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}

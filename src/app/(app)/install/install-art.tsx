@@ -126,7 +126,7 @@ function MenuArt({ label, row, glyph }: { label: string; row: string; glyph: Rea
       <div className="w-full max-w-[280px] rounded-2xl bg-surface shadow-card">
         <GhostRow w="w-16" />
         <div className="relative mx-1 flex h-12 items-center justify-between rounded-xl bg-tint px-2.5 text-accent-text ring-2 ring-accent">
-          <span className="text-[15px] font-bold tracking-[-0.01em]">{row}</span>
+          <span className="text-[15px] font-medium tracking-[-0.01em]">{row}</span>
           {glyph}
         </div>
         <GhostRow w="w-24" />
@@ -143,13 +143,13 @@ function ConfirmArt({ label, title, cancel = "Cancel", go }: { label: string; ti
         <div className="flex items-center gap-2.5">
           <ScoreMark size={36} />
           <div className="min-w-0">
-            <p className="truncate text-[14px] font-bold text-gray-900">Scorecard</p>
+            <p className="truncate text-[14px] font-medium text-gray-900">Scorecard</p>
             <p className="truncate text-[12px] font-medium text-gray-500">{title}</p>
           </div>
         </div>
         <div className="mt-3 flex items-center justify-end gap-2">
           <span className="inline-flex h-9 items-center rounded-full px-3 text-[14px] font-semibold text-gray-500">{cancel}</span>
-          <span className="relative inline-flex h-9 items-center rounded-full bg-tide-strong px-4 text-[14px] font-bold text-white">
+          <span className="relative inline-flex h-9 items-center rounded-full bg-tide-strong px-4 text-[14px] font-medium text-white">
             <span aria-hidden className="absolute -inset-1 rounded-full ring-2 ring-accent" />
             {go}
           </span>
@@ -198,11 +198,11 @@ export function Art({ name }: { name: ArtName }) {
           <div className="w-full max-w-[280px] rounded-2xl bg-surface p-3 shadow-card">
             <div className="flex items-center justify-between">
               <span className="text-[15px] font-medium text-gray-500">Cancel</span>
-              <span className="relative inline-flex h-9 items-center rounded-full bg-tint px-4 text-[15px] font-bold text-accent-text ring-2 ring-accent">Add</span>
+              <span className="relative inline-flex h-9 items-center rounded-full bg-tint px-4 text-[15px] font-medium text-accent-text ring-2 ring-accent">Add</span>
             </div>
             <div className="mt-3 flex items-center gap-2.5 border-t border-line pt-3">
               <ScoreMark size={40} />
-              <span className="text-[15px] font-bold text-gray-900">Scorecard</span>
+              <span className="text-[15px] font-medium text-gray-900">Scorecard</span>
             </div>
           </div>
         </Stage>

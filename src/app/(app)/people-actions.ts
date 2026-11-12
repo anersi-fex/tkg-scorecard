@@ -279,19 +279,6 @@ export async function savePcEnabled(on: boolean): Promise<ActionResult> {
   }
 }
 
-/** Whether the shared team password may still log sales (off: it only looks). Owner only. */
-export async function saveTeamPasswordLogs(on: boolean): Promise<ActionResult> {
-  try {
-    await requireViewer("owner");
-    const current = await getSettings();
-    await saveSettings({ ...current, teamPasswordLogs: on === true });
-    await refresh();
-    return { ok: true, message: on ? "The team password can log sales." : "The team password only looks now. People log with their own sign-in." };
-  } catch (err) {
-    return { ok: false, error: message(err) };
-  }
-}
-
 /**
  * A person's own profile (form fields "name", "phone", "in_office" = "1" or "0"; a field that is
  * not sent is left alone). Only ever the signed-in person's own row: the request names nobody.

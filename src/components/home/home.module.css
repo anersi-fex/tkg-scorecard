@@ -32,13 +32,15 @@
 }
 
 /* the header's tools */
-.tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tools { display: flex; flex: 0 0 auto; max-width: 100%; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tools > nav { flex: none; }
 .months { display: inline-flex; align-items: center; gap: 4px; }
 .pick { width: 240px; }
 @container home (max-width: 759px) {
   .tools { width: 100%; }
+  .tools { flex: 1 1 100%; }
   .tools > nav { display: flex; flex: 1 1 100%; }
-  .tools > nav > a { flex: 1 1 0; }
+  .tools > nav > a { flex: 1 1 auto; }
   .pick { width: 100%; }
 }
 

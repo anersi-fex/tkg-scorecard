@@ -394,3 +394,12 @@
   .log-done-again { align-self: center; margin-top: 0; }
   .log-foot .btn-lg { min-width: 0; }
 }
+
+/* ======================================================================= the React port's own bits */
+.log-who-pop-box { width: 360px; padding: 6px; }
+.log-who-wrap { display: flex; width: 100%; }
+.log-who-group { padding: 8px 8px 4px; font-size: 11.5px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--t-text-3); }
+.log-know-list .ico, .log-done-notes .ico, .log-board-k .ico { flex: none; }
+.log-side { display: flex; flex-direction: column; gap: 20px; }
+.log-main { min-width: 0; }
+@media (max-width: 759px) { .log-who-pop-box { left: 0; right: 0; width: auto; max-width: 100%; } }

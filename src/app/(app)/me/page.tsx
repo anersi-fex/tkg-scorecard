@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { pageViewer } from "@/lib/auth";
 import { getPerson } from "@/lib/people";
 import { formatPhone } from "@/lib/phone";
 import { dbConfigured } from "@/lib/supabase";
-import { Card, PageTitle } from "@/components/ui";
-import { ListCard, RowChevron } from "@/components/tide";
+import { ListRow, PageHead, Panel, RoleTag } from "@/components/ui/kit";
+import { Icon } from "@/components/ui/icon";
 import { ProfileForms } from "./profile-forms";
 
 export const metadata: Metadata = { title: "Your profile" };
@@ -13,17 +12,11 @@ export const metadata: Metadata = { title: "Your profile" };
 /** The row every kind of sign-in gets: the phone guide. */
 function InstallRow() {
   return (
-    <ListCard>
-      <li>
-        <Link href="/install" className="flex min-h-14 items-center gap-3 px-4 py-3">
-          <span className="min-w-0 flex-1">
-            <span className="block text-[16px] font-semibold text-gray-900">Put Scorecard on your phone</span>
-            <span className="block text-[13px] text-gray-500">A few taps, with pictures.</span>
-          </span>
-          <RowChevron />
-        </Link>
-      </li>
-    </ListCard>
+    <Panel>
+      <div className="list">
+        <ListRow href="/install" lead={<Icon name="phone" size={20} />} title="Put Scorecard on your phone" sub="A few taps, with pictures." chevron />
+      </div>
+    </Panel>
   );
 }
 
@@ -37,24 +30,28 @@ export default async function MePage() {
   const me = viewer.agentId && dbConfigured() ? await getPerson(viewer.agentId) : null;
   if (!me) {
     return (
-      <>
-        <PageTitle>Your profile</PageTitle>
-        <div className="space-y-4">
-          <Card>
-            <p className="text-[15px] leading-snug text-gray-900" data-me="shared">
-              {viewer.via === "owner-password" ? "You're on the owner password. Add yourself on the People page to get a profile." : "You're on the team password. Ask for a join link to get your own sign-in."}
-            </p>
-          </Card>
-          <InstallRow />
-        </div>
-      </>
+      <div className="page page-narrow">
+        <PageHead title="Your profile" />
+        <Panel>
+          <p data-me="shared">{viewer.via === "owner-password" ? "You're on the owner password. Add yourself on the People page to get a profile." : "You're on the team password. Ask for a join link to get your own sign-in."}</p>
+        </Panel>
+        <InstallRow />
+      </div>
     );
   }
   const upline = me.upline_id ? await getPerson(me.upline_id) : null;
   return (
-    <>
-      <PageTitle sub={viewer.via === "owner-password" ? "You're signed in with the owner password." : undefined}>Your profile</PageTitle>
-      <div className="space-y-4">
+    <div className="page">
+      <PageHead
+        title={
+          <>
+            Your profile
+            <RoleTag level={viewer.level} />
+          </>
+        }
+        sub={viewer.via === "owner-password" ? "You're signed in with the owner password." : "Only you and the admins see your number."}
+      />
+      <div className="stack">
         <ProfileForms
           name={me.name}
           // A person's own number, on their own screen.
@@ -66,6 +63,6 @@ export default async function MePage() {
         />
         <InstallRow />
       </div>
-    </>
+    </div>
   );
 }

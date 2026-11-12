@@ -3,8 +3,10 @@ import { pageViewer } from "@/lib/auth";
 import { isOwner } from "@/lib/viewer";
 import { dbConfigured } from "@/lib/supabase";
 import { getSettings, goalsForMonth } from "@/lib/data";
+import { loadMonthSnapshot } from "@/lib/board";
+import { formatDollars } from "@/lib/money";
 import { addMonths, monthKeyOf, monthLabel, todayInDetroit } from "@/lib/month";
-import { PageTitle } from "@/components/ui";
+import { PageHead } from "@/components/ui/kit";
 import { appBase } from "@/lib/app-url";
 import { LOG_TOKEN_MIN } from "@/lib/auth";
 import { DEFAULT_PC_COLOR } from "@/lib/pc-colors";
@@ -21,14 +23,21 @@ export const metadata: Metadata = { title: "Settings" };
 export default async function SettingsPage() {
   const viewer = await pageViewer("admin");
   const owner = isOwner(viewer);
-  if (!dbConfigured()) return <PageTitle>Settings</PageTitle>;
-  const month = monthKeyOf(todayInDetroit());
+  if (!dbConfigured())
+    return (
+      <div className="page">
+        <PageHead title="Settings" />
+      </div>
+    );
+  const today = todayInDetroit();
+  const month = monthKeyOf(today);
   const next = addMonths(month, 1);
-  const [settings, goals, nextGoals] = await Promise.all([getSettings(), goalsForMonth(month), goalsForMonth(next)]);
+  const [settings, goals, nextGoals, snap] = await Promise.all([getSettings(), goalsForMonth(month), goalsForMonth(next), loadMonthSnapshot(month, { today, scoreboard: false }).catch(() => null)]);
+  const progress = snap && snap.team.goalCents > 0 ? { pct: Math.min(999, snap.team.goalPct), projected: formatDollars(snap.team.pace.projectedCents) } : null;
   const token = owner ? (process.env.LOG_TOKEN ?? "") : "";
   return (
-    <>
-      <PageTitle sub={owner ? "You and the admins see this screen." : "Only the admins and Anersi see this screen."}>Settings</PageTitle>
+    <div className="page">
+      <PageHead title="Settings" sub={owner ? "You and the admins see this screen." : "Only the admins and Anersi see this screen."} />
       <SettingsForms
         // The P&C carriers, color and goals and the Sign-ins switch are the owner's: an admin's
         // screen is sent none of them (the color and the switch read as their defaults).
@@ -42,7 +51,8 @@ export default async function SettingsPage() {
         teamPasswordSet={owner && !!process.env.TEAM_PASSWORD}
         base={owner ? await appBase() : ""}
         owner={owner}
+        progress={progress}
       />
-    </>
+    </div>
   );
 }

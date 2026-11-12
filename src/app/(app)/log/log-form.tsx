@@ -210,7 +210,7 @@ export function LogForm({
               <span className="log-step-now">
                 Step {step} of 3 · {STEPS[step - 1]}
               </span>
-              {step < 3 && <span className="log-step-next">Next: {STEPS[step]}</span>}
+              {step < 3 && <span className="log-step-next">Next: {STEPS[step as 1 | 2]}</span>}
             </div>
             <div className="log-rail" role="progressbar" aria-valuemin={1} aria-valuemax={3} aria-valuenow={step} aria-label={`Step ${step} of 3`}>
               <i style={{ width: `${((step / 3) * 100).toFixed(2)}%` }} />
