@@ -11,9 +11,45 @@ import { isSoundKey } from "./sounds";
  * back as plain objects in cents and "YYYY-MM-DD" strings.
  */
 
+/**
+ * The data layer did not answer, or refused: `where` is the table and the operation, and the
+ * message adds the database's own short words (never a row). For the log and the setup notice;
+ * an action never shows it to a person (lineFor below).
+ */
+export class DataError extends Error {
+  constructor(where: string, error: { message: string } | null) {
+    super(`${where}: ${error?.message ?? "unknown error"}`);
+    this.name = "DataError";
+  }
+}
+
+/**
+ * A line written for the person on the screen and thrown on purpose ("Only an admin can do
+ * that", "That person isn't here."). Actions show a Said error's words and nobody else's.
+ */
+export class Said extends Error {
+  constructor(line: string) {
+    super(line);
+    this.name = "Said";
+  }
+}
+
+export const DIDNT_SAVE = "That didn't save. Try again.";
+
+/**
+ * The line a person sees for an error an action caught: the words of a Said error, and for
+ * anything else (the database, the Supabase client, a missing setting, a bug) one plain
+ * sentence, so no table, column or client wording reaches a screen. Logs the error's class only.
+ */
+export function lineFor(err: unknown, fallback: string = DIDNT_SAVE): string {
+  if (err instanceof Error && (err instanceof Said || err.name === "Said") && err.message) return err.message;
+  console.error("action_failed", err instanceof Error ? err.name : "error");
+  return fallback;
+}
+
 function fail(where: string, error: { message: string } | null): never {
   // The message names the table and the operation only: never a row.
-  throw new Error(`${where}: ${error?.message ?? "unknown error"}`);
+  throw new DataError(where, error);
 }
 
 export interface SaleWithAgent extends Sale {
@@ -294,4 +330,24 @@ function pcCarrierList(raw: unknown): PcCarrier[] {
 export async function saveSettings(next: AppSettings): Promise<void> {
   const { error } = await db().from("settings").upsert({ key: "app", value: next, updated_at: new Date().toISOString() });
   if (error) fail("settings.save", error);
+}
+
+/**
+ * Tells the TV something it shows has changed. The TV asks "anything new?" every 5 seconds and
+ * reads in full only when the board's stamp moves (boardStamp in board.ts: the newest sale, the
+ * month's count and this row's updated_at), so a change that is neither a new sale nor a Settings
+ * save (a goal, a person, an upline, an office mark, a fixed sale) moves the stamp here. Only
+ * updated_at is written: the settings themselves are never touched (a missing row is made with
+ * an empty value, which reads as the defaults). Best effort: it never throws, and a miss only
+ * means the TV follows on its once-a-minute full read.
+ */
+export async function touchBoard(): Promise<void> {
+  try {
+    const updated_at = new Date().toISOString();
+    const { data, error } = await db().from("settings").update({ updated_at }).eq("key", "app").select("key");
+    if (error || (data?.length ?? 0) > 0) return;
+    await db().from("settings").upsert({ key: "app", value: {}, updated_at }, { onConflict: "key", ignoreDuplicates: true });
+  } catch {
+    /* best effort */
+  }
 }

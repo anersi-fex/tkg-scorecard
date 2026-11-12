@@ -3,10 +3,9 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ScoreLockup } from "@/components/brand";
 import { clientAddress, JOIN_MAX_PER_IP, joinKey, loginThrottled, recordLoginFailure } from "@/lib/auth";
-import { listAgents } from "@/lib/data";
 import { readInvite, type Invite } from "@/lib/invites";
 import { loadLook } from "@/lib/look-setting";
-import { getPerson } from "@/lib/people";
+import { getPerson, listPeople } from "@/lib/people";
 import { PHONE_VIEWPORT } from "@/lib/phone-viewport";
 import { dbConfigured } from "@/lib/supabase";
 import { JoinForm, type JoinFormProps } from "./join-form";
@@ -99,9 +98,15 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
   try {
     if (invite.kind === "agency") {
       // Names only (never a number): the list a new person picks their upline from.
-      const people = (await listAgents()).map((a) => ({ id: a.id, name: a.name }));
+      const board = await listPeople();
+      const people = board.map((a) => ({ id: a.id, name: a.name }));
       const leader = invite.upline_id && people.some((p) => p.id === invite.upline_id) ? invite.upline_id : null;
-      props = { kind: "agency", people, leaderId: leader, needsPhone: true, inOffice: false };
+      // The people already on the board who have no sign-in yet (members only: an owner's or an
+      // admin's row is claimed through its own link). "Matt" on the board and "Matthew" typed would
+      // make a second row, so the card offers the board's own spelling to tap. Names and nothing
+      // else: no id, no number, nobody's numbers.
+      const unclaimed = [...new Set(board.filter((a) => !a.has_login && (a.role ?? "member") === "member").map((a) => a.name))].sort((x, y) => x.localeCompare(y));
+      props = { kind: "agency", people, unclaimed, leaderId: leader, needsPhone: true, inOffice: false };
     } else {
       const person = invite.agent_id ? await getPerson(invite.agent_id) : null;
       if (!person || !person.active) return bad;

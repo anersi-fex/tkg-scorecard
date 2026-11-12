@@ -1,8 +1,8 @@
 import "server-only";
 import { db } from "./supabase";
-import { deleteSale, getAgent, getSale, updateSale } from "./data";
+import { DataError, Said, deleteSale, getAgent, getSale, getSettings, updateSale } from "./data";
 import { personForSession, setRole } from "./people";
-import { revokePersonInvites } from "./invites";
+import { revokeInvitesMadeBy, revokePersonInvites } from "./invites";
 import { isDateKey } from "./month";
 import { isSaleKind, type SaleKind } from "./types";
 import { APPROVAL_KINDS, isOwner, type ApprovalKind, type Viewer } from "./viewer";
@@ -21,7 +21,7 @@ export interface Approval {
   id: string;
   kind: ApprovalKind;
   payload: Record<string, unknown>;
-  /** Plain words: "Make Mikal Sedik an admin". */
+  /** Plain words: "Make Dana Reyes an admin". */
   summary: string;
   requested_by: string | null;
   /** Who asked, by name (null when that person is gone). */
@@ -47,7 +47,7 @@ const COLUMNS = "id, kind, payload, summary, requested_by, requested_at, status,
 type Row = Omit<Approval, "requested_by_name" | "kind"> & { kind: string; agents: { name: string } | { name: string }[] | null };
 
 function fail(where: string, error: { message: string } | null): never {
-  throw new Error(`${where}: ${error?.message ?? "unknown error"}`);
+  throw new DataError(where, error);
 }
 
 const isKind = (v: unknown): v is ApprovalKind => typeof v === "string" && (APPROVAL_KINDS as string[]).includes(v);
@@ -82,10 +82,10 @@ const targetKey = (kind: ApprovalKind) => (kind === "make_admin" || kind === "re
  * it already answered, and he reads the new one before he approves it.
  */
 export async function requestApproval(input: { kind: ApprovalKind; payload: Record<string, unknown>; summary: string; requestedBy: string | null }): Promise<void> {
-  if (!isKind(input.kind)) throw new Error("That isn't something to ask for.");
+  if (!isKind(input.kind)) throw new Said("That isn't something to ask for.");
   const key = targetKey(input.kind);
   const target = input.payload[key];
-  if (!isUuid(target)) throw new Error("That request is missing what it is about.");
+  if (!isUuid(target)) throw new Said("That request is missing what it is about.");
   const summary = input.summary.replace(/\s+/g, " ").trim().slice(0, 200);
   const waiting = await db().from("approvals").select("id, summary").eq("status", "pending").eq("kind", input.kind).eq(`payload->>${key}`, target);
   if (waiting.error) fail("approvals.find", waiting.error);
@@ -152,6 +152,9 @@ async function carryOut(a: Approval): Promise<string> {
       return `${person.name} is an admin now.`;
     }
     if (person.role !== "admin") return `${person.name} is not an admin anymore already.`;
+    // The one-time links they made as an admin stop with the level. First, so a try that fails
+    // halfway leaves the level as it was and the next try does both.
+    await revokeInvitesMadeBy(person.id);
     await setRole(person.id, "member");
     return `${person.name} is not an admin anymore.`;
   }
@@ -164,6 +167,8 @@ async function carryOut(a: Approval): Promise<string> {
   }
   const patch = salePatch(a.payload.patch);
   if (!patch) return "Approved, but the new numbers could not be read, so nothing changed.";
+  // Checked again now, like the fix was when it was asked for: Settings may have changed while it waited.
+  if (patch.kind === "pc" && !(await getSettings()).pcEnabled) return "Approved, but that kind of sale is turned off, so nothing changed.";
   if (!(await getAgent(patch.agent_id))) return "Approved, but that person is gone, so nothing changed.";
   const found = await updateSale(sale.id, patch);
   return found ? "Approved. The sale is fixed." : "Approved, but that sale is already gone, so nothing changed.";
@@ -175,7 +180,7 @@ async function carryOut(a: Approval): Promise<string> {
  * change itself fails (the database did not answer), the request goes back to waiting.
  */
 export async function decideApproval(id: string, approve: boolean, viewer: Viewer): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
-  if (!isOwner(viewer)) throw new Error("Only the owner can do that");
+  if (!isOwner(viewer)) throw new Said("Only the owner can do that");
   if (!isUuid(id)) return { ok: false, error: "That request isn't here." };
   const decided_at = new Date().toISOString();
   const { data, error } = await db()

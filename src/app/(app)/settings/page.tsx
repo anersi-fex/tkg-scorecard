@@ -7,6 +7,7 @@ import { addMonths, monthKeyOf, monthLabel, todayInDetroit } from "@/lib/month";
 import { PageTitle } from "@/components/ui";
 import { appBase } from "@/lib/app-url";
 import { LOG_TOKEN_MIN } from "@/lib/auth";
+import { DEFAULT_PC_COLOR } from "@/lib/pc-colors";
 import { SettingsForms } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -29,11 +30,12 @@ export default async function SettingsPage() {
     <>
       <PageTitle sub={owner ? "You and the admins see this screen." : "Only the admins and Anersi see this screen."}>Settings</PageTitle>
       <SettingsForms
-        // The P&C carriers are the owner's to see and change.
-        settings={owner ? settings : { ...settings, pcCarriers: [] }}
+        // The P&C carriers, color and goals and the Sign-ins switch are the owner's: an admin's
+        // screen is sent none of them (the color and the switch read as their defaults).
+        settings={owner ? settings : { ...settings, pcCarriers: [], pcColor: DEFAULT_PC_COLOR, teamPasswordLogs: true }}
         months={[
-          { key: month, label: monthLabel(month), cents: goals.teamCents, pcCents: goals.pcTeamCents, current: true },
-          { key: next, label: monthLabel(next), cents: nextGoals.teamCents, pcCents: nextGoals.pcTeamCents, current: false },
+          { key: month, label: monthLabel(month), cents: goals.teamCents, pcCents: owner ? goals.pcTeamCents : 0, current: true },
+          { key: next, label: monthLabel(next), cents: nextGoals.teamCents, pcCents: owner ? nextGoals.pcTeamCents : 0, current: false },
         ]}
         shortcutReady={owner && token.length >= LOG_TOKEN_MIN}
         shortcutTooShort={owner && token.length > 0 && token.length < LOG_TOKEN_MIN}

@@ -14,7 +14,7 @@ import { KindDot, KindSplit, PcTag } from "@/components/kind";
 import { MonthChart } from "@/components/month-chart";
 import { Eyebrow, ListCard, ListTitle, ROW_INSET } from "@/components/tide";
 import { Badge, Card, Notice, cn, formatClock, formatDate } from "@/components/ui";
-import { SaleRowMenu } from "./sale-row-menu";
+import { SaleRowMenu, type UndoRight } from "./sale-row-menu";
 
 export const metadata: Metadata = { title: "This month" };
 
@@ -74,9 +74,12 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   // "My team" (owner, 2026-11-12): the viewer's own people when they lead some, else the team they
   // are on. The shared team password names nobody, so it has no filter to offer.
   let myTeam: { leaderName: string; ids: Set<string> } | null = null;
+  // Who is looking: a member takes back their own sales only, so the menu offers Undo only there.
+  let who: Awaited<ReturnType<typeof currentViewer>> = null;
   try {
     const [snapshot, everyone, viewer] = await Promise.all([loadMonthSnapshot(month, { today, scoreboard: false }), listAgents({ includeInactive: true }), currentViewer()]);
     s = snapshot;
+    who = viewer;
     const me = viewer?.agentId && everyone.some((a) => a.id === viewer.agentId) ? viewer.agentId : null;
     if (me) {
       const org = buildOrg(everyone);
@@ -84,14 +87,19 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
       if (leader) myTeam = { leaderName: org.nameOf(leader) ?? "", ids: new Set(org.teamOf(leader)) };
     }
   } catch (err) {
+    // The class only, for the log: the database's own words are not for a screen everyone opens.
+    console.error("home_load_failed", err instanceof Error ? err.name : "error");
     return (
       <>
         <PageHeader month={month} current={current} view="life" />
-        <Notice tone="red">The database answered with an error: {err instanceof Error ? err.message : "unknown"}. Check that the setup SQL ran (SETUP.md, step 3).</Notice>
+        <Notice tone="red">The database didn&apos;t answer. Try again in a moment.</Notice>
       </>
     );
   }
-  const { carriers, pcCarriers } = await getSettings();
+  const { carriers, pcCarriers, teamPasswordLogs } = await getSettings();
+  // "Undo (just logged)" only where the tap would work: a member on their own sale, the team
+  // password while the owner lets it log. The server checks again on the tap.
+  const undoFor = (agentId: string): UndoRight => (who?.level === "member" ? (agentId === who.agentId ? "ok" : "not-yours") : who?.level === "team" && !teamPasswordLogs ? "view-only" : "ok");
   const pcOn = s.pcEnabled === true;
   const view: View = pcOn ? asked : "life";
   // The goal line today: how far through its business days the month is (the same tick on every bar).
@@ -154,7 +162,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
                 </p>
               </div>
               <p className="shrink-0 font-mono text-[16px] font-bold text-gray-900">{formatMoney(r.premiumCents)}</p>
-              <SaleRowMenu sale={r} role={role} agents={agentOptions} carriers={carriers} pcCarriers={pcCarrierNames} pcEnabled={pcOn} />
+              <SaleRowMenu sale={r} role={role} undo={undoFor(r.agentId)} agents={agentOptions} carriers={carriers} pcCarriers={pcCarrierNames} pcEnabled={pcOn} />
             </li>
           ))}
           {moreSales > 0 && (

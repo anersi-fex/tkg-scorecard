@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildWrap, carrierSummary, neededOnDay, periodFor, periodNav, type WrapInput } from "../src/lib/wrap";
+import { buildWrap, carrierSummary, neededOnDay, periodFor, periodNav, wrapRoster, WRAP_QUIET_NAMES, WRAP_ROWS, type WrapInput } from "../src/lib/wrap";
 import type { FeedSale } from "../src/lib/board";
 
 let n = 0;
@@ -318,4 +318,54 @@ test("life only: when only life sales reach the Wrap, nothing on it is P&C", () 
   // The verdict is the same with or without the P&C sale: it always measured life.
   assert.deepEqual(buildWrap(input(life), "2026-10-28").verdict, buildWrap(input(all), "2026-10-28").verdict);
   assert.equal(buildWrap(input(life), "2026-10-28").teamCents, 4000 * 100);
+});
+
+test("everybody's period stays one screenshot: the top rows, then the rest of the sellers and the no-sale people on one line", () => {
+  // An agency: `people` on the board, the first `sellers` of them sell on the 28th ($100 more each, so the order is known).
+  const roster = (people: number, sellers: number) => {
+    const team = Array.from({ length: people }, (_, i) => ({ id: `p${i}`, name: `Person ${String(i).padStart(2, "0")}`, tone: "t1", active: true }));
+    const sales = team.slice(0, sellers).map((a, i) => sale(a.id, a.name, "2026-10-28", 1000 + i * 100));
+    const w = buildWrap({ clock: { key: "2026-10", today: "2026-10-28" }, team: { goalCents: 0 }, agents: team, sales }, "2026-10-28");
+    return { w, r: wrapRoster(w.lines) };
+  };
+  assert.equal(WRAP_ROWS, 7);
+  assert.equal(WRAP_QUIET_NAMES, 6);
+
+  // Seven people or fewer: everyone is a row, the ones without a sale included; no line under them.
+  let { w, r } = roster(7, 3);
+  assert.equal(r.rows.length, 7);
+  assert.deepEqual(r.rows, w.lines);
+  assert.deepEqual([r.more, r.quiet.length, r.quietNamed], [null, 0, false]);
+
+  // Eight people, seven of them selling (the smoke test's team): seven rows and "No sale: <name>", as before.
+  ({ w, r } = roster(8, 7));
+  assert.deepEqual(r.rows.map((l) => l.rank), [1, 2, 3, 4, 5, 6, 7]);
+  assert.equal(r.more, null);
+  assert.deepEqual([r.quiet.map((l) => l.name), r.quietNamed], [["Person 07"], true]);
+
+  // Eight sellers: the rows stop at the top six and the other two share the line.
+  ({ w, r } = roster(8, 8));
+  assert.deepEqual(r.rows.map((l) => [l.rank, l.premiumCents / 100]), [[1, 1700], [2, 1600], [3, 1500], [4, 1400], [5, 1300], [6, 1200]]);
+  assert.deepEqual(r.more, { count: 2, premiumCents: (1100 + 1000) * 100, policies: 2 });
+  assert.deepEqual([r.quiet.length, r.quietNamed], [0, false]);
+
+  // The agency: 60 on the board, 27 sold. Six rows, "and 21 more sold $...", and 33 without a sale as a count.
+  ({ w, r } = roster(60, 27));
+  assert.equal(r.rows.length, 6);
+  assert.equal(r.rows[0].premiumCents, 3600 * 100);
+  assert.equal(r.more?.count, 21);
+  assert.equal(r.more?.policies, 21);
+  // The rows and the line add up to the period's total: nobody's sale is dropped.
+  assert.equal(r.rows.reduce((sum, l) => sum + l.premiumCents, 0) + (r.more?.premiumCents ?? 0), w.teamCents);
+  assert.equal(r.rows.reduce((sum, l) => sum + l.policies, 0) + (r.more?.policies ?? 0), w.policies);
+  assert.deepEqual([r.quiet.length, r.quietNamed], [33, false]);
+
+  // Up to six people without a sale are named; the seventh makes it a count.
+  assert.equal(roster(13, 7).r.quietNamed, true);
+  assert.equal(roster(14, 7).r.quietNamed, false);
+  // Nobody sold yet: no rows past seven people, only the count.
+  ({ r } = roster(30, 0));
+  assert.deepEqual([r.rows.length, r.more, r.quiet.length, r.quietNamed], [0, null, 30, false]);
+  // Nobody on the board.
+  assert.deepEqual(wrapRoster([]), { rows: [], more: null, quiet: [], quietNamed: false });
 });

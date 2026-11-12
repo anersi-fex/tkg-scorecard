@@ -3,11 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireViewer } from "@/lib/auth";
-import { addAgent, deleteSale, getAgent, getSale, insertSale, listAgents, saveSettings, setAgentGoal, setAgentPcGoal, setTeamGoal, setTeamPcGoal, updateAgent, updateSale, getSettings } from "@/lib/data";
+import { addAgent, deleteSale, getAgent, getSale, insertSale, lineFor, listAgents, saveSettings, setAgentGoal, setAgentPcGoal, setTeamGoal, setTeamPcGoal, touchBoard, updateAgent, updateSale, getSettings } from "@/lib/data";
 import { requestApproval } from "@/lib/approvals";
+import { bumpSession, sameName } from "@/lib/people";
+import { revokeInvitesMadeBy, revokePersonInvites } from "@/lib/invites";
 import { isManager, isOwner } from "@/lib/viewer";
 import { isDateKey, isMonthKey, todayInDetroit, addDays, dayLabel } from "@/lib/month";
-import { formatDollars, parseDollars } from "@/lib/money";
+import { formatDollars, formatMoney, parseDollars } from "@/lib/money";
 import { DEFAULT_CARRIERS, DEFAULT_PC_CARRIERS, DEFAULT_PRODUCTS, isBoardTheme, isTvScreens, type PcCarrier } from "@/lib/types";
 import { isColorwayKey } from "@/lib/colorways";
 import { isPcColorKey } from "@/lib/pc-colors";
@@ -15,12 +17,22 @@ import { isSoundKey } from "@/lib/sounds";
 
 export type ActionResult = { ok: true; message?: string; id?: string } | { ok: false; error: string };
 
+/**
+ * The line a person sees when an action fails: the words the code threw on purpose ("Only an
+ * admin can do that"), and for anything else (the database, its client) "That didn't save. Try
+ * again." with the class logged, so no table or column wording reaches a screen (data.ts lineFor).
+ */
 function message(err: unknown): string {
-  return err instanceof Error ? err.message : "Something went wrong.";
+  return lineFor(err);
 }
 
-function refresh() {
+/**
+ * After a change: the pages read again, and the TV is told (touchBoard moves the stamp its
+ * 5-second poll watches), so a goal, a person or a fixed sale shows on the TV within one poll.
+ */
+async function refresh(): Promise<void> {
   revalidatePath("/", "layout");
+  await touchBoard();
 }
 
 /**
@@ -113,7 +125,7 @@ export async function logSale(form: FormData): Promise<ActionResult> {
       logged_by: isManager(viewer) ? "owner" : "team",
       logged_by_agent: viewer.agentId,
     });
-    refresh();
+    await refresh();
     return { ok: true, id: sale.id, message: "Logged. The board is celebrating." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -144,11 +156,11 @@ export async function removeSale(id: string): Promise<ActionResult> {
         summary: `Remove ${sale.agent_name}'s ${formatDollars(sale.premium_cents)} sale of ${dayLabel(sale.sold_on)}`,
         requestedBy: viewer.agentId,
       });
-      refresh();
+      await refresh();
       return { ok: true, message: SENT_FOR_OK };
     }
     await deleteSale(id);
-    refresh();
+    await refresh();
     return { ok: true, message: "Removed." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -200,23 +212,35 @@ export async function editSale(id: string, form: FormData): Promise<ActionResult
       const sale = await getSale(id);
       if (!sale) return { ok: false, error: "That sale is already gone." };
       if (inPastMonth(sale.sold_on) || inPastMonth(input.sold_on)) {
-        const was = `${sale.agent_name}'s ${formatDollars(sale.premium_cents)} sale of ${dayLabel(sale.sold_on)}`;
-        const now = `${sale.agent_id === agent.id ? "" : `${agent.name}, `}${formatDollars(cents)}, ${dayLabel(input.sold_on)}`;
-        // The owner approves one sentence: it names everything the fix changes, not only the amount and the day.
-        const more = [
-          input.policies !== sale.policies ? `${input.policies} ${input.policies === 1 ? "policy" : "policies"}` : "",
-          (input.carrier ?? "") !== (sale.carrier ?? "") ? `carrier ${input.carrier ?? "none"}` : "",
-          (input.product ?? "") !== (sale.product ?? "") ? `product ${input.product ?? "none"}` : "",
-          (input.note ?? "") !== (sale.note ?? "") ? "a new note" : "",
-        ].filter(Boolean);
-        const summary = `Fix ${was} to ${now}${more.length ? ` (${more.join(", ")})` : ""}`.slice(0, 200);
+        // The owner approves one sentence, so it names everything the fix changes: the amount with
+        // its cents when there are any ($777.00 to $777.49 must not read as no change), the day,
+        // the person, and a changed kind, policy count, carrier, product or note.
+        const cut = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+        const sentence = (nameMax: number, values: boolean) => {
+          const was = `${cut(sale.agent_name, nameMax)}'s ${formatMoney(sale.premium_cents)} sale of ${dayLabel(sale.sold_on)}`;
+          const now = `${sale.agent_id === agent.id ? "" : `${cut(agent.name, nameMax)}, `}${formatMoney(cents)}, ${dayLabel(input.sold_on)}`;
+          const more = [
+            input.kind !== sale.kind ? (input.kind === "pc" ? "now a P&C sale" : "now a life sale") : "",
+            input.policies !== sale.policies ? `${input.policies} ${input.policies === 1 ? "policy" : "policies"}` : "",
+            (input.carrier ?? "") !== (sale.carrier ?? "") ? (values ? `carrier ${input.carrier ?? "none"}` : "a new carrier") : "",
+            (input.product ?? "") !== (sale.product ?? "") ? (values ? `product ${input.product ?? "none"}` : "a new product") : "",
+            (input.note ?? "") !== (sale.note ?? "") ? "a new note" : "",
+          ].filter(Boolean);
+          return `Fix ${was} to ${now}${more.length ? ` (${more.join(", ")})` : ""}`;
+        };
+        // The row holds 200 characters. A line that is too long is written shorter (long names cut,
+        // the carrier and product named without their new values) so every change is still named;
+        // if even that is too long it says there is more instead of being cut silently.
+        let summary = sentence(60, true);
+        if (summary.length > 200) summary = sentence(28, false);
+        if (summary.length > 200) summary = `${summary.slice(0, 181)}… and more changes`;
         await requestApproval({ kind: "edit_past_sale", payload: { sale_id: sale.id, patch }, summary, requestedBy: viewer.agentId });
-        refresh();
+        await refresh();
         return { ok: true, message: SENT_FOR_OK };
       }
     }
     const found = await updateSale(id, patch);
-    refresh();
+    await refresh();
     if (!found) return { ok: false, error: "That sale is already gone." };
     return { ok: true, message: "Saved." };
   } catch (err) {
@@ -232,17 +256,19 @@ export async function addPerson(form: FormData): Promise<ActionResult> {
     const name = Name.safeParse(form.get("name"));
     if (!name.success) return { ok: false, error: "Type the person's name." };
     const existing = await listAgents({ includeInactive: true });
-    const dup = existing.find((a) => a.name.toLowerCase() === name.data.toLowerCase());
+    // The same person however the name was typed (case, spaces, the kind of apostrophe); someone on the board first.
+    const same = existing.filter((a) => sameName(a.name, name.data));
+    const dup = same.find((a) => a.active) ?? same[0];
     if (dup) {
       if (dup.active) return { ok: false, error: `${dup.name} is already on the team.` };
       // Back on the board brings an old sign-in back with it: for someone who was an admin that is the owner's call.
       if (!isOwner(viewer) && (dup.role === "admin" || dup.role === "owner")) return { ok: false, error: `${dup.name} was an admin. Only the owner can put them back.` };
       await updateAgent(dup.id, { active: true });
-      refresh();
+      await refresh();
       return { ok: true, message: `${dup.name} is back on the board.` };
     }
     await addAgent(name.data);
-    refresh();
+    await refresh();
     return { ok: true, message: `${name.data} is on the board.` };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -258,8 +284,11 @@ export async function renamePerson(id: string, form: FormData): Promise<ActionRe
     if (!person) return { ok: false, error: "That person isn't here." };
     // The owner's row is the owner's to change (an admin runs everyone else's).
     if (person.role === "owner" && !isOwner(viewer)) return { ok: false, error: "Only the owner can change the owner's name." };
+    // Two people on the board with one name: an approval could name the wrong one, and the Shortcut finds neither.
+    const taken = (await listAgents()).find((a) => a.id !== id && sameName(a.name, name.data));
+    if (taken) return { ok: false, error: `Someone else on the board is ${taken.name}. Add a middle initial.` };
     await updateAgent(id, { name: name.data });
-    refresh();
+    await refresh();
     return { ok: true, message: "Saved." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -276,8 +305,18 @@ export async function setPersonActive(id: string, active: boolean): Promise<Acti
     // Off the board ends a person's sign-in and back on the board returns it, so for the owner's
     // row or an admin's both ways are the owner's call (making an admin always waits for the owner).
     if (!isOwner(viewer) && (person.role === "owner" || person.role === "admin")) return { ok: false, error: "Only the owner can take an admin off the board or bring one back." };
+    if (!active) {
+      // Off the board ends more than today's access: the one-time links they made for others and
+      // the unused ones made for them are turned off, and their session version goes up, so no
+      // old cookie and no old link works again if they are put back later (their number and
+      // password sign in again then). Before the row changes, so a try that fails halfway leaves
+      // them on the board and the next try does all of it.
+      await revokeInvitesMadeBy(id);
+      await revokePersonInvites(id);
+      await bumpSession(id);
+    }
     await updateAgent(id, { active });
-    refresh();
+    await refresh();
     return { ok: true, message: active ? "Back on the board." : "Off the board. Their sales stay in the history." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -290,7 +329,7 @@ export async function setPersonPc(id: string, licensed: boolean): Promise<Action
     await requireViewer("owner");
     if (!Id.safeParse(id).success) return { ok: false, error: "That person isn't here." };
     await updateAgent(id, { pc_licensed: licensed });
-    refresh();
+    await refresh();
     return { ok: true, message: licensed ? "P&C licensed. Log a sale offers Life or P&C for them." : "Life only on Log a sale for them." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -308,7 +347,7 @@ export async function saveTeamGoal(month: string, form: FormData): Promise<Actio
     const cents = raw === "" ? 0 : parseDollars(raw);
     if (cents == null) return { ok: false, error: "The goal needs to be an amount, like 150000." };
     await setTeamGoal(month, cents);
-    refresh();
+    await refresh();
     return { ok: true, message: cents ? "Goal saved. The board shows it now." : "Goal cleared." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -323,7 +362,7 @@ export async function savePersonGoal(month: string, agentId: string, form: FormD
     const cents = raw === "" ? 0 : parseDollars(raw);
     if (cents == null) return { ok: false, error: "The goal needs to be an amount, like 25000." };
     await setAgentGoal(month, agentId, cents);
-    refresh();
+    await refresh();
     return { ok: true, message: cents ? "Goal saved." : "Goal cleared." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -339,7 +378,7 @@ export async function saveTeamPcGoal(month: string, form: FormData): Promise<Act
     const cents = raw === "" ? 0 : parseDollars(raw);
     if (cents == null) return { ok: false, error: "The goal needs to be an amount, like 30000." };
     await setTeamPcGoal(month, cents);
-    refresh();
+    await refresh();
     return { ok: true, message: cents ? "P&C goal saved. The board shows it now." : "P&C goal cleared." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -355,7 +394,7 @@ export async function savePersonPcGoal(month: string, agentId: string, form: For
     const cents = raw === "" ? 0 : parseDollars(raw);
     if (cents == null) return { ok: false, error: "The goal needs to be an amount, like 8000." };
     await setAgentPcGoal(month, agentId, cents);
-    refresh();
+    await refresh();
     return { ok: true, message: cents ? "P&C goal saved." : "P&C goal cleared." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -369,7 +408,7 @@ export async function saveColorway(key: string): Promise<ActionResult> {
     if (!isColorwayKey(key)) return { ok: false, error: "That colorway isn't one of the choices." };
     const current = await getSettings();
     await saveSettings({ ...current, colorway: key });
-    refresh();
+    await refresh();
     return { ok: true, message: "Saved. The TV changes within a few seconds." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -383,7 +422,7 @@ export async function savePcColor(key: string): Promise<ActionResult> {
     if (!isPcColorKey(key)) return { ok: false, error: "That P&C color isn't one of the choices." };
     const current = await getSettings();
     await saveSettings({ ...current, pcColor: key });
-    refresh();
+    await refresh();
     return { ok: true, message: "Saved. The TV changes within a few seconds." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -397,7 +436,7 @@ export async function saveBoardTheme(theme: string): Promise<ActionResult> {
     if (!isBoardTheme(theme)) return { ok: false, error: "The TV look is Dark or Light." };
     const current = await getSettings();
     await saveSettings({ ...current, boardTheme: theme });
-    refresh();
+    await refresh();
     return { ok: true, message: "Saved. The TV changes within a few seconds." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -412,7 +451,7 @@ export async function saveTvScreens(choice: string): Promise<ActionResult> {
     const current = await getSettings();
     if ((choice === "pc" || choice === "total") && !current.pcEnabled) return { ok: false, error: "That isn't one of the TV screens." };
     await saveSettings({ ...current, tvScreens: choice });
-    refresh();
+    await refresh();
     return { ok: true, message: "Saved. The TV changes within a few seconds." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -426,7 +465,7 @@ export async function saveSaleSound(key: string): Promise<ActionResult> {
     if (!isSoundKey(key)) return { ok: false, error: "That sound isn't one of the choices." };
     const current = await getSettings();
     await saveSettings({ ...current, sound: key });
-    refresh();
+    await refresh();
     return { ok: true, message: key === "off" ? "Saved. The TV stays quiet." : "Saved. The TV plays it on the next sale." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -476,7 +515,7 @@ export async function saveBoardSettings(form: FormData): Promise<ActionResult> {
       carriers: form.has("carriers") ? chips(form.get("carriers"), DEFAULT_CARRIERS) : current.carriers,
       pcCarriers: keepPc ? current.pcCarriers : pcCarriers.length ? pcCarriers : DEFAULT_PC_CARRIERS,
     });
-    refresh();
+    await refresh();
     return { ok: true, message: "Saved. The board updates within a few seconds." };
   } catch (err) {
     return { ok: false, error: message(err) };

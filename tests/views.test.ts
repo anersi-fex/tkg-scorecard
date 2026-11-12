@@ -179,12 +179,21 @@ test("the Production table shows the most recent days that fit, and prints them 
   assert.equal(compactDollars(999_50), "$1K");
   assert.equal(compactDollars(999_99), "$1K");
   assert.equal(compactDollars(1_000_00), "$1K");
-  // A zero tenth is dropped, as on the Scoreboard page.
+  // A zero tenth is dropped.
   assert.equal(compactDollars(57_000_00), "$57K");
+  assert.equal(compactDollars(56_960_00), "$57K");
   assert.equal(compactDollars(1_234_567_00), "$1.2M");
   assert.equal(compactDollars(999_960_00), "$1M");
+  assert.equal(compactDollars(999_949_00), "$999.9K");
   assert.equal(compactDollars(0), "$0");
   assert.equal(compactDollars(-2_100_00), "−$2.1K");
+  // The tenth rounds half up, the same on the TV and the phone ($12,850 was "$12.8K" on one and "$12.9K" on the other).
+  assert.equal(compactDollars(12_850_00), "$12.9K");
+  assert.equal(compactDollars(12_849_99), "$12.8K");
+  assert.equal(compactDollars(1_050_00), "$1.1K");
+  assert.equal(compactDollars(1_049_99), "$1K");
+  assert.equal(compactDollars(-12_850_00), "−$12.9K");
+  assert.equal(compactDollars(1_250_000_00), "$1.3M");
 });
 
 test("P&C by line and by carrier: most policies first, then premium, then the name; life left out", () => {

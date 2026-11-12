@@ -3,6 +3,7 @@ import { db } from "./supabase";
 import { burnPasswordCheck, hashPassword, passwordProblem, verifyPassword } from "./passwords";
 import { normalizePhone } from "./phone";
 import { consumeInvite, readInvite } from "./invites";
+import { DataError, Said } from "./data";
 import { isAgentRole, type Agent, type AgentRole } from "./types";
 
 /**
@@ -18,11 +19,13 @@ type PersonRow = Omit<Person, "has_login">;
 
 export const BAD_LINK = "This link isn't good anymore. Ask for a new one.";
 export const PHONE_TAKEN = "That number already has a sign-in. Sign in instead.";
+/** Someone who was taken off the board opened the agency link: an admin puts them back, the link never does. */
+export const OFF_BOARD = "Ask an admin to put you back on the board.";
 const PHONE_HELP = "Type your cell number with the area code, like 248 555 0100.";
 
 function fail(where: string, error: { message: string } | null): never {
-  // The table and the operation only: never a row, a number or a name.
-  throw new Error(`${where}: ${error?.message ?? "unknown error"}`);
+  // The table and the operation only: never a row, a number or a name. Never shown to a person (data.ts lineFor).
+  throw new DataError(where, error);
 }
 
 const isUuid = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
@@ -140,34 +143,34 @@ async function wouldLoop(id: string, uplineId: string): Promise<boolean> {
 
 /** Whose team a person is on (null: the top of the tree). Refuses a loop. */
 export async function setUpline(id: string, uplineId: string | null): Promise<void> {
-  if (!isUuid(id) || (uplineId !== null && !isUuid(uplineId))) throw new Error("That person isn't here.");
+  if (!isUuid(id) || (uplineId !== null && !isUuid(uplineId))) throw new Said("That person isn't here.");
   const person = await personForSession(id);
-  if (!person) throw new Error("That person isn't here.");
+  if (!person) throw new Said("That person isn't here.");
   if (uplineId) {
     const upline = await personForSession(uplineId);
-    if (!upline || !upline.active) throw new Error("That upline isn't on the board.");
-    if (await wouldLoop(id, uplineId)) throw new Error(id === uplineId ? "A person can't be their own upline." : `${upline.name} is on ${person.name}'s team, so ${person.name} can't go under them.`);
+    if (!upline || !upline.active) throw new Said("That upline isn't on the board.");
+    if (await wouldLoop(id, uplineId)) throw new Said(id === uplineId ? "A person can't be their own upline." : `${upline.name} is on ${person.name}'s team, so ${person.name} can't go under them.`);
   }
   await patchPerson(id, { upline_id: uplineId }, "people.upline");
 }
 
 export async function setInOffice(id: string, on: boolean): Promise<void> {
-  if (!isUuid(id)) throw new Error("That person isn't here.");
+  if (!isUuid(id)) throw new Said("That person isn't here.");
   await patchPerson(id, { in_office: on === true }, "people.office");
 }
 
 /** Admin or member. The owner's row never changes here (the database holds exactly one owner). */
 export async function setRole(id: string, role: AgentRole): Promise<void> {
-  if (!isUuid(id) || (role !== "admin" && role !== "member")) throw new Error("That isn't one of the levels.");
+  if (!isUuid(id) || (role !== "admin" && role !== "member")) throw new Said("That isn't one of the levels.");
   const { data, error } = await db().from("agents").update({ role, updated_at: new Date().toISOString() }).eq("id", id).neq("role", "owner").select("id");
   if (error) fail("people.role", error);
-  if (!data?.length) throw new Error("That person's level can't be changed.");
+  if (!data?.length) throw new Said("That person's level can't be changed.");
 }
 
 /** Signs a person out everywhere: every session made before now stops working. Returns the new version. */
 export async function bumpSession(id: string): Promise<number> {
   const person = await personForSession(id);
-  if (!person) throw new Error("That person isn't here.");
+  if (!person) throw new Said("That person isn't here.");
   const next = person.sessionVersion + 1;
   await patchPerson(id, { session_version: next }, "people.session");
   return next;
@@ -179,24 +182,27 @@ export async function setName(id: string, name: string): Promise<void> {
 
 /** A person's cell number (the name they sign in with). Refuses a number someone else has. */
 export async function setPhone(id: string, phone: string | null): Promise<void> {
-  if (!isUuid(id)) throw new Error("That person isn't here.");
+  if (!isUuid(id)) throw new Said("That person isn't here.");
   if (phone !== null) {
     const { data, error } = await db().from("agents").select("id").eq("phone", phone).neq("id", id).limit(1);
     if (error) fail("people.phone", error);
-    if (data?.length) throw new Error("Someone else signs in with that number.");
+    if (data?.length) throw new Said("Someone else signs in with that number.");
   }
   const { error } = await db().from("agents").update({ phone, updated_at: new Date().toISOString() }).eq("id", id);
   if (error) {
-    if ((error as { code?: string }).code === "23505") throw new Error("Someone else signs in with that number.");
+    if ((error as { code?: string }).code === "23505") throw new Said("Someone else signs in with that number.");
     fail("people.phone", error);
   }
 }
 
 // Wrong passwords for one account, counted in login_attempts under "acct:<id>" (the same table and
-// 15-minute window as the per-address count in auth.ts). Past 20, the account is closed to every
-// address that has a wrong try of its own in the window, and to nobody else: whoever is guessing
-// is stopped, and the person's own phone still gets in with the right password, so nobody can
-// keep someone else from signing in. (These rows stay out of the flood cap in auth.ts.)
+// 15-minute window as the per-address counts in auth.ts). Past 20, the account is closed to every
+// address that has another wrong try of its own in the window, and to nobody else: whoever is
+// guessing is stopped, and the person's own phone still gets in with the right password, so
+// nobody can keep someone else from signing in. (These rows stay out of the flood cap in auth.ts.)
+// Like the address's count, a try is written BEFORE the password is looked at and counted with
+// its own row in, so tries sent at the same moment cannot all get under the limit; a right
+// password takes the account's rows back, and a try that finds the account closed takes back its own.
 const ACCOUNT_WINDOW_MS = 15 * 60 * 1000;
 const ACCOUNT_MAX = 20;
 const acctKey = (id: string) => `acct:${id}`;
@@ -214,15 +220,33 @@ async function recentTries(key: string): Promise<number> {
   }
 }
 
-/** Closed to this address? With no address (a signed-in person checking their own password): closed past the limit. */
+/**
+ * Closed to this try? Asked AFTER the try's own row is written (under the account's key, and by
+ * the caller under the address's), so both counts hold this try: closed means more than 20 on the
+ * account and another try from this address besides this one. With no address (a signed-in person
+ * checking their own password): closed past the limit.
+ */
 async function accountLocked(key: string, address?: string): Promise<boolean> {
-  const [onAccount, fromAddress] = await Promise.all([recentTries(key), address ? recentTries(address) : Promise.resolve(1)]);
-  return onAccount >= ACCOUNT_MAX && fromAddress > 0;
+  const [onAccount, fromAddress] = await Promise.all([recentTries(key), address ? recentTries(address) : Promise.resolve(2)]);
+  return onAccount > ACCOUNT_MAX && fromAddress > 1;
 }
 
-async function recordAccountFailure(key: string): Promise<void> {
+/** Writes one try under an account's key. Returns the row's id, to take it back (null when the table did not answer). */
+async function recordAccountTry(key: string): Promise<number | null> {
   try {
-    await db().from("login_attempts").insert({ ip: key });
+    const { data, error } = await db().from("login_attempts").insert({ ip: key }).select("id").single();
+    const id = Number(data?.id);
+    return !error && Number.isSafeInteger(id) ? id : null;
+  } catch {
+    return null; // best effort
+  }
+}
+
+/** Takes one try's own row back (the account was closed to it, or the password was right). */
+async function takeBackAccountTry(id: number | null): Promise<void> {
+  if (id == null) return;
+  try {
+    await db().from("login_attempts").delete().eq("id", id);
   } catch {
     /* best effort */
   }
@@ -240,9 +264,9 @@ async function clearAccountFailures(id: string): Promise<void> {
  * A personal sign-in: the person's id and session version for a right phone number and password,
  * null for anything else (unknown number, wrong password, off the board, no sign-in yet, an
  * account closed to this address by too many wrong tries). A wrong try does the same work in the
- * same order whether the number has a sign-in or not (the row, the two counts, the password
- * check, one row written), so the time it takes never says which numbers exist. `address` is
- * where the request came from (the caller keeps the per-address throttle with it).
+ * same order whether the number has a sign-in or not (the row, one row written, the two counts,
+ * the password check), so the time it takes never says which numbers exist. `address` is the key
+ * the caller already counted this try under (login/actions.ts: "signin:<address>").
  */
 export async function verifyPersonLogin(phone: string, password: string, address?: string): Promise<{ id: string; sessionVersion: number } | null> {
   const e164 = normalizePhone(phone);
@@ -253,17 +277,19 @@ export async function verifyPersonLogin(phone: string, password: string, address
   const { data, error } = await db().from("agents").select("id, pass_hash, session_version, active").eq("phone", e164).maybeSingle();
   if (error) fail("people.signin", error);
   const row = data && data.active === true && typeof data.pass_hash === "string" ? { id: String(data.id), hash: data.pass_hash, sessionVersion: Number(data.session_version) } : null;
-  const locked = await accountLocked(row ? acctKey(row.id) : NO_ACCOUNT, address);
+  // Counted before the password is looked at: tries sent at the same moment each see the others.
+  const key = row ? acctKey(row.id) : NO_ACCOUNT;
+  const mine = await recordAccountTry(key);
+  const locked = await accountLocked(key, address);
   if (!row || locked) {
     await burnPasswordCheck(password);
-    await recordAccountFailure(NO_ACCOUNT);
+    // A try that found the account closed is not counted, so the lock ends 15 minutes after the last real guess.
+    if (locked) await takeBackAccountTry(mine);
     return null;
   }
   const id = row.id;
-  if (!(await verifyPassword(password, row.hash))) {
-    await recordAccountFailure(acctKey(id));
-    return null;
-  }
+  // A wrong password leaves its row.
+  if (!(await verifyPassword(password, row.hash))) return null;
   await clearAccountFailures(id);
   // Best effort: when they were last here (the People list shows it).
   await db().from("agents").update({ last_seen_at: new Date().toISOString() }).eq("id", id);
@@ -279,9 +305,14 @@ export async function checkOwnPassword(id: string, password: string): Promise<bo
     await burnPasswordCheck(password);
     return false;
   }
-  if (await accountLocked(acctKey(id))) return false;
+  // Counted first, like a sign-in: a right password takes its own row back, a wrong one leaves it.
+  const mine = await recordAccountTry(acctKey(id));
+  if (await accountLocked(acctKey(id))) {
+    await takeBackAccountTry(mine);
+    return false;
+  }
   const ok = await verifyPassword(password, data.pass_hash);
-  if (!ok) await recordAccountFailure(acctKey(id));
+  if (ok) await takeBackAccountTry(mine);
   return ok;
 }
 
@@ -291,9 +322,9 @@ export async function checkOwnPassword(id: string, password: string): Promise<bo
  */
 export async function setPersonPassword(id: string, password: string): Promise<number> {
   const problem = passwordProblem(password);
-  if (problem) throw new Error(problem);
+  if (problem) throw new Said(problem);
   const person = await personForSession(id);
-  if (!person) throw new Error("That person isn't here.");
+  if (!person) throw new Said("That person isn't here.");
   const next = person.sessionVersion + 1;
   await patchPerson(id, { pass_hash: await hashPassword(password), session_version: next }, "people.password");
   await clearAccountFailures(id);
@@ -386,6 +417,12 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
   if (!typedPhone) return { ok: false, error: PHONE_HELP };
   const holder = people.find((p) => p.phone === typedPhone);
   if (holder?.active) return { ok: false, error: PHONE_TAKEN, counts: true };
+  const matches = people.filter((p) => sameName(p.name, name));
+  const match = matches.find((p) => p.active) ?? matches[0];
+  // Someone who was taken off the board does not come back through the link: not as themself
+  // (their name), and not as a second row (another spelling of the name, with the number their
+  // old row still holds). An admin puts them back.
+  if (match ? !match.active : !!holder) return { ok: false, error: OFF_BOARD, counts: true };
   // The upline they picked, when it is a real person on the board; else the leader this link belongs to.
   const picked = isUuid(input.uplineId) ? people.find((p) => p.id === input.uplineId && p.active) : undefined;
   const linkLeader = invite.upline_id ? people.find((p) => p.id === invite.upline_id && p.active) : undefined;
@@ -393,10 +430,7 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
   const pass_hash = await hashPassword(input.password);
   const now = new Date().toISOString();
 
-  const matches = people.filter((p) => sameName(p.name, name));
-  const match = matches.find((p) => p.active) ?? matches[0];
   if (match) {
-    if (!match.active) return { ok: false, error: `${match.name} was taken off the board. Ask an admin to bring you back, then open this link again.`, counts: true };
     if (logins.has(match.id) || match.role !== "member") return { ok: false, error: `${match.name} is already on Scorecard. Sign in, or ask an admin for your own link.`, counts: true };
     if (holder) await releaseParkedPhone(holder.id, typedPhone);
     // The claim: only while the row still has no sign-in (two phones at once: one wins).
@@ -421,7 +455,7 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
     return { ok: true, agentId: match.id, sessionVersion: next };
   }
 
-  if (holder) await releaseParkedPhone(holder.id, typedPhone);
+  // A new person (nobody holds their number: a number parked on an off-board row was refused above).
   const { data: last } = await db().from("agents").select("sort").order("sort", { ascending: false }).limit(1).maybeSingle();
   const sort = ((last?.sort as number | undefined) ?? 0) + 1;
   const { data, error } = await db()

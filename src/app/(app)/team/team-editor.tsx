@@ -599,7 +599,9 @@ function AddPerson({ people }: { people: PersonRow[] }) {
   const [pending, start] = useTransition();
   const [name, setName] = useState("");
   const [upline, setUpline] = useState<string | null>(null);
-  const [inOffice, setInOffice] = useState(true);
+  // Off to start: the first person added with it on would be the whole office group, alone at the
+  // top of every board. The switch keeps what the admin set while they add more people.
+  const [inOffice, setInOffice] = useState(false);
   return (
     <section data-add-person>
       <ListTitle>Add a person</ListTitle>

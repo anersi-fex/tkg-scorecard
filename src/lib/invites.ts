@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { db } from "./supabase";
 import { appBase } from "./app-url";
+import { DataError } from "./data";
 
 /**
  * Join links (owner, 2026-11-12: "send everyone something, and it automatically makes them sign
@@ -30,7 +31,7 @@ type InviteRow = Invite & { revoked_at: string | null; used_at: string | null };
 const ONE_USE_DAYS = 7;
 
 function fail(where: string, error: { message: string } | null): never {
-  throw new Error(`${where}: ${error?.message ?? "unknown error"}`);
+  throw new DataError(where, error);
 }
 
 /** A new link token: 32 random bytes as base64url (43 characters, nothing to escape in an address). */
@@ -134,6 +135,16 @@ export async function revokeAgencyInvites(): Promise<void> {
 /** Turns off a person's unused personal links (they were taken off the board, or made an admin). */
 export async function revokePersonInvites(agentId: string): Promise<void> {
   const { error } = await db().from("invites").update({ revoked_at: new Date().toISOString() }).eq("agent_id", agentId).in("kind", ["person", "reset"]).is("used_at", null).is("revoked_at", null);
+  if (error) fail("invites.revoke", error);
+}
+
+/**
+ * Turns off the unused one-time links a person MADE for others (they stopped being an admin, or
+ * were taken off the board): a link is a way to sign in as the person it is for, so it must not
+ * outlive the level of whoever holds its address. The people those links were for ask for a new one.
+ */
+export async function revokeInvitesMadeBy(agentId: string): Promise<void> {
+  const { error } = await db().from("invites").update({ revoked_at: new Date().toISOString() }).eq("created_by", agentId).in("kind", ["person", "reset"]).is("used_at", null).is("revoked_at", null);
   if (error) fail("invites.revoke", error);
 }
 

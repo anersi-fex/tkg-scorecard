@@ -269,6 +269,43 @@ export function buildWrap(input: WrapInput, day: string, view: WrapView = "day")
   };
 }
 
+/**
+ * The most seller rows one screenshot holds: seven rows and the line under them end just above
+ * the tab bar at 390x844 (the smoke test measures it).
+ */
+export const WRAP_ROWS = 7;
+/** Up to this many people without a sale are named on the line under the rows; more are a count. */
+export const WRAP_QUIET_NAMES = 6;
+
+/** "Everybody's period" as the page draws it: the rows, and what the one line under them says. */
+export interface WrapRoster {
+  /** The rows to draw, best first. */
+  rows: WrapLine[];
+  /** The sellers who have no row: how many, and what they sold together. Null when every seller has a row. */
+  more: { count: number; premiumCents: number; policies: number } | null;
+  /** The people without a sale who have no row (up to seven people, they are dimmed rows and this is empty). */
+  quiet: WrapLine[];
+  /** True when the line under the rows names the people without a sale; false when it only counts them. */
+  quietNamed: boolean;
+}
+
+/**
+ * Sizes "everybody's period" to stay one screenshot at any team size (2026-11-12: an agency of 30
+ * to 70). Up to seven people, everyone is a row. Past seven people the ones without a sale share
+ * the line under the rows (as before), and once more than seven people sold the rows stop at the
+ * top six, so the rest of the sellers fit on that same line: "and 19 more sold $48,210". Six rows
+ * and not seven, because a big day's carrier chips take a second line. `lines` is `PeriodWrap.lines`.
+ */
+export function wrapRoster(lines: WrapLine[]): WrapRoster {
+  if (lines.length <= WRAP_ROWS) return { rows: lines, more: null, quiet: [], quietNamed: false };
+  const sold = lines.filter((l) => l.premiumCents > 0);
+  const quiet = lines.filter((l) => l.premiumCents === 0);
+  const rows = sold.length > WRAP_ROWS ? sold.slice(0, WRAP_ROWS - 1) : sold;
+  const rest = sold.slice(rows.length);
+  const more = rest.length > 0 ? { count: rest.length, premiumCents: rest.reduce((sum, l) => sum + l.premiumCents, 0), policies: rest.reduce((sum, l) => sum + l.policies, 0) } : null;
+  return { rows, more, quiet, quietNamed: quiet.length > 0 && quiet.length <= WRAP_QUIET_NAMES };
+}
+
 /** "AHL ×2 · Newbridge" for a line's carriers. */
 export function carrierSummary(carriers: WrapCount[]): string {
   return carriers.map((c) => (c.count > 1 ? `${c.name} ×${c.count}` : c.name)).join(" · ");

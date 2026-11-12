@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireViewer } from "@/lib/auth";
 import { isOwner } from "@/lib/viewer";
-import { addAgent, listAgents, updateAgent } from "@/lib/data";
-import { cleanName, setInOffice, setUpline } from "@/lib/people";
+import { addAgent, lineFor, listAgents, touchBoard, updateAgent } from "@/lib/data";
+import { cleanName, sameName, setInOffice, setUpline } from "@/lib/people";
 import type { ActionResult } from "../actions";
 
 // Any id Postgres holds (the same shape src/lib/people.ts accepts).
@@ -26,7 +26,9 @@ export async function addPersonToTeam(form: FormData): Promise<ActionResult> {
     const inOffice = String(form.get("in_office") ?? "") === "1";
     const existing = await listAgents({ includeInactive: true });
     if (uplineId && !existing.some((a) => a.id === uplineId && a.active)) return { ok: false, error: "That upline isn't on the board." };
-    const dup = existing.find((a) => a.name.toLowerCase() === name.toLowerCase());
+    // The same person however the name was typed (case, spaces, the kind of apostrophe); someone on the board first.
+    const same = existing.filter((a) => sameName(a.name, name));
+    const dup = same.find((a) => a.active) ?? same[0];
     if (dup?.active) return { ok: false, error: `${dup.name} is already on the board.` };
     let id: string;
     if (dup) {
@@ -43,11 +45,14 @@ export async function addPersonToTeam(form: FormData): Promise<ActionResult> {
       if (uplineId && uplineId !== id) await setUpline(id, uplineId);
       await setInOffice(id, inOffice);
     } catch (err) {
-      note = ` ${err instanceof Error ? err.message : "Their team did not save."} Open them to set it.`;
+      // The line the code wrote ("That upline isn't on the board."), never the database's own words.
+      note = ` ${lineFor(err, "Their team did not save.")} Open them to set it.`;
     }
     revalidatePath("/", "layout");
+    // The TV is told, so the new person shows within one poll.
+    await touchBoard();
     return { ok: true, id, message: `${dup ? `${dup.name} is back on the board.` : `${name} is on the board.`}${note}` };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong." };
+    return { ok: false, error: lineFor(err) };
   }
 }

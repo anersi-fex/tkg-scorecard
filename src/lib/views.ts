@@ -143,13 +143,19 @@ export function shortDay(date: string): string {
   return `${MONTHS[Number(date.slice(5, 7)) - 1] ?? ""} ${Number(date.slice(8, 10))}`;
 }
 
-/** "$91.6K", "$1.2M", "$950": a big number on a card, the way the agency's CRM prints it. */
+/**
+ * "$91.6K", "$1.2M", "$950": a big number on a card, the way the agency's CRM prints it. The one
+ * spelling of short money: the TV's cards call it and so does the phone Scoreboard (`shortMoney`),
+ * so the same Production never reads two ways.
+ */
 export function compactDollars(cents: number): string {
   const dollars = Math.abs(cents) / 100;
   const sign = cents < 0 ? "−" : "";
-  // One decimal, dropped when it is zero ("$57K", "$91.6K"): the same spelling as the Scoreboard page's shortMoney.
-  const one = (n: number) => n.toFixed(1).replace(/\.0$/, "");
+  // One decimal, the half rounded up ($12,850 is "$12.9K"; toFixed alone says "$12.8K"), and
+  // dropped when it is zero ("$57K").
+  const one = (n: number) => String(Math.round(n * 10) / 10);
   if (dollars >= 999_950) return `${sign}$${one(dollars / 1_000_000)}M`;
+  // $999.50 and up is a thousand: "$1K", never "$1000".
   if (Math.round(dollars) >= 1000) return `${sign}$${one(dollars / 1000)}K`;
   return `${sign}$${Math.round(dollars)}`;
 }

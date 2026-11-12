@@ -7,6 +7,7 @@ import { createPersonToken, readSessionToken, SESSION_COOKIE, SESSION_TTL_SECOND
 import { ownerPerson, personForSession } from "./people";
 import { isManager, isOwner, type Viewer } from "./viewer";
 import { db } from "./supabase";
+import { Said } from "./data";
 
 /**
  * Session checks. proxy.ts is only an optimistic gate (Next 16): every page calls pageViewer()
@@ -72,8 +73,9 @@ export async function pageViewer(need: Need = "any"): Promise<Viewer> {
 /** Server actions and route handlers: throw instead of redirecting. */
 export async function requireViewer(need: Need = "any"): Promise<Viewer> {
   const viewer = await currentViewer();
-  if (!viewer) throw new Error("Not signed in");
-  if (!allowed(viewer, need)) throw new Error(need === "owner" ? "Only the owner can do that" : "Only an admin can do that");
+  // Said: lines written for the screen (an action shows them as they are; data.ts lineFor).
+  if (!viewer) throw new Said("Not signed in");
+  if (!allowed(viewer, need)) throw new Said(need === "owner" ? "Only the owner can do that" : "Only an admin can do that");
   return viewer;
 }
 
@@ -125,17 +127,23 @@ export function roleForPassword(supplied: string): Role | null {
   return found;
 }
 
-// Login throttle: a per-instance map plus a shared per-address count in login_attempts (holds
-// across serverless instances), and a high flood cap across every address, so one stranger
-// typing wrong passwords locks only themselves out, never the owner or the TV. The same count
-// guards the personal sign-in and the join links. A wrong try stays counted for 15 minutes: a
-// right team password or a person's own sign-in never clears it (anyone on the team has those,
-// and could guess at the owner password without limit otherwise); only the owner password does.
-// A personal sign-in also counts wrong passwords per account, in the same table under
-// "acct:<id>" (verifyPersonLogin in people.ts); those rows, and the "joined:" rows that count
-// people who joined, stay out of the flood cap, so a locked account never closes sign-in for all.
+// Login throttle, in login_attempts (15 minutes; holds across serverless instances) with a
+// per-instance map in front. Each sign-in form keeps its own count for an address, so an office
+// behind one address never locks itself out of the other form:
+//   the shared-password form (owner / team password)   "<address>"          10
+//   a person's own sign-in                              "signin:<address>"   60 (an office is one address)
+//   a join link's wrong tries                           "join:<address>"     30
+//   people who joined through the agency link           "joined:<address>"   60
+// plus a high flood cap across every address, and a count per account ("acct:<id>", 20, in
+// people.ts). The "acct:" and "joined:" rows stay out of the flood cap, so a locked account never
+// closes sign-in for all.
+// A try is counted BEFORE it is looked at (beginTry: record, then count, then check), so tries
+// sent at the same moment cannot all get under the limit; a right password takes its own row
+// back. A wrong try stays counted for 15 minutes: a right team password or a person's own
+// sign-in never clears the address's count (anyone on the team has those, and could guess at the
+// owner password without limit otherwise); only the owner password does.
 const WINDOW_MS = 15 * 60 * 1000;
-const MAX_PER_IP = 10;
+export const MAX_PER_IP = 10;
 const MAX_GLOBAL = 500;
 const failures = new Map<string, { count: number; resetAt: number }>();
 
@@ -145,6 +153,14 @@ export async function clientAddress(): Promise<string> {
   return (h.get("x-forwarded-for")?.split(",")[0] || h.get("x-real-ip") || "unknown").trim().slice(0, 64);
 }
 
+/**
+ * The key a person's own sign-in is counted under: beside the shared-password form, never in it.
+ * An office is one address, so its typos must not close the owner's or the TV's sign-in (and ten
+ * wrong shared passwords must not close the office's own sign-ins). Each account still closes to
+ * a guesser at 20 (people.ts), so the address gets room for a whole office.
+ */
+export const signInKey = (ip: string): string => `signin:${ip}`.slice(0, 64);
+export const SIGNIN_MAX_PER_IP = 60;
 /**
  * The key a join link's wrong tries are counted under: beside the sign-in count, never in it, so
  * a bad link opened in the office cannot lock the office's sign-ins (and the other way round).
@@ -160,16 +176,27 @@ export const JOIN_MAX_PER_IP = 30;
 export const joinedKey = (ip: string): string => `joined:${ip}`.slice(0, 64);
 export const JOINED_MAX_PER_IP = 60;
 
+/** Rows in the window under one key (null when the table cannot be read). */
+async function rowsUnder(key: string): Promise<number | null> {
+  try {
+    const since = new Date(Date.now() - WINDOW_MS).toISOString();
+    const { count, error } = await db().from("login_attempts").select("id", { count: "exact", head: true }).eq("ip", key.slice(0, 64)).gte("at", since);
+    return !error && count != null ? count : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Is this key at its limit (or sign-in flooded from everywhere)? Reads only: nothing is counted. */
 export async function loginThrottled(ip: string, max: number = MAX_PER_IP): Promise<boolean> {
   const entry = failures.get(ip);
   if (entry && entry.resetAt >= Date.now() && entry.count >= max) return true;
+  const mine = await rowsUnder(ip);
+  if (mine != null && mine >= max) return true;
   try {
+    // The flood cap counts tries by address only: not the per-account rows, not the joins.
     const since = new Date(Date.now() - WINDOW_MS).toISOString();
-    const recent = () => db().from("login_attempts").select("id", { count: "exact", head: true }).gte("at", since);
-    const mine = await recent().eq("ip", ip.slice(0, 64));
-    if (!mine.error && mine.count != null && mine.count >= max) return true;
-    // The flood cap counts wrong tries by address only: not the per-account rows, not the joins.
-    const all = await recent().not("ip", "like", "acct:%").not("ip", "like", "joined:%");
+    const all = await db().from("login_attempts").select("id", { count: "exact", head: true }).gte("at", since).not("ip", "like", "acct:%").not("ip", "like", "joined:%");
     if (all.error || all.count == null) return false;
     return all.count >= MAX_GLOBAL;
   } catch {
@@ -177,18 +204,83 @@ export async function loginThrottled(ip: string, max: number = MAX_PER_IP): Prom
   }
 }
 
-export async function recordLoginFailure(ip: string): Promise<void> {
+/** This instance's own count for a key, raised by one. Returns the count as it stands with this try in it. */
+function bump(key: string): number {
   const now = Date.now();
-  const entry = failures.get(ip);
-  // The window runs from the first wrong try and is never pushed forward: 15 minutes, like the table's.
-  if (!entry || entry.resetAt < now) failures.set(ip, { count: 1, resetAt: now + WINDOW_MS });
-  else entry.count += 1;
+  const entry = failures.get(key);
   if (failures.size > 5000) for (const [k, v] of failures) if (v.resetAt < now) failures.delete(k);
+  // The window runs from the first try and is never pushed forward: 15 minutes, like the table's.
+  if (!entry || entry.resetAt < now) {
+    failures.set(key, { count: 1, resetAt: now + WINDOW_MS });
+    return 1;
+  }
+  entry.count += 1;
+  return entry.count;
+}
+
+/** Writes one row under a key. Returns its id, to take it back (null when the table did not answer). */
+async function writeTry(key: string): Promise<number | null> {
   try {
-    await db().from("login_attempts").insert({ ip: ip.slice(0, 64) });
+    const { data, error } = await db().from("login_attempts").insert({ ip: key.slice(0, 64) }).select("id").single();
+    const id = Number(data?.id);
+    return !error && Number.isSafeInteger(id) ? id : null;
+  } catch {
+    return null; // best effort
+  }
+}
+
+/** Counts one try under a key (here and in the table). Returns the row's id (null when the table did not answer). */
+export async function recordLoginFailure(ip: string): Promise<number | null> {
+  bump(ip);
+  return writeTry(ip);
+}
+
+/** Takes one counted try back (here and in the table): it was not a wrong try. */
+async function takeBackTry(ip: string, id: number | null): Promise<void> {
+  const entry = failures.get(ip);
+  if (entry && entry.count > 0) entry.count -= 1;
+  if (id == null) return;
+  try {
+    await db().from("login_attempts").delete().eq("id", id);
   } catch {
     /* best effort */
   }
+}
+
+/** One try at a form that is limited per address. */
+export interface Try {
+  /** Past the limit: say "too many" and do not look at what was typed. */
+  closed: boolean;
+  /** A right password (or a try that says nothing about anyone) takes its own row back. Safe to call twice. */
+  takeBack: () => Promise<void>;
+}
+const CLOSED: Try = { closed: true, takeBack: async () => {} };
+
+/**
+ * Counts a try BEFORE it is looked at: record, then count, then check. Tries sent at the same
+ * moment each see the others' rows, so only `max` of them find room, whether a guess among them
+ * was right or wrong (counting after the check let all of them through). A key already at its
+ * limit is refused without being counted, and a try that finds no room takes its row back, so
+ * the wait really is 15 minutes however often the button is tapped. The caller calls takeBack()
+ * for a right password; a wrong one leaves its row.
+ */
+export async function beginTry(key: string, max: number = MAX_PER_IP): Promise<Try> {
+  if (await loginThrottled(key, max)) return CLOSED;
+  // This instance's own order first (no waiting in between), then the table's.
+  const place = bump(key);
+  const id = await writeTry(key);
+  let taken = false;
+  const takeBack = async () => {
+    if (taken) return;
+    taken = true;
+    await takeBackTry(key, id);
+  };
+  const standing = await rowsUnder(key);
+  if (place > max || (standing != null && standing > max)) {
+    await takeBack();
+    return CLOSED;
+  }
+  return { closed: false, takeBack };
 }
 
 /** Clears an address's count (here and in the table). Only a right owner password does this. */

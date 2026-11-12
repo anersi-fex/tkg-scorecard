@@ -80,9 +80,12 @@ export default async function ScoreboardPage({ searchParams }: PageProps<"/score
   let onBoard = true;
   let leaderName: string | null = null;
   let agencyName = "";
+  let noUplines = false;
   try {
     const agents = await listAgents({ includeInactive: true });
     const org = buildOrg(agents);
+    // Uplines make teams: before anyone on the board has one, the Teams view says where to set them.
+    noUplines = !agents.some((a) => a.active && a.upline_id);
     // "My team": the viewer's own people when they lead some, else the team they are on. The
     // shared team password names nobody, so it has no team to show.
     const me = viewer.agentId && agents.some((a) => a.id === viewer.agentId) ? viewer.agentId : null;
@@ -253,6 +256,7 @@ export default async function ScoreboardPage({ searchParams }: PageProps<"/score
             scopeLeaderId={leaderId}
             linkTail={tail ? `&${tail}` : ""}
             emptyLine={whole ? `No sales in ${monthLabel(month)}.` : "No sales yet this month. The first one starts the board."}
+            noUplines={noUplines}
           />
         </section>
       </SearchProvider>

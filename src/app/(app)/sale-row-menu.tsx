@@ -11,12 +11,21 @@ import { Button, Input, Label, Select, cn } from "@/components/ui";
 const UNDO_WINDOW_MS = 15 * 60 * 1000;
 
 /**
- * The "…" at the end of a sale row: the owner can fix or remove any sale; the team can take back
- * one logged in the last 15 minutes.
+ * Whether this viewer may take this sale back while it is fresh (the server decides again on the
+ * tap): "ok" for a member on their own sale and for the team password while it can log; "not-yours"
+ * for a member on someone else's sale; "view-only" for a team password that only looks.
+ */
+export type UndoRight = "ok" | "not-yours" | "view-only";
+
+/**
+ * The "…" at the end of a sale row: the owner or an admin can fix or remove any sale; a member can
+ * take back their own, and the team password any, logged in the last 15 minutes. "Undo (just
+ * logged)" is offered only where the tap would work.
  */
 export function SaleRowMenu({
   sale,
   role,
+  undo = "ok",
   agents,
   carriers,
   pcCarriers,
@@ -24,6 +33,8 @@ export function SaleRowMenu({
 }: {
   sale: FeedSale;
   role: Role;
+  /** Home knows the viewer; a manager's menu ignores it. */
+  undo?: UndoRight;
   agents: Array<{ id: string; name: string }>;
   carriers: string[];
   pcCarriers: string[];
@@ -36,7 +47,7 @@ export function SaleRowMenu({
   const wrap = useRef<HTMLDivElement | null>(null);
   // Whether the team can still take this one back, checked when the menu opens (a clock in render is impure).
   const [fresh, setFresh] = useState(true);
-  const canRemove = role === "owner" || fresh;
+  const canRemove = role === "owner" || (fresh && undo === "ok");
 
   useEffect(() => {
     if (!open) return;
@@ -93,7 +104,9 @@ export function SaleRowMenu({
               {pending ? "Removing..." : role === "owner" ? "Remove" : "Undo (just logged)"}
             </button>
           ) : (
-            <p className="px-3 py-2 text-[13px] leading-snug text-gray-500">Only an admin can remove a sale after 15 minutes.</p>
+            <p data-undo={undo} className="px-3 py-2 text-[13px] leading-snug text-gray-500">
+              {undo === "view-only" ? "The team password only looks now." : undo === "not-yours" ? "You can take back your own sales only. Ask an admin about this one." : "Only an admin can remove a sale after 15 minutes."}
+            </p>
           )}
         </div>
       )}

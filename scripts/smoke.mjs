@@ -4,9 +4,14 @@
 // shared team password each do what their level allows; the Scoreboard, the teams and the office
 // group are checked against the sales the test logged; the TV's screens, its rotation and its
 // feed stamp; the owner's P&C switch (off by default: no screen may name P&C before it is turned
-// on or after it is turned off again); and last a full office, 46 people, on Home, the phone and
-// the TV. Screenshots go to test-results/. With no LOG_TOKEN the Shortcut steps are skipped and
-// the numbers are smaller; everything else still runs.
+// on or after it is turned off again); and last a full office, 46 people, on Home, the phone, the
+// Wrap (still one screenshot) and the TV. Along the way: the sign-in limits the way an office meets
+// them (everybody behind one address: each form keeps its own count, and tries sent at the same
+// moment are counted), the join card's "Already on the board? Tap your name.", what ends with a
+// place on the board or an admin's level (sessions and one-time links), and a goal or an upline
+// change reaching the TV within a poll. Screenshots go to test-results/. With no LOG_TOKEN the
+// Shortcut steps are skipped and the numbers are smaller; everything else still runs.
+// Start the server fresh for each run: its own memory keeps wrong tries for 15 minutes.
 // Run it on a fresh database:
 //   scripts/local-db/start.sh --reset
 //   set -a; . .local-db/env; set +a
@@ -88,8 +93,9 @@ const lastBusinessDay = () => daysBack((w) => w !== 0 && w !== 6);
 /** The Detroit date of the Sunday before this week's Monday: always an earlier week. */
 const lastSunday = () => daysBack((w) => w === 0);
 
-// Invented people. The first four work in the office; the last three do not. Two more join by
-// link: Dana (new, under Ivy, in the office) and Ivy herself (claims her row by typing her name).
+// Invented people. The first four work in the office; the last three do not. Three join by the
+// agency link: Dana (new, under Ivy, in the office), Ivy (claims her row by typing her name) and
+// Wes (claims his by tapping it under "Already on the board? Tap your name.").
 const NORA = "Nora Vance";
 const THEO = "Theo Marsh";
 const PRIYA = "Priya Nolan";
@@ -107,7 +113,7 @@ const PEOPLE = [
   [WES, false],
   [IVY, false],
 ];
-const PHONE = { [DANA]: "248 555 0142", [IVY]: "248 555 0143", [PRIYA]: "248 555 0144" };
+const PHONE = { [DANA]: "248 555 0142", [IVY]: "248 555 0143", [PRIYA]: "248 555 0144", [WES]: "248 555 0145" };
 
 // What the test logged and still stands, this month, life only: the numbers every screen must show.
 const ledger = new Map();
@@ -130,21 +136,20 @@ const totalPolicies = () => [...ledger.values()].reduce((s, e) => s + e.policies
 const topOf = (names) => names.filter((n) => ledger.has(n)).sort((a, b) => centsOf(b) - centsOf(a))[0];
 /** "$12,450": the app's whole dollars. */
 const dollars = (cents) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
-/** "$91.6K", "$950": the short money on the Scoreboard's top cards. */
+/**
+ * "$91.6K", "$57K", "$950": the short money on the Scoreboard's top cards, the phone's and the
+ * TV's alike (compactDollars in src/lib/views.ts): a tenth, the half rounded up, a zero tenth
+ * dropped, and $999.50 and up is "$1K".
+ */
 const shortMoney = (cents) => {
   const d = Math.abs(cents) / 100;
-  const one = (n) => (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, "");
+  const one = (n) => String(Math.round(n * 10) / 10);
   if (d >= 999_950) return `$${one(d / 1_000_000)}M`;
-  if (d >= 1_000) return `$${one(d / 1_000)}K`;
+  if (Math.round(d) >= 1000) return `$${one(d / 1_000)}K`;
   return `$${Math.round(d)}`;
 };
-/** The TV's short money: always one decimal past a thousand ("$57.0K"). */
-const tvMoney = (cents) => {
-  const d = Math.abs(cents) / 100;
-  if (d >= 999_950) return "$" + (d / 1_000_000).toFixed(1) + "M";
-  if (Math.round(d) >= 1000) return "$" + (d / 1000).toFixed(1) + "K";
-  return "$" + Math.round(d);
-};
+/** The TV prints what the phone prints (2026-11-12; it used to keep ".0" and round a half down). */
+const tvMoney = shortMoney;
 
 // Words no screen may show while the owner's P&C switch is off (the contract's decision 8).
 const PC_WORDS = /P&C|agency total|life \+ P&C/i;
@@ -224,8 +229,8 @@ async function actionShot(page, act, has = "") {
   return { url: req.url(), headers: await req.allHeaders(), body: req.postDataBuffer() };
 }
 /** Sends a captured server action call with another session's cookie (the page never offers it to them). */
-async function replay(ctx, shot, body) {
-  const headers = { origin: new URL(APP).origin };
+async function replay(ctx, shot, body, extra = {}) {
+  const headers = { origin: new URL(APP).origin, ...extra };
   for (const k of ["next-action", "content-type", "accept", "next-router-state-tree", "next-url"]) if (shot.headers[k]) headers[k] = shot.headers[k];
   const res = await ctx.request.post(shot.url, { headers, data: body ?? shot.body });
   return { status: res.status(), text: await res.text() };
@@ -306,14 +311,22 @@ try {
   // People: seven people added by hand, four of them in the office
   await go(o, "/team", "#new-name");
   check((await o.textContent("h1")).includes("People"), "the Team page is called People");
+  // The office mark starts off (the first person added must not become the whole office group
+  // at the top of every board) and then keeps what was set while more people are added.
+  check((await o.getAttribute("[data-add-person] [role=switch]", "aria-checked")) === "false", "Add a person starts with the office mark off");
+  let officeTaps = 0;
   for (const [name, office] of PEOPLE) {
     await o.waitForFunction(() => document.querySelector("#new-name")?.value === "" && !document.querySelector("#new-name")?.disabled);
     await o.fill("#new-name", name);
     const mark = o.locator("[data-add-person] [role=switch]");
-    if (((await mark.getAttribute("aria-checked")) === "true") !== office) await mark.click();
+    if (((await mark.getAttribute("aria-checked")) === "true") !== office) {
+      await mark.click();
+      officeTaps++;
+    }
     await o.click("[data-add-person] button[type=submit]");
     await o.waitForSelector(`text=${name} is on the board.`);
   }
+  check(officeTaps === 2, `the office mark keeps what was set from one person to the next (${officeTaps} taps for four in the office, then three outside)`);
   const added = await feedUntil((j) => j.agents.length === 7);
   check(added.agents.length === 7 && added.agents.filter((p) => p.inOffice).length === 4, "seven people on the board, four marked in the office");
   // A duplicate is refused
@@ -324,6 +337,9 @@ try {
   check(true, "duplicate name refused");
   const ID = {};
   for (const [name] of PEOPLE) ID[name] = await idOf(name);
+  // Nobody has an upline yet: the Teams view says what makes a team, not just that there is none
+  await o.goto(`${APP}/scoreboard?who=teams`);
+  check((await appears(o, "p[data-empty=no-uplines]", 8000)) && (await o.textContent("p[data-empty=no-uplines]")).includes("Teams show here once people have an upline. Set uplines on the People page."), "with no uplines yet, the Scoreboard's Teams view says that uplines make teams");
   // Goal for one person
   {
     const sheet = await openEditor(o, THEO);
@@ -441,7 +457,13 @@ try {
   const ivy = await newVisitor();
   const iv = await ivy.newPage();
   await go(iv, joinPath, "form[data-join=agency]");
+  // The card lists the people an admin already added who have no sign-in yet (names only), so
+  // nobody comes on a second time under another spelling.
+  const claimNames = (page) => page.locator("[data-claim] button[data-claim-name]").evaluateAll((els) => els.map((e) => e.getAttribute("data-claim-name")));
+  const waiting = [GUS, IVY, LENA, NORA, PRIYA, THEO, WES].sort((x, y) => x.localeCompare(y));
+  check((await iv.getAttribute("[data-claim]", "data-claim")) === "chips" && (await iv.textContent("[data-claim]")).includes("Already on the board? Tap your name.") && (await claimNames(iv)).join() === waiting.join(), `the join card asks "Already on the board? Tap your name." over the people with no sign-in yet, A to Z (${(await claimNames(iv)).length} names, no ${DANA})`);
   await iv.fill("#name", IVY.toLowerCase());
+  check((await appears(iv, "[data-claim-chosen]", 3000)) && (await iv.getAttribute(`button[data-claim-name="${IVY}"]`, "aria-pressed")) === "true", "typing the board's spelling by hand, in any case, marks that name as hers too");
   await iv.fill("#phone", PHONE[IVY]);
   await iv.click("form[data-join] button:has-text(\"I'm not sure\")");
   await iv.fill("#password", "ivy-first-pass");
@@ -449,6 +471,28 @@ try {
   check((await iv.textContent("h1")) === "Welcome, Ivy.", "someone already on the board joins under the name they were added with");
   const afterIvy = await feed();
   check(afterIvy.agents.length === 8 && afterIvy.agents.filter((p) => p.name.toLowerCase() === IVY.toLowerCase()).length === 1 && afterIvy.agents.find((p) => p.name === IVY)?.id === ID[IVY], "a name that matches an unclaimed person claims that row (no second Ivy Brandt)");
+  // Wes starts to type his name another way, then taps it on the card: the tap puts the board's
+  // own spelling in the box, and the join claims his row.
+  {
+    const wes = await newVisitor();
+    const w = await wes.newPage();
+    await go(w, joinPath, "form[data-join=agency]");
+    const left = await claimNames(w);
+    check(left.join() === waiting.filter((n) => n !== IVY).join(), `someone who has a sign-in now is off the card's list (${left.length} names, no ${IVY})`);
+    await w.fill("#name", "Wesley Calder");
+    const typed = { chosen: await w.locator("[data-claim-chosen]").count(), pressed: await w.getAttribute(`button[data-claim-name="${WES}"]`, "aria-pressed") };
+    await w.click(`button[data-claim-name="${WES}"]`);
+    check(typed.chosen === 0 && typed.pressed === "false" && (await w.inputValue("#name")) === WES && (await w.getAttribute(`button[data-claim-name="${WES}"]`, "aria-pressed")) === "true" && ((await w.textContent("[data-claim-chosen]")) ?? "").includes("That's you on the board. Your numbers stay with you."), "a tap on a name puts the board's own spelling in the name box and says the numbers stay");
+    await w.screenshot({ path: `${OUT}/16b-join-chips.png`, fullPage: true });
+    await w.fill("#phone", PHONE[WES]);
+    await w.click("form[data-join] button:has-text(\"I'm not sure\")");
+    await w.fill("#password", "wes-first-pass");
+    await Promise.all([w.waitForURL((u) => u.pathname === "/install"), w.click("form[data-join] button[type=submit]")]);
+    const afterWes = await feed();
+    const wesLines = afterWes.agents.filter((p) => /calder/i.test(p.name));
+    check((await w.textContent("h1")) === "Welcome, Wes." && afterWes.agents.length === 8 && wesLines.length === 1 && wesLines[0].id === ID[WES] && wesLines[0].name === WES && wesLines[0].inOffice === false, "the tapped name claims the row that was there: no second Wes, and the office mark an admin left stays");
+    await wes.close();
+  }
   // A number that already has a sign-in is told to sign in; a short password is refused in plain words
   const zed = await newVisitor();
   const z = await zed.newPage();
@@ -560,6 +604,85 @@ try {
     await early.close();
   }
 
+  // --- The sign-in limits, the way an office meets them: everybody behind one address ---
+  // (owner, 2026-11-12: "the ones in the office are like a group of like 27": they all sign in for
+  // the first time from one network, next to the TV.) Each form keeps a count of its own, a try is
+  // counted before it is looked at, and a number nobody has is typed here, so no account is touched.
+  {
+    const PERSONAL_LIMIT = 60;
+    const SHARED_LIMIT = 10;
+    const NO_MATCH = "That phone number and password don't match.";
+    const CLOSED_PERSONAL = "Too many tries from this network. Wait a few minutes, or ask an admin for a new sign-in link.";
+    const at = (addr) => browser.newContext({ viewport: { width: 1280, height: 900 }, extraHTTPHeaders: { "x-forwarded-for": addr } });
+    /** Types a shared password on the team form: true once it signed in, false when the form answered instead. */
+    /** True once the page has left /login; false when the form said to wait, or nothing came. */
+    const leavesLogin = async (page) =>
+      (await Promise.race([
+        page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 10000 }).then(() => "in", () => "no"),
+        page.waitForSelector("text=Too many tries", { timeout: 10000 }).then(() => "wait", () => "no"),
+      ])) === "in";
+    const sharedSignsIn = async (page, password) => {
+      await go(page, "/login?way=team", "form[data-way=team]");
+      await page.fill("#password", password);
+      await page.click("button[type=submit]");
+      return leavesLogin(page);
+    };
+    const office = address();
+    const desk = await at(office);
+    const k = await desk.newPage();
+    await go(k, "/login?way=person", "form[data-way=person]");
+    await k.fill("#phone", "248 555 0190");
+    await k.fill("#password", "not-anyones-pass");
+    const wrongPersonal = await actionShot(k, () => k.click("button[type=submit]"), "0190");
+    let looked = (await appears(k, `text=${NO_MATCH}`)) ? 1 : 0;
+    const again = async (ctx, shot, addr) => (await replay(ctx, shot, undefined, { "x-forwarded-for": addr })).text;
+    for (let i = 0; i < 9; i++) if ((await again(desk, wrongPersonal, office)).includes(NO_MATCH)) looked++;
+    // The TV and a phone on the team password, at the same address
+    const tvSide = await at(office);
+    const tvp = await tvSide.newPage();
+    const teamIn = await sharedSignsIn(tvp, TEAM);
+    await tvp.goto(`${APP}/board`);
+    check(looked === 10 && teamIn && (await appears(tvp, "main[data-screen]")) && tvp.url() === `${APP}/board`, `ten wrong tries on people's own sign-in (${looked} looked at) leave the team password and the TV's sign-in open for that address`);
+    await tvSide.close();
+    // The personal form closes at its own limit, 60 for an address: the 61st try is refused whatever was typed
+    for (let i = looked; i < PERSONAL_LIMIT; i++) if ((await again(desk, wrongPersonal, office)).includes(NO_MATCH)) looked++;
+    const past = await again(desk, wrongPersonal, office);
+    await k.fill("#phone", PHONE[IVY]);
+    await k.fill("#password", "ivy-first-pass");
+    await k.click("button[type=submit]");
+    check(looked === PERSONAL_LIMIT && past.includes(CLOSED_PERSONAL) && !past.includes(NO_MATCH) && (await appears(k, `text=${CLOSED_PERSONAL}`)) && new URL(k.url()).pathname === "/login", `the personal form closes at its own limit: ${looked} tries were looked at, and after that even the right password is told to wait`);
+    const ownerSide = await at(office);
+    const op = await ownerSide.newPage();
+    check(await sharedSignsIn(op, OWNER), "while the personal form is closed for an address, the owner password still signs in there");
+    await ownerSide.close();
+    await desk.close();
+
+    // The other way round, and a burst: thirty wrong shared passwords sent at the same moment
+    // from one address. Each is counted before it is looked at, so no more than ten get an answer
+    // about the password; the rest are told to wait.
+    const lobby = address();
+    const guest = await at(lobby);
+    const g = await guest.newPage();
+    await go(g, "/login?way=team", "form[data-way=team]");
+    await g.fill("#password", "wrong-password");
+    const wrongShared = await actionShot(g, () => g.click("button[type=submit]"));
+    const first = (await appears(g, "text=That password isn't right")) ? 1 : 0;
+    const burst = await Promise.all(Array.from({ length: 30 }, () => again(guest, wrongShared, lobby)));
+    const answered = first + burst.filter((t) => t.includes("That password isn't right.")).length;
+    const waited = burst.filter((t) => t.includes("Too many tries. Wait 15 minutes and try again.")).length;
+    check(first === 1 && answered <= SHARED_LIMIT && answered + waited === 31 && waited >= 21, `a burst of wrong tries sent at once is counted: of 31, ${answered} were looked at and ${waited} were told to wait`);
+    // Tries that were told to wait are not counted, so the form may still have room: fill it one at a time
+    for (let i = 0; i < SHARED_LIMIT; i++) await again(guest, wrongShared, lobby);
+    const closedShared = !(await sharedSignsIn(g, TEAM)) && (await g.innerText("body")).includes("Too many tries. Wait 15 minutes and try again.");
+    const person = await guest.newPage();
+    await go(person, "/login?way=person", "form[data-way=person]");
+    await person.fill("#phone", PHONE[IVY]);
+    await person.fill("#password", "ivy-first-pass");
+    await person.click("button[type=submit]");
+    check(closedShared && (await leavesLogin(person)), "ten wrong shared passwords close that form for the address, and a person's own sign-in still works there");
+    await guest.close();
+  }
+
   // --- Sales through the form (the owner logs for anyone) ---
   await go(o, "/log", "#premium");
   await o.screenshot({ path: `${OUT}/04-log-empty.png`, fullPage: true });
@@ -636,15 +759,30 @@ try {
   const danaRow = d.locator(`li:has(button[aria-label=More]):has-text("${DANA}")`);
   check((await danaRow.count()) === 1 && (await danaRow.textContent()).includes("$3,000") && (await feed()).agents.find((p) => p.id === ID[DANA])?.lifeCents === 300_000, "the member's sale shows on Home, under their own name");
   check((await d.locator("button:has-text('Fix this sale')").count()) === 0, "a member is offered no Fix on a sale");
+  /** The newest sale in the feed that fn picks (the feed's sale rows carry their ids). */
+  const saleIn = async (fn) => {
+    const j = await feed();
+    return [...j.lifeRecent, ...j.recent].find(fn)?.id ?? null;
+  };
+  /** What an open "…" menu on a sale row offers: the Undo button, or the line that says why not. */
+  const menuOf = (page) => page.evaluate(() => ({ why: document.querySelector("p[data-undo]")?.getAttribute("data-undo") ?? null, text: document.querySelector("p[data-undo]")?.textContent ?? "", undo: [...document.querySelectorAll("button")].some((b) => (b.textContent ?? "").includes("Undo (just logged)")) }));
+  const danaSale = await saleIn((s) => s.agentId === ID[DANA]);
   d.once("dialog", (dlg) => dlg.accept());
   await danaRow.locator("button[aria-label=More]").click();
-  await d.click("button:has-text('Undo (just logged)')");
-  check((await appears(d, "text=Removed.")) && (await feedUntil((j) => j.agents.find((p) => p.id === ID[DANA])?.lifeCents === 0)).agents.find((p) => p.id === ID[DANA])?.lifeCents === 0, "a member takes back their own sale");
-  // Somebody else's sale: the menu offers the undo, the server refuses it
-  d.once("dialog", (dlg) => dlg.accept());
+  const ownMenu = await menuOf(d);
+  // Her own undo call is kept: it is sent again further down for other people's sales.
+  const undoShot = await actionShot(d, () => d.click("button:has-text('Undo (just logged)')"), danaSale ?? "");
+  check(ownMenu.undo && ownMenu.why === null && (await appears(d, "text=Removed.")) && (await feedUntil((j) => j.agents.find((p) => p.id === ID[DANA])?.lifeCents === 0)).agents.find((p) => p.id === ID[DANA])?.lifeCents === 0, "a member takes back their own sale");
+  /** The undo call for another sale, as the body the member's own call had. */
+  const undoBody = (saleId) => (undoShot.body?.toString("utf8") ?? "").replace(danaSale ?? "?", saleId ?? "");
+  // Somebody else's sale: the menu offers no undo and says why, and the server refuses the call itself
   await d.locator(`li:has(button[aria-label=More]):has-text("${GUS}") button[aria-label=More]`).click();
-  await d.click("button:has-text('Undo (just logged)')");
-  check((await appears(d, "text=You can take back your own sales only.")) && (await feed()).agents.find((p) => p.id === ID[GUS])?.lifeCents === 610_000, "a member cannot take back someone else's sale");
+  await d.waitForSelector("p[data-undo]");
+  const otherMenu = await menuOf(d);
+  check(!otherMenu.undo && otherMenu.why === "not-yours" && otherMenu.text.includes("You can take back your own sales only. Ask an admin about this one."), "Undo is on a member's own sale only: on someone else's the menu says why not");
+  const gusSale = await saleIn((s) => s.agentId === ID[GUS]);
+  const forGus = await replay(dana, undoShot, undoBody(gusSale));
+  check(!!danaSale && !!gusSale && undoBody(gusSale).includes(gusSale) && forGus.text.includes("You can take back your own sales only.") && (await feed()).agents.find((p) => p.id === ID[GUS])?.lifeCents === 610_000, "a member who calls the undo for someone else's sale directly is refused, and the sale stands");
   // The owner's "log a sale for Lena" call, sent with the member's session: the server logs it for the member
   {
     const forLena = await replay(dana, logShot);
@@ -787,6 +925,11 @@ try {
     const sheet = await openEditor(o, LENA);
     await sheet.locator(`[role=switch][aria-label="${LENA} works in the office"]`).click();
     check((await appears(o, "text=In the office: at the top of the boards.")) && (await feedUntil((j) => j.agents.find((p) => p.id === ID[LENA])?.inOffice === true)).agents.find((p) => p.id === ID[LENA])?.inOffice === true, "the owner marks a person in the office");
+    // Rename: a name someone else on the board already has is refused (two people with one name
+    // would let an approval name the wrong one, and the Shortcut would find neither)
+    await sheet.locator(`#name-${ID[LENA]}`).fill(WES.toLowerCase());
+    await sheet.locator(`form:has(#name-${ID[LENA]}) button[type=submit]`).click();
+    check((await appears(o, `text=Someone else on the board is ${WES}. Add a middle initial.`)) && (await feed()).agents.find((p) => p.id === ID[LENA])?.name === LENA, "renaming a person to a name someone else on the board has is refused, in any case");
   }
   const OFFICE = [NORA, THEO, PRIYA, GUS, DANA, LENA];
   const OTHERS = [WES, IVY];
@@ -906,10 +1049,13 @@ try {
   check((await m.locator("#premium").count()) === 0 && (await m.locator("button:has-text('Sign out and sign in with your own number')").count()) === 1, "with the switch off the team password's Log a sale only says how to sign in");
   await m.goto(`${APP}/`);
   await m.waitForSelector("text=Leaderboard");
-  m.once("dialog", (dlg) => dlg.accept());
   await m.locator("button[aria-label=More]").first().click();
-  await m.click("button:has-text('Undo (just logged)')");
-  check((await appears(m, "text=The team password only looks now. Sign in with your own number to log a sale.")) && (await feed()).agents.find((p) => p.id === ID[IVY])?.lifeCents === 199_900, "and it cannot take a sale back either: view-only");
+  await m.waitForSelector("p[data-undo]");
+  const lookMenu = await menuOf(m);
+  check(!lookMenu.undo && lookMenu.why === "view-only" && lookMenu.text.includes("The team password only looks now."), "view-only, the menu on a sale offers no Undo and says the team password only looks now");
+  const ivySale = await saleIn((s) => s.agentId === ID[IVY] && s.premiumCents === 199_900);
+  const asLooker = await replay(team, undoShot, undoBody(ivySale));
+  check(!!ivySale && asLooker.text.includes("The team password only looks now. Sign in with your own number to log a sale.") && (await feed()).agents.find((p) => p.id === ID[IVY])?.lifeCents === 199_900, "and it cannot take a sale back either: the undo itself is refused, view-only");
   await m.goto(`${APP}/board`);
   check(await appears(m, "main[data-screen]"), "view-only, the team password still opens the TV board");
   await m.goto(`${APP}/`);
@@ -921,7 +1067,7 @@ try {
   // --- What else an owner and an admin reach for in the first week ---
   // A cell number never reaches a browser that is not a manager's: read from the page as it was sent, not only from what shows
   {
-    const numbers = /555[-\s.)]*01(42|43|44)/;
+    const numbers = /555[-\s.)]*01(42|43|44|45)/;
     const sheet = await openEditor(o, DANA);
     check((await sheet.textContent()).includes("(248) 555-0142"), "a manager's People page shows a person's cell number");
     let sent = "";
@@ -980,9 +1126,19 @@ try {
     check(teamUrl !== freshUrl && (await lk.getAttribute("[data-upline]", "data-upline")) === ID[NORA] && (await lk.textContent("[data-upline]")).includes(NORA), "a link for one team opens the join page with that leader already picked");
     await looker.close();
 
-    // Off the board: the person's sign-in stops working until they are back
+    // Off the board: the person's sign-in stops working until they are back, and the links and
+    // the cookies they had are gone for good
     {
       const off = await openEditor(o, DANA);
+      // A reset link made for her before she is taken off: it must not outlive her place on the board
+      await off.locator("[data-sign-in] button:has-text('Make a reset link')").click();
+      await off.locator("[data-sign-in] [data-link-box] code").waitFor();
+      const early = ((await off.locator("[data-sign-in] [data-link-box] code").textContent()) ?? "").trim();
+      const earlyPath = early.startsWith("http") ? new URL(early).pathname : early;
+      const holder = await newVisitor();
+      const hp = await holder.newPage();
+      await hp.goto(`${APP}${earlyPath}`);
+      const openBefore = (await hp.locator("form[data-join=reset]").count()) === 1;
       o.once("dialog", (dlg) => dlg.accept());
       await off.locator("button:has-text('Take off the board')").click();
       await o.waitForSelector("text=Off the board. Their sales stay in the history.");
@@ -993,12 +1149,34 @@ try {
       await d.fill("#password", "dana-second-pass");
       await d.click("button[type=submit]");
       check(bounced && (await appears(d, "text=That phone number and password don't match.")) && (await feed()).agents.length === 7, "taking a person off the board ends their session and their sign-in, with the same neutral line");
+      await hp.goto(`${APP}${earlyPath}`);
+      check(/^\/join\/[A-Za-z0-9_-]{16,}$/.test(earlyPath) && openBefore && (await hp.locator("[data-join=closed]").count()) === 1 && (await hp.locator("form[data-join]").count()) === 0, "and the unused reset link that was made for them is turned off");
+      // The agency link is not a way back in: not under their name, and not under a new name with their number
+      const ASK = "Ask an admin to put you back on the board.";
+      const tryJoin = async (name, phone) => {
+        await go(hp, freshPath, "form[data-join=agency]");
+        await hp.fill("#name", name);
+        await hp.fill("#phone", phone);
+        await hp.click("form[data-join] button:has-text(\"I'm not sure\")");
+        await hp.fill("#password", "back-in-again");
+        await hp.click("form[data-join] button[type=submit]");
+        return (await appears(hp, `text=${ASK}`)) && new URL(hp.url()).pathname === freshPath;
+      };
+      await go(hp, freshPath, "form[data-join=agency]");
+      const offList = !(await hp.locator("[data-claim] button[data-claim-name]").evaluateAll((els) => els.map((e) => e.getAttribute("data-claim-name")))).includes(DANA);
+      const byName = await tryJoin(DANA, "248 555 0188");
+      const byNumber = await tryJoin("Dee Whitlow", PHONE[DANA]);
+      const stillOff = await feed();
+      check(offList && byName && byNumber && stillOff.agents.length === 7 && !stillOff.agents.some((x) => /whitlow/i.test(x.name)), `the join card refuses the name of someone taken off the board, and a new name with their number ("${ASK}"): nobody is added`);
+      await holder.close();
       await go(o, "/team", "#new-name");
       await o.click(`li:has-text("${DANA}") button:has-text("Put back")`);
       await o.waitForSelector("text=Back on the board.");
-      // Back on the board returns the sign-in they had: the phone that was signed in is signed in again.
+      // Back on the board the number and the password work again; the cookie the phone had does not.
       await d.goto(`${APP}/`);
-      check(d.url() === `${APP}/` && (await feedUntil((j) => j.agents.length === 8)).agents.length === 8, "back on the board, the phone that was signed in is signed in again");
+      check(new URL(d.url()).pathname === "/login" && (await feedUntil((j) => j.agents.length === 8)).agents.length === 8, "back on the board, the session the phone had does not come back: it is asked to sign in");
+      await signInPerson(d, PHONE[DANA], "dana-second-pass");
+      check(d.url() === `${APP}/`, "the same number and password sign that phone in again");
       const again = await newVisitor();
       const ag = await again.newPage();
       await signInPerson(ag, PHONE[DANA], "dana-second-pass");
@@ -1025,6 +1203,36 @@ try {
       await forgot.close();
       await signInPerson(d, PHONE[DANA], "dana-third-pass");
       check(d.url() === `${APP}/`, "and the new password is the one that signs in from then on");
+    }
+
+    // The links an admin made go with the admin: the owner removes Priya as an admin, and the
+    // sign-in link she made for Lena stops working. Then she is made an admin again.
+    {
+      const sheet = await openEditor(ad, LENA);
+      await sheet.locator("[data-sign-in] button:has-text('Make their sign-in link')").click();
+      await sheet.locator("[data-sign-in] [data-link-box] code").waitFor();
+      const made = ((await sheet.locator("[data-sign-in] [data-link-box] code").textContent()) ?? "").trim();
+      const lenaPath = made.startsWith("http") ? new URL(made).pathname : made;
+      const holder = await newVisitor();
+      const hp = await holder.newPage();
+      await hp.goto(`${APP}${lenaPath}`);
+      const openBefore = (await hp.locator("form[data-join=person]").count()) === 1 && (await hp.textContent("h1")) === "Hi Lena, set up your sign-in";
+      const ownerSheet = await openEditor(o, PRIYA);
+      o.once("dialog", (dlg) => dlg.accept());
+      await ownerSheet.locator("[data-admin-row] button").click();
+      const removed = await appears(o, `text=${PRIYA} is not an admin anymore.`);
+      await hp.goto(`${APP}${lenaPath}`);
+      check(/^\/join\/[A-Za-z0-9_-]{16,}$/.test(lenaPath) && openBefore && removed && (await hp.locator("[data-join=closed]").count()) === 1 && (await hp.locator("form[data-join]").count()) === 0, "when the owner removes an admin, the unused sign-in link that admin made stops working");
+      await ad.goto(`${APP}/settings`);
+      await ad.waitForURL(`${APP}/`);
+      check(true, "and Settings is closed to her from then on");
+      await holder.close();
+      const backSheet = await openEditor(o, PRIYA);
+      o.once("dialog", (dlg) => dlg.accept());
+      await backSheet.locator("[data-admin-row] button").click();
+      const adminAgain = await appears(o, `text=${PRIYA} is an admin now.`);
+      await ad.goto(`${APP}/settings`);
+      check(adminAgain && (await appears(ad, "input[name=goal]")), "the owner makes her an admin again, and Settings opens for her");
     }
   }
 
@@ -1341,6 +1549,11 @@ try {
   };
   check(await keep("Scoreboard", "scoreboard"), "Scoreboard in Settings keeps the TV on the Scoreboard within a poll, with only its own pill");
   const tvKpis = await t.evaluate(() => Object.fromEntries([...document.querySelectorAll("main [data-kpi]")].map((el) => [el.getAttribute("data-kpi"), el.innerText.replace(/\s+/g, " ")])));
+  // The phone's Scoreboard at this same moment: both print one text for the same production
+  await d.goto(`${APP}/scoreboard`);
+  await d.waitForSelector("[data-scoreboard=agency]");
+  const phoneProduction = ((await d.textContent("section[data-kpi=Production] p.font-mono")) ?? "").trim();
+  check(phoneProduction === shortMoney(totalCents()) && (tvKpis["Production"] ?? "").split(" ").includes(phoneProduction), `the phone's Scoreboard and the TV print the same short money for Production (${phoneProduction})`);
   check((tvKpis["Production"] ?? "").includes(tvMoney(totalCents())) && (tvKpis["Policies sold"] ?? "").includes(` ${totalPolicies()} `) && (tvKpis["Active agents"] ?? "").includes(` ${ledger.size} `), `the TV's Scoreboard shows the three top numbers the test logged (${tvMoney(totalCents())}, ${totalPolicies()} policies, ${ledger.size} agents)`);
   const tvScore = await t.innerText("main");
   check(tvScore.includes("Where agents stand") && tvScore.includes("Moved most this week") && tvScore.includes("Going up") && tvScore.includes(`vs ${sb.compare.label}`) && !PC_WORDS.test(tvScore), "the TV's Scoreboard has where agents stand and who moved most");
@@ -1356,7 +1569,39 @@ try {
   check(tvTeam.includes(`${NORA}’s team`) && tvTeam.includes("3 people") && tvTeam.includes("3 sold") && tvTeam.includes(dollars(centsOf(NORA, THEO, GUS))) && (await t.locator("main li[data-team]").count()) === 2 && !PC_WORDS.test(await t.innerText("main")), `the TV's Teams screen adds up the leader's whole downline (${dollars(centsOf(NORA, THEO, GUS))})`);
   check(await fits(t, "li[data-team]"), "the Teams screen fits the TV at 1920x1080");
   await t.screenshot({ path: `${OUT}/10f-board-teams.png` });
+  // An upline change is not a Settings row either: the stamp moves, and the team on the TV grows within a poll
+  {
+    const teamOnTv = (people) => settles(t, ([id, words]) => (document.querySelector(`main li[data-team="${id}"]`)?.innerText ?? "").replace(/\s+/g, " ").includes(words), 12000, [ID[IVY], people]);
+    const before = (await feed()).stamp;
+    const sheet = await openEditor(o, WES);
+    await sheet.locator("[data-upline-picker] > button").click();
+    await sheet.locator("input[aria-label='Find the upline']").fill("ivy");
+    await sheet.locator(`[role=option]:has-text("${IVY}")`).click();
+    const moved = await feedUntil((j) => j.agents.find((x) => x.id === ID[WES])?.uplineId === ID[IVY]);
+    const asked = await owner.request.get(`${APP}/api/board?stamp=${encodeURIComponent(before)}`);
+    check(moved.agents.find((x) => x.id === ID[WES])?.uplineId === ID[IVY] && asked.status() === 200, "an upline change moves the stamp");
+    check(await teamOnTv("3 people"), `and ${IVY}'s team on the TV counts three people within a poll`);
+    await sheet.locator("[data-upline-picker] > button", { hasText: IVY }).waitFor();
+    await sheet.locator("[data-upline-picker] > button").click();
+    await sheet.locator("[role=option]:has-text('No upline')").click();
+    check((await feedUntil((j) => j.agents.find((x) => x.id === ID[WES])?.uplineId == null)).agents.find((x) => x.id === ID[WES])?.uplineId == null && (await teamOnTv("2 people")), "and two again once the upline is taken off");
+    await go(o, "/settings", `${tvScreens} [role=radio]`);
+  }
   check(await keep("Leaderboard", "life"), "Leaderboard keeps the TV on the leaderboard");
+  // A goal is not a Settings row, yet its save moves the stamp too ("Goal saved. The board shows it
+  // now."): the leaderboard's goal follows within a poll, there and back
+  for (const [amount, shown] of [
+    ["155000", "$155,000"],
+    ["150000", "$150,000"],
+  ]) {
+    const before = (await feed()).stamp;
+    await o.locator("input[name=goal]").first().fill(amount);
+    await o.locator("form:has(input[name=goal])").first().locator("button[type=submit]").click();
+    const saved = await feedUntil((j) => j.team.goalCents === Number(amount) * 100);
+    const asked = await owner.request.get(`${APP}/api/board?stamp=${encodeURIComponent(before)}`);
+    check(saved.team.goalCents === Number(amount) * 100 && asked.status() === 200 && (await asked.json()).team.goalCents === Number(amount) * 100, `a goal save moves the stamp: the TV's next question gets the whole feed, with ${shown}`);
+    check(await settles(t, (text) => (document.querySelector("main")?.innerText ?? "").includes(`of ${text}`), 12000, shown), `and the goal on the TV reads ${shown} within a poll`);
+  }
   await o.click(tvScreen("Rotate"));
   check(await settles(t, () => document.querySelector("main")?.dataset.screen === "life" && [...document.querySelectorAll("[data-pill]")].map((e) => e.getAttribute("data-pill")).join() === "life,scoreboard,production,teams", 12000), "Rotate brings the TV back to rotating, with a pill for each of its four screens");
   // This TV was shown a change at almost every poll (the test kept saving Settings), so here only
@@ -1643,6 +1888,33 @@ try {
       await pp.goto(`${APP}/`);
       await pp.waitForSelector("section[data-group]");
       await pp.screenshot({ path: `${OUT}/24b-phone-home-full-office.png`, fullPage: true });
+      // The Wrap at that size (owner, 2026-10-29: "tells you a lot on one screenshot"): past seven
+      // sellers the top six are rows and everybody else shares one line, the rest of the sellers
+      // with what they sold and the people with no sale as a count.
+      const sellers = ledger.size;
+      const quiet = ALL - sellers;
+      const ranked = [...ledger.keys()].sort((x, y) => centsOf(y) - centsOf(x));
+      const rowsWant = sellers > 7 ? 6 : sellers;
+      const lineWant = [sellers > 7 ? `and ${sellers - 6} more sold ${dollars(centsOf(...ranked.slice(6)))}` : "", quiet > 6 ? `${quiet} with no sale` : ""].filter(Boolean).join(" · ");
+      for (const [view, ready] of [
+        ["day", "text=Player of the day"],
+        ["week", "text=Player of the week"],
+        ["month", "text=Player of the month"],
+      ]) {
+        await pp.goto(`${APP}/wrap${view === "day" ? "" : `?view=${view}`}`);
+        await pp.waitForSelector(ready);
+        const w = await pp.evaluate(() => ({
+          rows: [...document.querySelectorAll("li[data-wrap-row]")].map((li) => li.innerText.replace(/\s+/g, " ").trim()),
+          line: document.querySelector("li[data-wrap-fold]")?.innerText.replace(/\s+/g, " ").trim() ?? "",
+          bottom: document.querySelector("[data-wrap-foot]").getBoundingClientRect().bottom,
+          pill: document.querySelector("nav[data-tabbar] > div").getBoundingClientRect().top,
+          wide: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+        }));
+        check(w.rows.length === rowsWant && w.rows[0].includes(ranked[0]) && w.line === lineWant, `with ${ALL} people the Wrap's ${view} shows the top ${rowsWant} sellers as rows and the rest on one line ("${w.line}")`);
+        check(w.bottom <= w.pill - 8 && !w.wide, `and it is still one iPhone screenshot at 390x844 (ends at ${Math.round(w.bottom)}px, the tab bar starts at ${Math.round(w.pill)})`);
+        if (view === "day") await pp.screenshot({ path: `${OUT}/26-phone-wrap-full-office.png`, fullPage: true });
+        if (view === "week") await pp.screenshot({ path: `${OUT}/26b-phone-wrap-week-full-office.png`, fullPage: true });
+      }
       await ph.close();
     }
     // The TV at that size: the office group in three columns, a page at a time, the second page taking its turn

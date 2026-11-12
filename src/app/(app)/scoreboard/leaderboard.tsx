@@ -40,6 +40,8 @@ interface Props {
   /** What follows "/scoreboard?team=<id>", so a team link keeps the month and the view. */
   linkTail: string;
   emptyLine: string;
+  /** Nobody on the board has an upline yet, so there are no teams to show: Teams says how to make them. */
+  noUplines?: boolean;
 }
 
 interface Sortable {
@@ -81,7 +83,7 @@ function Chevron({ open }: { open: boolean }) {
 const TH = "sticky top-0 z-20 border-b border-line bg-surface-2 px-2.5 py-0 text-[12px] font-bold whitespace-nowrap text-gray-600";
 const TD = "border-b border-line px-2.5 py-1 text-right font-mono text-[13px] whitespace-nowrap text-gray-900";
 
-export function Leaderboard({ who, field, columns, rows, teams, agencyName, scopeLeaderId, linkTail, emptyLine }: Props) {
+export function Leaderboard({ who, field, columns, rows, teams, agencyName, scopeLeaderId, linkTail, emptyLine, noUplines = false }: Props) {
   const { q } = useSearch();
   const [picked, setSort] = useState<Sort>({ key: "total", desc: true });
   const [opened, setOpened] = useState<string[]>([]);
@@ -115,7 +117,14 @@ export function Leaderboard({ who, field, columns, rows, teams, agencyName, scop
   const shown = who === "teams" ? shownTeams.length : shownRows.length;
 
   // Nobody sold: the page's own line for the month. People sold but no team did: say only that.
-  if (count === 0) return <p className="border-t border-line px-4 py-6 text-[14px] text-gray-600">{who === "teams" && rows.length > 0 ? "No teams here." : emptyLine}</p>;
+  // Teams before anyone has an upline: uplines make teams, so say where to set them.
+  if (count === 0) {
+    return (
+      <p data-empty={who === "teams" && noUplines ? "no-uplines" : undefined} className="border-t border-line px-4 py-6 text-[14px] text-gray-600">
+        {who === "teams" && noUplines ? "Teams show here once people have an upline. Set uplines on the People page." : who === "teams" && rows.length > 0 ? "No teams here." : emptyLine}
+      </p>
+    );
+  }
 
   const nameLink = (r: ScoreRow, className: string) => {
     const id = teamOf(r);

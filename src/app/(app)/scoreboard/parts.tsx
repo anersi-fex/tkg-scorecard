@@ -1,19 +1,15 @@
 import Link from "next/link";
 import { cn } from "@/components/ui";
+import { compactDollars } from "@/lib/views";
 
 /**
  * Small pieces the Scoreboard page shares between its server parts and its client parts (no
  * hooks here, so both can use them). Colors are theme tokens only.
  */
 
-/** "$91.6K", "$950", "$1.2M": the short money on the top cards, like the agency's CRM. */
+/** "$91.6K", "$950", "$1.2M": the short money on the top cards, like the agency's CRM. The TV's spelling, letter for letter. */
 export function shortMoney(cents: number): string {
-  const dollars = Math.abs(cents) / 100;
-  const sign = cents < 0 ? "−" : "";
-  const one = (n: number) => (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, "");
-  if (dollars >= 999_950) return `${sign}$${one(dollars / 1_000_000)}M`;
-  if (dollars >= 1_000) return `${sign}$${one(dollars / 1_000)}K`;
-  return `${sign}$${Math.round(dollars)}`;
+  return compactDollars(cents);
 }
 
 export interface SegmentItem {

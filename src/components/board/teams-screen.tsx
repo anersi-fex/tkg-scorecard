@@ -16,6 +16,8 @@ import { ChangeChip } from "./production-screen";
  * sold, policies, the team's top three sellers and the total. More teams than fit page.
  */
 const ROW = 4.5;
+/** The same sentence as the phone Scoreboard's Teams view. */
+const NO_UPLINES = "Teams show here once people have an upline. Set uplines on the People page.";
 const COLUMNS = "3.2em minmax(0, 1.2fr) 8.5em 7em minmax(0, 1.75fr) 9.5em";
 
 export function TeamsScreen({ snap, onPages }: { snap: MonthSnapshot; onPages?: (pages: number) => void }) {
@@ -26,7 +28,9 @@ export function TeamsScreen({ snap, onPages }: { snap: MonthSnapshot; onPages?: 
   const pages = pageCount(teams.length, fit);
   const page = usePager(pages);
   useReportPages(pages, onPages);
-  if (!sb || teams.length === 0) return <EmptyScreen title="Teams" line={sb ? "A team shows here once someone on it sells." : "The numbers are on their way."} />;
+  // Uplines make teams: before anyone has one, say where to set them, not that nobody sold.
+  const uplines = snap.agents.some((a) => a.active && a.uplineId);
+  if (!sb || teams.length === 0) return <EmptyScreen title="Teams" line={!uplines ? NO_UPLINES : sb ? "A team shows here once someone on it sells." : "The numbers are on their way."} />;
   const byId = new Map(sb.rows.map((r) => [r.agentId, r]));
   const top = Math.max(1, ...teams.map((t) => t.totalCents));
   const shown = pageOf(teams, page, fit);

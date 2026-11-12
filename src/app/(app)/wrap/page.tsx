@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requirePage } from "@/lib/auth";
 import { dbConfigured } from "@/lib/supabase";
 import { loadMonthSnapshot } from "@/lib/board";
-import { buildWrap, carrierSummary, isWrapView, periodFor, periodNav, WRAP_VIEWS, type PeriodWrap, type WrapLine, type WrapPeriod, type WrapView } from "@/lib/wrap";
+import { buildWrap, carrierSummary, isWrapView, periodFor, periodNav, wrapRoster, WRAP_VIEWS, type PeriodWrap, type WrapLine, type WrapPeriod, type WrapView } from "@/lib/wrap";
 import { datesOfMonth, dayLabelLong, isDateKey, monthKeyOf, monthName, todayInDetroit, weekday } from "@/lib/month";
 import { formatDollars } from "@/lib/money";
 import { DEFAULT_AGENCY_NAME } from "@/lib/types";
@@ -64,20 +64,28 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
     agency = snap.agencyName || DEFAULT_AGENCY_NAME;
     wrap = buildWrap(snap, day, view);
   } catch (err) {
+    // The class only, for the log: the database's own words are not for a screen everyone opens.
+    console.error("wrap_load_failed", err instanceof Error ? err.name : "error");
     return (
       <>
         <Header period={period} day={day} today={today} />
-        <Notice tone="red">The database answered with an error: {err instanceof Error ? err.message : "unknown"}. Check that the setup SQL ran (SETUP.md, step 3).</Notice>
+        <Notice tone="red">The database didn&apos;t answer. Try again in a moment.</Notice>
       </>
     );
   }
   const words = WORDS[view];
   const verdict = verdictBadge(wrap);
   const best = wrap.bestSale;
-  const sold = wrap.lines.filter((l) => l.premiumCents > 0);
-  const quiet = wrap.lines.filter((l) => l.premiumCents === 0);
-  // Seven people fit one screenshot as rows, every one of them selling; past seven, the no-sale names share one line.
-  const fold = wrap.lines.length > 7;
+  // Up to seven people are rows. Past that the people without a sale share the line under the
+  // rows, and past seven sellers the rows stop at the top six and the rest are on that line too
+  // ("and 19 more sold $48,210"), so an agency's week is still one screenshot.
+  const roster = wrapRoster(wrap.lines);
+  const foldLine = [
+    roster.more ? `and ${roster.more.count} more sold ${formatDollars(roster.more.premiumCents)}` : "",
+    roster.quietNamed ? `No sale: ${roster.quiet.map((l) => firstName(l.name)).join(", ")}` : roster.quiet.length > 0 ? `${roster.quiet.length} with no sale` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const month = monthName(wrap.month.key);
   const monthDates = datesOfMonth(wrap.month.key);
   // The carriers are the month's, as they stood at the period's end.
@@ -141,17 +149,19 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
         )}
       </div>
 
-      {/* Everybody: sold rows ranked; with a long roster the no-sale names fold into one line */}
+      {/* Everybody: sold rows ranked; with a long roster the rest of the sellers and the no-sale people share one line */}
       <ListCard className="mt-3 pt-2.5">
         <li className="px-4 pb-1">
           <Eyebrow>{wrap.current ? words.now : words.then}</Eyebrow>
         </li>
         {wrap.lines.length === 0 && <li className="px-4 py-3 text-[14px] text-gray-600">Nobody is on the board yet.</li>}
-        {(fold ? sold : wrap.lines).map((l) => (
+        {roster.rows.map((l) => (
           <WrapRow key={l.id} line={l} pcOn={pcOn} />
         ))}
-        {fold && quiet.length > 0 && (
-          <li className={cn("px-4 py-2 text-[12px] font-semibold text-gray-500", ROW_INSET.plain)}>No sale: {quiet.map((l) => firstName(l.name)).join(", ")}</li>
+        {foldLine && (
+          <li data-wrap-fold className={cn("px-4 py-2 text-[12px] font-semibold text-gray-500", ROW_INSET.plain)}>
+            {foldLine}
+          </li>
         )}
       </ListCard>
 
@@ -218,7 +228,7 @@ function WrapRow({ line, pcOn }: { line: WrapLine; pcOn: boolean }) {
   const sold = line.premiumCents > 0;
   const medal = line.rank === 1 ? "text-gold" : line.rank === 2 ? "text-silver" : line.rank === 3 ? "text-bronze" : "text-gray-500";
   return (
-    <li className={cn("flex items-center gap-3 px-4 py-1", ROW_INSET.plain, !sold && "opacity-50")}>
+    <li data-wrap-row className={cn("flex items-center gap-3 px-4 py-1", ROW_INSET.plain, !sold && "opacity-50")}>
       <span className={cn("w-4 shrink-0 text-center font-mono text-[14px] font-bold", medal)}>{line.rank ?? "–"}</span>
       <Avatar name={line.name} tone={line.tone} size={sold ? 32 : 28} />
       <div className="min-w-0 flex-1">

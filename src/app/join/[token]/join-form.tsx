@@ -13,6 +13,11 @@ export interface JoinFormProps {
   firstName?: string;
   /** Everyone on the board, names only: who a new person can pick as their upline. */
   people: { id: string; name: string }[];
+  /**
+   * The agency link only: the people already on the board with no sign-in yet, as the board
+   * spells them. Names and nothing else (no id, no number).
+   */
+  unclaimed?: string[];
   /** The leader this link belongs to: already picked. */
   leaderId: string | null;
   needsPhone: boolean;
@@ -25,8 +30,10 @@ const FIELD = "h-12 rounded-2xl text-[17px]";
  * The join card's form. Submits through onSubmit, so a refused try keeps everything that was
  * typed. Nothing is decided here: the server checks the link, the name, the number and the password.
  */
-export function JoinForm({ token, kind, people, leaderId, needsPhone, inOffice }: JoinFormProps) {
+export function JoinForm({ token, kind, people, unclaimed = [], leaderId, needsPhone, inOffice }: JoinFormProps) {
   const [error, setError] = useState<string | null>(null);
+  // The name is kept here so a tap on "Already on the board?" can write the board's spelling into it.
+  const [name, setName] = useState("");
   const [pending, startTransition] = useTransition();
   const [office, setOffice] = useState(inOffice);
   const [upline, setUpline] = useState<string | null>(leaderId);
@@ -59,7 +66,8 @@ export function JoinForm({ token, kind, people, leaderId, needsPhone, inOffice }
           <Label htmlFor="name" className="font-semibold">
             First and last name
           </Label>
-          <Input id="name" name="name" autoComplete="name" autoCapitalize="words" maxLength={60} placeholder="Alex Smith" className={FIELD} required />
+          <Input id="name" name="name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" autoCapitalize="words" maxLength={60} placeholder="Alex Smith" className={FIELD} required />
+          {unclaimed.length > 0 && <ClaimNames names={unclaimed} typed={name} onPick={setName} />}
         </div>
       )}
       {needsPhone && (
@@ -114,6 +122,82 @@ export function JoinForm({ token, kind, people, leaderId, needsPhone, inOffice }
 }
 
 const fold = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+
+/** Past this many names the chips become a short list that follows what is typed in the name field. */
+const CHIP_LIMIT = 12;
+
+/** Two words that are likely the same name written two ways: one starts the other ("matt", "matthew"), or they share their first three letters ("dangelo", "dangerlo"). */
+function alike(a: string, b: string): boolean {
+  if (a.startsWith(b) || b.startsWith(a)) return true;
+  return a.length >= 3 && b.length >= 3 && a.slice(0, 3) === b.slice(0, 3);
+}
+
+/**
+ * "Already on the board? Tap your name." (2026-11-12). The join claims a person's row only when
+ * the name is the board's own spelling, so "Matt" on the board and "Matthew" typed made a second
+ * row. A tap writes the board's spelling into the name field; the chip is the chosen one for as
+ * long as the field still says that name, so typing a different name clears it. Up to twelve
+ * names are chips; more are a short list that narrows to the names like what is being typed.
+ */
+function ClaimNames({ names, typed, onPick }: { names: string[]; typed: string; onPick: (name: string) => void }) {
+  const text = fold(typed);
+  const chosen = names.find((n) => fold(n) === text) ?? null;
+  const long = names.length > CHIP_LIMIT;
+  // The names like what is in the field (a word of one starts, or nearly starts, a word of the other).
+  const near = useMemo(() => {
+    if (!text) return [];
+    const words = text.split(" ");
+    const like = names.filter((n) => {
+      const theirs = fold(n).split(" ");
+      return words.some((w) => theirs.some((t) => alike(w, t)));
+    });
+    // The name that starts the way the field does comes first.
+    return [...like.filter((n) => fold(n).startsWith(text)), ...like.filter((n) => !fold(n).startsWith(text))];
+  }, [names, text]);
+  // The chips always show every name; the long list shows every name until something is typed.
+  const shown = long && text ? near : names;
+
+  return (
+    <div className="mt-2" data-claim={long ? "list" : "chips"}>
+      <p className="text-[12.5px] leading-snug font-semibold text-gray-600">Already on the board? Tap your name.</p>
+      {shown.length > 0 ? (
+        <div className={cn("mt-1.5 flex flex-wrap gap-1.5", long && "max-h-[140px] overflow-y-auto overscroll-contain rounded-2xl border border-line p-2")}>
+          {shown.map((n) => {
+            const on = n === chosen;
+            return (
+              <button
+                key={n}
+                type="button"
+                aria-pressed={on}
+                data-claim-name={n}
+                onClick={() => onPick(n)}
+                className={cn(
+                  "inline-flex min-h-10 max-w-full items-center gap-1.5 rounded-full border px-3.5 text-[14px] font-bold transition",
+                  // While a name is being typed, the chips like it stand out, so "Matthew" sees "Matt Fouchey".
+                  on ? "border-transparent bg-tide-strong text-white" : !chosen && near.includes(n) ? "border-accent bg-tint text-accent-text" : "border-line bg-surface text-gray-800 hover:bg-tint",
+                )}
+              >
+                {on && (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="shrink-0">
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                  </svg>
+                )}
+                <span className="truncate">{n}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="mt-1 text-[12.5px] leading-snug text-gray-500">Nobody by that name is waiting on the board. That&apos;s fine: you&apos;ll be added.</p>
+      )}
+      {chosen && (
+        <p className="mt-1.5 text-[12.5px] leading-snug font-semibold text-accent-text" data-claim-chosen>
+          That&apos;s you on the board. Your numbers stay with you.
+        </p>
+      )}
+    </div>
+  );
+}
 
 /** "Who is your upline?": type a few letters, tap the name. "I'm not sure" is a fine answer. */
 function UplinePicker({

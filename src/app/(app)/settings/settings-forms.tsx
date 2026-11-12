@@ -185,6 +185,9 @@ function AgencyNameForm({ name }: { name: string }) {
   const [pending, start] = useTransition();
   return (
     <form
+      // A tap before the page's script has loaded sends the form the plain way: by post, so what was
+      // typed never lands in the address.
+      method="post"
       onSubmit={(e) => {
         e.preventDefault();
         const form = new FormData(e.currentTarget);
@@ -674,6 +677,9 @@ function GoalForm({ month, pc = false }: { month: MonthGoal; pc?: boolean }) {
   const cents = pc ? month.pcCents : month.cents;
   return (
     <form
+      // A tap before the page's script has loaded sends the form the plain way: by post, so what was
+      // typed never lands in the address.
+      method="post"
       onSubmit={(e) => {
         e.preventDefault();
         const form = new FormData(e.currentTarget);
@@ -707,6 +713,9 @@ function BoardForm({ settings, owner }: { settings: AppSettings; owner: boolean 
   const pcOn = settings.pcEnabled === true && owner;
   return (
     <form
+      // A tap before the page's script has loaded sends the form the plain way: by post, so what was
+      // typed never lands in the address.
+      method="post"
       onSubmit={(e) => {
         e.preventDefault();
         const form = new FormData(e.currentTarget);

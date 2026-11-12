@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { endSession, requireViewer, startPersonSession } from "@/lib/auth";
-import { getAgent, getSettings, listAgents, saveSettings } from "@/lib/data";
+import { getAgent, getSettings, lineFor, listAgents, saveSettings, touchBoard } from "@/lib/data";
 import { bumpSession, checkOwnPassword, cleanName, getPerson, sameName, setInOffice, setName, setPersonPassword, setPhone, setRole, setUpline, type Person } from "@/lib/people";
-import { agencyToken, createInvite, joinUrl, revokeAgencyInvites, revokePersonInvites } from "@/lib/invites";
+import { agencyToken, createInvite, joinUrl, revokeAgencyInvites, revokeInvitesMadeBy, revokePersonInvites } from "@/lib/invites";
 import { decideApproval as decide, listApprovals, requestApproval, type Approval } from "@/lib/approvals";
 import { passwordProblem } from "@/lib/passwords";
 import { normalizePhone } from "@/lib/phone";
@@ -24,12 +24,19 @@ export type LinkResult = { ok: true; url: string } | { ok: false; error: string 
 const Id = z.guid();
 const SENT_FOR_OK = "Sent to Anersi for a quick OK.";
 
+/**
+ * The line a person sees when an action fails: the words the code threw on purpose ("Only an
+ * admin can do that"), and for anything else (the database, its client) "That didn't save. Try
+ * again." with the class logged, so no table or column wording reaches a screen (data.ts lineFor).
+ */
 function message(err: unknown): string {
-  return err instanceof Error ? err.message : "Something went wrong.";
+  return lineFor(err);
 }
 
-function refresh() {
+/** After a change: the pages read again, and the TV is told, so it shows within one poll (data.ts touchBoard). */
+async function refresh(): Promise<void> {
   revalidatePath("/", "layout");
+  await touchBoard();
 }
 
 /** Whose team a person is on (null: nobody above them). The owner or an admin. */
@@ -38,7 +45,7 @@ export async function setPersonUpline(id: string, uplineId: string | null): Prom
     await requireViewer("manager");
     if (!Id.safeParse(id).success || (uplineId !== null && !Id.safeParse(uplineId).success)) return { ok: false, error: "That person isn't here." };
     await setUpline(id, uplineId);
-    refresh();
+    await refresh();
     return { ok: true, message: "Saved." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -52,7 +59,7 @@ export async function setPersonInOffice(id: string, on: boolean): Promise<Action
     if (!Id.safeParse(id).success) return { ok: false, error: "That person isn't here." };
     if (!(await getAgent(id))) return { ok: false, error: "That person isn't here." };
     await setInOffice(id, on === true);
-    refresh();
+    await refresh();
     return { ok: true, message: on ? "In the office: at the top of the boards." : "Not in the office." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -79,13 +86,16 @@ export async function setPersonRole(id: string, role: string): Promise<ActionRes
         summary: role === "admin" ? `Make ${person.name} an admin` : `Make ${person.name} a member again (not an admin)`,
         requestedBy: viewer.agentId,
       });
-      refresh();
+      await refresh();
       return { ok: true, message: SENT_FOR_OK };
     }
+    // The one-time links an admin made for others stop with the level. First, so a try that
+    // fails halfway leaves the level as it was and the next try does both.
+    if (role === "member") await revokeInvitesMadeBy(person.id);
     await setRole(person.id, role);
     // A personal link made while they were a member must not hand out an admin's sign-in.
     if (role === "admin") await revokePersonInvites(person.id);
-    refresh();
+    await refresh();
     return { ok: true, message: role === "admin" ? `${person.name} is an admin now.` : `${person.name} is not an admin anymore.` };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -117,7 +127,7 @@ export async function resetJoinLink(): Promise<LinkResult> {
     const viewer = await requireViewer("manager");
     await revokeAgencyInvites();
     const url = await joinUrl(await agencyToken(null, viewer.agentId));
-    refresh();
+    await refresh();
     return { ok: true, url };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -181,7 +191,7 @@ export async function decideApproval(id: string, approve: boolean): Promise<Acti
   try {
     const viewer = await requireViewer("owner");
     const result = await decide(id, approve === true, viewer);
-    refresh();
+    await refresh();
     return result;
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -199,7 +209,7 @@ export async function saveAgencyName(form: FormData): Promise<ActionResult> {
     if (name.length > 40) return { ok: false, error: "Keep the agency's name to 40 characters." };
     const current = await getSettings();
     await saveSettings({ ...current, agencyName: name });
-    refresh();
+    await refresh();
     return { ok: true, message: "Saved. Every screen shows it now." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -214,7 +224,7 @@ export async function savePcEnabled(on: boolean): Promise<ActionResult> {
     // Back off: the TV cannot stay on a screen that no longer exists.
     const tvScreens = !on && (current.tvScreens === "pc" || current.tvScreens === "total") ? "rotate" : current.tvScreens;
     await saveSettings({ ...current, pcEnabled: on === true, tvScreens });
-    refresh();
+    await refresh();
     return { ok: true, message: on ? "On. P&C and the agency total are back on every screen." : "Off. Scorecard is life insurance only." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -227,7 +237,7 @@ export async function saveTeamPasswordLogs(on: boolean): Promise<ActionResult> {
     await requireViewer("owner");
     const current = await getSettings();
     await saveSettings({ ...current, teamPasswordLogs: on === true });
-    refresh();
+    await refresh();
     return { ok: true, message: on ? "The team password can log sales." : "The team password only looks now. People log with their own sign-in." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -268,7 +278,7 @@ export async function updateMyProfile(form: FormData): Promise<ActionResult> {
       const v = String(form.get("in_office"));
       await setInOffice(me.id, v === "1" || v === "on" || v === "true");
     }
-    refresh();
+    await refresh();
     return { ok: true, message: "Saved." };
   } catch (err) {
     return { ok: false, error: message(err) };
@@ -300,7 +310,7 @@ export async function changeMyPassword(form: FormData): Promise<ActionResult> {
     // This device keeps going on the new session; a shared-password session (the owner password) is left as it is.
     if (viewer.via === "person") await startPersonSession(me.id, version);
     // The page reads again: on the owner password the card now asks for the current password.
-    refresh();
+    await refresh();
     return { ok: true, message: "Password changed. Your other devices are signed out." };
   } catch (err) {
     return { ok: false, error: message(err) };
