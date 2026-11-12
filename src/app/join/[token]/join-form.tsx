@@ -24,7 +24,7 @@ export interface JoinFormProps {
   inOffice: boolean;
 }
 
-const FIELD = "h-12 rounded-2xl text-[17px]";
+const FIELD = "text-[15px]";
 
 /**
  * The join card's form. Submits through onSubmit, so a refused try keeps everything that was
@@ -57,13 +57,13 @@ export function JoinForm({ token, kind, people, unclaimed = [], leaderId, needsP
   }
 
   return (
-    <form method="post" onSubmit={onSubmit} className="space-y-4" data-join={kind}>
+    <form method="post" onSubmit={onSubmit} className="space-y-[18px]" data-join={kind}>
       <input type="hidden" name="token" value={token} />
       <input type="hidden" name="in_office" value={office ? "1" : "0"} />
       <input type="hidden" name="upline_id" value={unsure ? "" : (upline ?? "")} />
       {kind === "agency" && (
         <div>
-          <Label htmlFor="name" className="font-semibold">
+          <Label htmlFor="name">
             First and last name
           </Label>
           <Input id="name" name="name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" autoCapitalize="words" maxLength={60} placeholder="Alex Smith" className={FIELD} required />
@@ -72,7 +72,7 @@ export function JoinForm({ token, kind, people, unclaimed = [], leaderId, needsP
       )}
       {needsPhone && (
         <div>
-          <Label htmlFor="phone" className="font-semibold">
+          <Label htmlFor="phone">
             Cell number
           </Label>
           <Input id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="248 555 0100" className={FIELD} required />
@@ -98,23 +98,23 @@ export function JoinForm({ token, kind, people, unclaimed = [], leaderId, needsP
         />
       )}
       {kind !== "reset" && (
-        <div className="flex min-h-12 items-center justify-between gap-3 rounded-2xl border border-line px-3.5 py-2">
+        <div className="flex min-h-12 items-center justify-between gap-3 rounded-[10px] bg-input px-3.5 py-2.5">
           <div className="min-w-0">
-            <p className="text-[15px] font-semibold text-gray-900">I work in the office</p>
-            <p className="text-[12.5px] leading-snug text-gray-500">The office group is at the top of the board.</p>
+            <p className="text-[14px] font-medium text-fg">I work in the office</p>
+            <p className="text-[12.5px] leading-snug text-fg-2">The office group is at the top of the board.</p>
           </div>
           <Switch checked={office} onChange={setOffice} label="I work in the office" />
         </div>
       )}
       <div>
-        <Label htmlFor="password" className="font-semibold">
+        <Label htmlFor="password">
           {kind === "reset" ? "New password" : "Password"}
         </Label>
         <PasswordField id="password" name="password" autoComplete="new-password" minLength={8} maxLength={200} required />
-        <p className="mt-1.5 text-[12.5px] text-gray-500">8 characters or more. You pick it; nobody else sees it.</p>
+        <p className="mt-1.5 text-[12.5px] text-fg-2">8 characters or more. You pick it; nobody else sees it.</p>
       </div>
       {error && <Notice tone="red">{error}</Notice>}
-      <Button type="submit" className="h-12 w-full rounded-2xl text-[15px]" disabled={pending}>
+      <Button type="submit" className="min-h-[46px] w-full text-[15px]" disabled={pending}>
         {pending ? "One moment..." : kind === "agency" ? "Join" : kind === "person" ? "Set up my sign-in" : "Save my new password"}
       </Button>
     </form>
@@ -159,9 +159,9 @@ function ClaimNames({ names, typed, onPick }: { names: string[]; typed: string; 
 
   return (
     <div className="mt-2" data-claim={long ? "list" : "chips"}>
-      <p className="text-[12.5px] leading-snug font-semibold text-gray-600">Already on the board? Tap your name.</p>
+      <p className="text-[12.5px] leading-snug font-medium text-fg-2">Already on the board? Tap your name.</p>
       {shown.length > 0 ? (
-        <div className={cn("mt-1.5 flex flex-wrap gap-1.5", long && "max-h-[140px] overflow-y-auto overscroll-contain rounded-2xl border border-line p-2")}>
+        <div className={cn("mt-1.5 flex flex-wrap gap-1.5", long && "max-h-[140px] overflow-y-auto overscroll-contain rounded-[10px] border border-line p-2")}>
           {shown.map((n) => {
             const on = n === chosen;
             return (
@@ -172,9 +172,9 @@ function ClaimNames({ names, typed, onPick }: { names: string[]; typed: string; 
                 data-claim-name={n}
                 onClick={() => onPick(n)}
                 className={cn(
-                  "inline-flex min-h-10 max-w-full items-center gap-1.5 rounded-full border px-3.5 text-[14px] font-bold transition",
+                  "inline-flex min-h-[34px] max-w-full items-center gap-1.5 rounded-[9px] border px-3 text-[13px] font-medium transition-colors",
                   // While a name is being typed, the chips like it stand out, so "Matthew" sees "Matt Fouchey".
-                  on ? "border-transparent bg-tide-strong text-white" : !chosen && near.includes(n) ? "border-accent bg-tint text-accent-text" : "border-line bg-surface text-gray-800 hover:bg-tint",
+                  on ? "border-accent bg-accent-soft text-fg" : !chosen && near.includes(n) ? "border-fg-2 bg-surface-2 text-fg" : "border-line-2 bg-surface-2 text-fg hover:border-fg-3",
                 )}
               >
                 {on && (
@@ -188,10 +188,10 @@ function ClaimNames({ names, typed, onPick }: { names: string[]; typed: string; 
           })}
         </div>
       ) : (
-        <p className="mt-1 text-[12.5px] leading-snug text-gray-500">Nobody by that name is waiting on the board. That&apos;s fine: you&apos;ll be added.</p>
+        <p className="mt-1 text-[12.5px] leading-snug text-fg-2">Nobody by that name is waiting on the board. That&apos;s fine: you&apos;ll be added.</p>
       )}
       {chosen && (
-        <p className="mt-1.5 text-[12.5px] leading-snug font-semibold text-accent-text" data-claim-chosen>
+        <p className="mt-1.5 text-[12.5px] leading-snug font-medium text-accent-text" data-claim-chosen>
           That&apos;s you on the board. Your numbers stay with you.
         </p>
       )}
@@ -229,11 +229,11 @@ function UplinePicker({
   if (pickedName || unsure) {
     return (
       <div>
-        <p className="mb-1 block text-sm font-semibold text-gray-700">Who is your upline?</p>
-        <div className="flex min-h-12 items-center justify-between gap-2 rounded-2xl border border-line bg-tint py-1 pr-1.5 pl-3.5" data-upline={picked ?? "unsure"}>
+        <p className="mb-2 block text-[13.5px] font-medium text-fg">Who is your upline?</p>
+        <div className="flex min-h-11 items-center justify-between gap-2 rounded-[10px] bg-input py-1 pr-1.5 pl-3.5" data-upline={picked ?? "unsure"}>
           <div className="min-w-0">
-            <p className="truncate text-[16px] font-bold text-gray-900">{pickedName ?? "I'm not sure"}</p>
-            {unsure && <p className="text-[12.5px] leading-snug text-gray-600">That&apos;s fine. An admin will put you on the right team.</p>}
+            <p className="truncate text-[14.5px] font-medium text-fg">{pickedName ?? "I'm not sure"}</p>
+            {unsure && <p className="text-[12.5px] leading-snug text-fg-2">That&apos;s fine. An admin will put you on the right team.</p>}
           </div>
           <button
             type="button"
@@ -241,7 +241,7 @@ function UplinePicker({
               setQuery("");
               onClear();
             }}
-            className="min-h-10 shrink-0 rounded-xl px-3 text-[13px] font-bold text-accent-text hover:bg-surface"
+            className="min-h-9 shrink-0 rounded-lg px-3 text-[13px] font-medium text-accent-text hover:bg-accent-soft"
           >
             Change
           </button>
@@ -252,7 +252,7 @@ function UplinePicker({
 
   return (
     <div>
-      <Label htmlFor="upline-search" className="font-semibold">
+      <Label htmlFor="upline-search">
         Who is your upline?
       </Label>
       <Input
@@ -273,18 +273,18 @@ function UplinePicker({
         aria-controls="upline-list"
       />
       {query.trim() !== "" && (
-        <ul id="upline-list" className="mt-2 overflow-hidden rounded-2xl border border-line">
+        <ul id="upline-list" className="mt-2 overflow-hidden rounded-[10px] border border-line-2 bg-surface-2">
           {matches.map((p, i) => (
             <li key={p.id}>
-              <button type="button" onClick={() => onPick(p.id)} className={cn("flex min-h-11 w-full items-center px-3.5 text-left text-[15px] font-semibold text-gray-900 hover:bg-tint", i > 0 && "border-t border-line")}>
+              <button type="button" onClick={() => onPick(p.id)} className={cn("flex min-h-11 w-full items-center px-3.5 text-left text-[14px] font-medium text-fg hover:bg-hover", i > 0 && "border-t border-line")}>
                 {p.name}
               </button>
             </li>
           ))}
-          {matches.length === 0 && <li className="px-3.5 py-3 text-[14px] text-gray-600">Nobody by that name yet. Check the spelling, or tap &ldquo;I&apos;m not sure&rdquo;.</li>}
+          {matches.length === 0 && <li className="px-3.5 py-3 text-[13.5px] text-fg-2">Nobody by that name yet. Check the spelling, or tap &ldquo;I&apos;m not sure&rdquo;.</li>}
         </ul>
       )}
-      <button type="button" onClick={onUnsure} className="mt-1 min-h-11 rounded-xl px-2 text-[14px] font-semibold text-accent-text hover:bg-tint">
+      <button type="button" onClick={onUnsure} className="mt-1 min-h-10 rounded-lg px-2 text-[13.5px] font-medium text-accent-text hover:underline">
         I&apos;m not sure
       </button>
     </div>

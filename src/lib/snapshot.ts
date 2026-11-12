@@ -75,7 +75,10 @@ export interface FeedSale {
   product: string | null;
   carrier: string | null;
   kind: SaleKind;
-  note: string | null;
+  /** Whose own sign-in logged it (null: a shared password, the Shortcut, an import): "Take it back" for whoever logged it. */
+  loggedByAgent: string | null;
+  // No note: a sale's free text can hold a client's name or number (the Shortcut takes one), and
+  // this feed reaches the TV and the shared team password (/api/board). Nothing on a board shows it.
   soldOn: string;
   createdAt: string;
 }
@@ -180,7 +183,7 @@ function toFeed(s: SaleWithAgent): FeedSale {
     product: s.product,
     carrier: s.carrier,
     kind: s.kind,
-    note: s.note,
+    loggedByAgent: s.logged_by_agent ?? null,
     soldOn: s.sold_on,
     createdAt: s.created_at,
   };
@@ -337,7 +340,8 @@ export function buildSnapshot(input: SnapshotInput): MonthSnapshot {
         lastSaleAt: p.last,
         active: a.active,
         inOffice: a.in_office === true,
-        uplineId: a.upline_id ?? null,
+        // A picked upline that waits to be confirmed puts nobody on a team (0006).
+        uplineId: a.upline_confirmed === false ? null : (a.upline_id ?? null),
       };
     });
   // Three orders: life (the main board), all of it added up, and P&C for the people who write it.

@@ -1,65 +1,76 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import type { Role } from "@/lib/session";
 import type { FeedSale } from "@/lib/board";
 import { formatMoney } from "@/lib/money";
-import { editSale, removeSale } from "./actions";
+import { Icon } from "@/components/ui/icon";
+import { removeSale } from "./sale-actions";
 import { toast } from "@/components/toaster";
-import { Button, Input, Label, Select, cn } from "@/components/ui";
 
 const UNDO_WINDOW_MS = 15 * 60 * 1000;
 
 /**
  * Whether this viewer may take this sale back while it is fresh (the server decides again on the
- * tap): "ok" for a member on their own sale and for the team password while it can log; "not-yours"
- * for a member on someone else's sale; "view-only" for a team password that only looks.
+ * tap): "ok" for a person on their own sale (or one they logged); "not-yours" for someone else's
+ * sale; "view-only" for the shared team password, which never changes a sale (contract decision 2).
  */
 export type UndoRight = "ok" | "not-yours" | "view-only";
 
 /**
- * The "…" at the end of a sale row: the owner or an admin can fix or remove any sale; a member can
- * take back their own, and the team password any, logged in the last 15 minutes. "Undo (just
- * logged)" is offered only where the tap would work.
+ * The "…" at the end of a sale row on Home. "Open the policy" goes to /policies/<id> when the
+ * viewer may see it (their own, their confirmed team's for someone above the seller, anyone's for
+ * an admin: pass `canOpen`, which defaults to an admin or the seller's own row). An admin also gets
+ * "Fix this sale" (the policy page, its Policy section open) and Remove; a person takes back their
+ * own sale in the first 15 minutes. Every rule is checked again on the server.
+ *
+ * Props are the earlier ones (agents, carriers, pcCarriers and pcEnabled are accepted and no
+ * longer used: fixing happens on the policy page), plus `canOpen`.
  */
 export function SaleRowMenu({
   sale,
   role,
   undo = "ok",
-  agents,
-  carriers,
-  pcCarriers,
-  pcEnabled = false,
+  canOpen,
 }: {
   sale: FeedSale;
+  /** "owner" for the owner and an admin (rules: isAdmin), "team" for everyone else. */
   role: Role;
-  /** Home knows the viewer; a manager's menu ignores it. */
   undo?: UndoRight;
-  agents: Array<{ id: string; name: string }>;
-  carriers: string[];
-  pcCarriers: string[];
-  /** Whether the owner has the P&C board on; off (the default), the sheet is life only and never names P&C. */
+  agents?: Array<{ id: string; name: string }>;
+  carriers?: string[];
+  pcCarriers?: string[];
   pcEnabled?: boolean;
+  /** The viewer may open this policy (rules.ts canSeeClient); default: an admin, or their own row. */
+  canOpen?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
   const wrap = useRef<HTMLDivElement | null>(null);
-  // Whether the team can still take this one back, checked when the menu opens (a clock in render is impure).
+  // Whether the sale can still be taken back, checked when the menu opens (a clock in render is impure).
   const [fresh, setFresh] = useState(true);
-  const canRemove = role === "owner" || (fresh && undo === "ok");
+  const admin = role === "owner";
+  const canRemove = admin || (fresh && undo === "ok");
+  const opens = canOpen ?? (admin || undo === "ok");
+  const href = `/policies/${sale.id}?back=home`;
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {
       if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("pointerdown", onDown);
-    return () => document.removeEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
   const remove = () => {
-    if (!window.confirm(`Remove ${sale.agentName}'s ${formatMoney(sale.premiumCents)} sale?`)) return;
+    if (!window.confirm(`${admin ? "Remove" : "Take back"} ${sale.agentName}'s ${formatMoney(sale.premiumCents)} sale?`)) return;
     start(async () => {
       const r = await removeSale(sale.id);
       toast(r.ok ? (r.message ?? "Removed.") : r.error, r.ok);
@@ -68,179 +79,48 @@ export function SaleRowMenu({
   };
 
   return (
-    <div ref={wrap} className="relative shrink-0">
+    <div ref={wrap} className="pop-wrap shrink-0" data-sale-menu={sale.id}>
       <button
         type="button"
         aria-label="More"
+        aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => {
           setFresh(Date.now() - new Date(sale.createdAt).getTime() < UNDO_WINDOW_MS);
           setOpen((v) => !v);
         }}
-        className="-mr-2 flex h-11 w-11 items-center justify-center rounded-full text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+        className="btn btn-ghost btn-icon btn-sm"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-          <circle cx="5" cy="12" r="2" />
-          <circle cx="12" cy="12" r="2" />
-          <circle cx="19" cy="12" r="2" />
-        </svg>
+        <Icon name="more" size={18} />
       </button>
       {open && (
-        <div className="absolute top-full right-0 z-20 w-44 rounded-2xl bg-surface p-1.5 shadow-float">
-          {role === "owner" && (
-            <button
-              type="button"
-              onClick={() => {
-                setEditing(true);
-                setOpen(false);
-              }}
-              className="flex min-h-11 w-full items-center rounded-xl px-3 text-left text-[14px] font-semibold text-gray-900 hover:bg-gray-50"
-            >
-              Fix this sale
-            </button>
-          )}
-          {canRemove ? (
-            <button type="button" disabled={pending} onClick={remove} className="flex min-h-11 w-full items-center rounded-xl px-3 text-left text-[14px] font-semibold text-red-700 hover:bg-red-50">
-              {pending ? "Removing..." : role === "owner" ? "Remove" : "Undo (just logged)"}
-            </button>
-          ) : (
-            <p data-undo={undo} className="px-3 py-2 text-[13px] leading-snug text-gray-500">
-              {undo === "view-only" ? "The team password only looks now." : undo === "not-yours" ? "You can take back your own sales only. Ask an admin about this one." : "Only an admin can remove a sale after 15 minutes."}
-            </p>
-          )}
+        <div className="pop pop-right" style={{ width: 220 }} role="menu">
+          <div className="menu">
+            {opens && (
+              <Link href={href} role="menuitem" className="menu-item" onClick={() => setOpen(false)}>
+                <Icon name="file" size={17} />
+                <span className="menu-label">Open the policy</span>
+              </Link>
+            )}
+            {admin && (
+              <Link href={`/policies/${sale.id}?edit=policy&back=home`} role="menuitem" className="menu-item" onClick={() => setOpen(false)}>
+                <Icon name="pencil" size={17} />
+                <span className="menu-label">Fix this sale</span>
+              </Link>
+            )}
+            {canRemove ? (
+              <button type="button" role="menuitem" disabled={pending} onClick={remove} className="menu-item danger">
+                <Icon name={admin ? "trash" : "undo"} size={17} />
+                <span className="menu-label">{pending ? "Removing..." : admin ? "Remove" : "Undo (just logged)"}</span>
+              </button>
+            ) : (
+              <p data-undo={undo} className="px-3 py-2 text-[13px] leading-snug text-fg-2">
+                {undo === "view-only" ? "The team password only looks." : undo === "not-yours" ? "You can take back your own sales only. Ask an admin about this one." : "Only an admin can remove a sale after 15 minutes."}
+              </p>
+            )}
+          </div>
         </div>
       )}
-      {editing && <EditSheet sale={sale} agents={agents} carriers={carriers} pcCarriers={pcEnabled ? pcCarriers : []} pcEnabled={pcEnabled} onClose={() => setEditing(false)} />}
-    </div>
-  );
-}
-
-function EditSheet({
-  sale,
-  agents,
-  carriers,
-  pcCarriers,
-  pcEnabled,
-  onClose,
-}: {
-  sale: FeedSale;
-  agents: Array<{ id: string; name: string }>;
-  carriers: string[];
-  pcCarriers: string[];
-  pcEnabled: boolean;
-  onClose: () => void;
-}) {
-  // The row's carrier stays pickable even if it left the Settings lists.
-  const known = sale.carrier && !carriers.includes(sale.carrier) && !pcCarriers.includes(sale.carrier) ? [sale.carrier] : [];
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/70 p-3 sm:items-center" role="dialog" aria-modal="true" aria-label="Fix this sale">
-      {/* onSubmit, not a form action: React 19 resets a form's fields after an action, which would wipe a typo the owner is fixing. */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          const form = new FormData(e.currentTarget);
-          start(async () => {
-            const r = await editSale(sale.id, form);
-            if (r.ok) {
-              toast(r.message ?? "Saved.");
-              onClose();
-            } else setError(r.error);
-          });
-        }}
-        className="w-full max-w-md rounded-[26px] bg-surface p-5 shadow-float"
-      >
-        <h2 className="text-[20px] font-extrabold tracking-[-0.02em] text-gray-900">Fix this sale</h2>
-        {error && <p className="mt-2 text-[13px] text-red-700">{error}</p>}
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <Label htmlFor="e-agent">Who</Label>
-            <Select id="e-agent" name="agent_id" defaultValue={sale.agentId}>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="e-premium">Annual premium</Label>
-            <Input id="e-premium" name="premium" inputMode="decimal" defaultValue={(sale.premiumCents / 100).toFixed(sale.premiumCents % 100 ? 2 : 0)} className="font-mono" required />
-          </div>
-          <div>
-            <Label htmlFor="e-policies">Policies</Label>
-            <Input id="e-policies" name="policies" type="number" min={1} max={50} defaultValue={sale.policies} className="font-mono" required />
-          </div>
-          {pcEnabled ? (
-            <div>
-              <Label htmlFor="e-kind">Kind</Label>
-              <Select id="e-kind" name="kind" defaultValue={sale.kind}>
-                <option value="life">Life</option>
-                <option value="pc">P&amp;C</option>
-              </Select>
-            </div>
-          ) : (
-            // Life only: the sale keeps the kind it has, and nothing on the sheet asks.
-            <input type="hidden" name="kind" value={sale.kind} />
-          )}
-          <div className={pcEnabled ? undefined : "col-span-2"}>
-            <Label htmlFor="e-carrier">Carrier</Label>
-            <Select id="e-carrier" name="carrier" defaultValue={sale.carrier ?? ""}>
-              <option value="">Not set</option>
-              {known.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-              {pcEnabled ? (
-                <>
-                  <optgroup label="Life">
-                    {carriers.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="P&amp;C">
-                    {pcCarriers.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </optgroup>
-                </>
-              ) : (
-                carriers.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))
-              )}
-            </Select>
-          </div>
-          <div className="col-span-2">
-            <Label htmlFor="e-product">{pcEnabled ? "Product (a P&C sale: the line, like Auto or Home)" : "Product"}</Label>
-            <Input id="e-product" name="product" defaultValue={sale.product ?? ""} maxLength={40} />
-          </div>
-          <div className="col-span-2">
-            <Label htmlFor="e-date">Day</Label>
-            <Input id="e-date" name="sold_on" type="date" defaultValue={sale.soldOn} required />
-          </div>
-          <div className="col-span-2">
-            <Label htmlFor="e-note">Note</Label>
-            <Input id="e-note" name="note" defaultValue={sale.note ?? ""} maxLength={200} />
-          </div>
-        </div>
-        <div className={cn("mt-5 flex gap-2")}>
-          <Button type="button" variant="secondary" className="flex-1 rounded-2xl" onClick={onClose} disabled={pending}>
-            Cancel
-          </Button>
-          <Button type="submit" className="flex-1 rounded-2xl" disabled={pending}>
-            {pending ? "Saving..." : "Save"}
-          </Button>
-        </div>
-      </form>
     </div>
   );
 }

@@ -24,6 +24,7 @@ Vercel builds the `main` branch, and right now `main` holds only a one-line READ
 6. Do the same with `0004_pc_goals.sql` (P&C goals, added 2026-11-04). Then Settings > **P&C goal** takes the team's P&C goal for the month, and Team > Edit takes each P&C licensed person's own.
 7. Do the same with `0005_lineage.sql` (the Lineage Financial update, added 2026-11-12: everyone's own sign-in, uplines and teams, the office group, admins, join links, approvals). Run it before that update is merged: the app that is live keeps working with it in, and running it twice is safe. It makes your row (the one named exactly Anersi Koka) the owner and Jack Gariglio's an admin, the first time only. Done: Claude ran this one for you on 2026-11-12 at your yes, so there is nothing to paste.
 8. Once the Lineage update is live the app is life insurance only: the P&C switches and goals of steps 5 and 6 show only after you turn on Settings > **Other lines of business** > **P&C board** (the last row, yours alone), and Team is called **People**, with a pencil on each person where Edit was.
+9. Do the same with `0006_crm.sql` (the CRM update, added 2026-11-12 evening: each policy's details and client, its status and history, managers, uplines that wait to be confirmed). Run it before that update is merged: the app that is live keeps working with it in, it only adds (nothing is removed), and running it twice is safe. The first time only, it makes everyone who has someone under them a **Manager**. Then run `select name, role from agents where role <> 'member';` in a new query: it should list you as owner, Jack as admin and your team leaders as manager. A miss is fixed after the update on **People** > the pencil > the role. Not run yet on the live project: Claude asks for your yes first, then runs it for you or sends you this step.
 
 ### Step 4. Copy two values
 1. **Project Settings** (gear) > **Data API**: copy the **Project URL** (it looks like `https://abcd.supabase.co`, nothing after `.co`).
@@ -85,7 +86,8 @@ Everyone gets their own sign-in: their cell number and a password they pick. No 
 2. They type their first and last name and their cell number, pick their upline from the list (**I'm not sure** is fine: you or an admin put them on the right team later), switch on **I work in the office** if they do, and pick a password (8 characters or more). Then **Join**.
 3. They are signed in, and the next screen is the install guide (below), which puts Scorecard on their phone.
 4. Someone who is already on the board sees **Already on the board? Tap your name.** under the name box, with the names of the people on the board who have no sign-in yet. They tap their own name: they get their own row, with the sales already on it, and nobody ends up on the board twice. (Typing the name the way the board has it does the same; typing it some other way makes a second person.) Someone who was taken off the board is told **Ask an admin to put you back on the board.**
-5. From then on they sign in with that cell number and password. They log their own sales, and can take one back for 15 minutes.
+5. After the CRM update: an upline picked from the list waits until that upline, a manager above them or an admin taps **Confirm** on People (or **Not on my team**). Someone who came in on a leader's team link is on that team at once.
+6. From then on they sign in with that cell number and password. They log their own sales, and can take one back for 15 minutes.
 
 ### Step 2. Jack's admin sign-in
 The database step makes Jack Gariglio an admin. An admin's sign-in never comes from the join link: you send it.
@@ -110,12 +112,13 @@ Everyone lands on it right after joining; later it is under their initials > **P
 ### What the two shared passwords are for now
 - **Owner password**: still signs you in as the owner, anywhere. Once anyone has their own sign-in, the sign-in screen opens asking for a cell number: tap **Use the team password** under it, and type the owner password in that box (it takes both passwords).
 - **Team password**: the TV, and a phone that has not joined yet. It can still log sales, as before. Once people have their own sign-ins: **Settings** > **Sign-ins** > switch off **The shared team password can log sales**. Then the team password only looks (the TV keeps working) and people log with their own sign-in.
+- After the CRM update (step 3, item 9): the team password only shows the boards (Home, Scoreboard, People's names, the TV) and the switch above is gone. Log a sale and Policies ask for a person's own sign-in.
 
 ## Phase 2: desk tags and a Shortcut (optional, after release 1 works)
 
 ### Option A, no Shortcut: a tag that opens Log a sale
 1. On your phone, **Team** > a person > **Edit** > **Copy** their desk link. (Once the Lineage update is live: **People** > the pencil on a person > **Desk link** > **Copy**.)
-2. Write that link to an NFC tag with any NFC writer app (NFC Tools is fine). When a phone touches the tag, Log a sale opens with that person already picked. Two taps left: the amount, then **Log it**.
+2. Write that link to an NFC tag with any NFC writer app (NFC Tools is fine). When a phone touches the tag, Log a sale opens with that person already picked. Two taps left: the amount, then **Log it**. (After the CRM update Log a sale has three steps, policy, client, review, and needs that person's own sign-in on the phone; the link still picks the person for a manager or an admin.)
 
 ### Option B: a Shortcut that asks and posts (confetti without opening the app)
 1. In Vercel, add `LOG_TOKEN` = any long random text (your password manager can make one; 24 or more characters, never under 12). Redeploy.
@@ -128,7 +131,7 @@ Everyone lands on it right after joining; later it is under their initials > **P
 3. Name it "Log a sale". Tap it once to test: the board celebrates within 5 seconds.
 4. NFC: Shortcuts > **Automation** > **+** > **NFC** > scan a tag > run "Log a sale". One tag per desk, or one shared tag.
 
-`agent` can be a first name when nobody shares it ("Alex"), else the full name; `carrier` must be one of the names in Settings (any case). Optional fields: `policies`, `product`, `date` (`YYYY-MM-DD`).
+`agent` can be a first name when nobody shares it ("Alex"), else the full name; `carrier` must be one of the names in Settings (any case). Optional fields: `policies`, `product`, `date` (`YYYY-MM-DD`). After the CRM update a Shortcut sale lands with the status Submitted and no client details; the seller fills in the rest under **Policies**.
 
 ## Reference: all settings
 - Required: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OWNER_PASSWORD`.
@@ -136,6 +139,6 @@ Everyone lands on it right after joining; later it is under their initials > **P
 - Optional: `LOG_TOKEN` (Shortcut endpoint), `SESSION_SECRET` (32+ characters; otherwise made from the Supabase key).
 - Changing a password signs out every device that used it. The owner password also opens Settings and can fix or remove any sale; the team password can log sales and take one back within 15 minutes.
 - Ten wrong passwords in 15 minutes lock that one phone or computer out for 15 minutes; everyone else is unaffected.
-- Once the Lineage update (built 2026-11-12) is live: each person also has their own sign-in (cell number and password, made through a join link; see Getting everyone on). Four levels: you (the owner password, or your own sign-in), admins (goals, people, this month's sales, the board; two things wait for your yes under Approvals), members (their own sales and profile), and the team password (the TV and phones that have not joined yet; whether it can still log sales is your switch under Settings > Sign-ins). A person's own password is theirs to change under their initials > Your profile; Sign out everywhere is there too.
+- Once the Lineage update (built 2026-11-12) is live: each person also has their own sign-in (cell number and password, made through a join link; see Getting everyone on). Four levels: you (the owner password, or your own sign-in), admins (goals, people, this month's sales, the board; two things wait for your yes under Approvals), members (their own sales and profile), and the team password (the TV and phones that have not joined yet; whether it can still log sales is your switch under Settings > Sign-ins). After the CRM update (Phase 1 Step 3, item 9): five, with **Manager** between admin and agent (their own sales and their team's: logging for a teammate, a teammate's status and notes, confirming who joins their team), members are called **Agent**, and the team password only shows the boards. A person's own password is theirs to change under their initials > Your profile; Sign out everywhere is there too.
 - With that update the wrong tries are counted per address, and an office Wi-Fi is one address. The two sign-in screens are counted apart, so one never closes the other: ten wrong owner or team passwords in 15 minutes close that screen for everyone on the address; people's own sign-ins (cell number and password) have their own, larger count, 60 from one address and 20 on one person's account, and when that screen closes it says "Too many tries from this network. Wait a few minutes, or ask an admin for a new sign-in link." A closed screen opens again as the tries age out, 15 minutes at most. Typing your owner password right, while its screen is still open, clears that screen's count. Phones already signed in, the TV and the join link keep working.
 - No cron jobs, no email, no AI in release 1.

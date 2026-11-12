@@ -2,7 +2,7 @@
 
 import { cn } from "@/components/ui";
 
-/** An iPhone-style switch: the cobalt-to-violet gradient when on, the track color when off. */
+/** An on/off switch (the demo's): the accent when on with a white thumb, a quiet track and thumb when off. */
 export function Switch({
   checked,
   onChange,
@@ -26,16 +26,16 @@ export function Switch({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative inline-flex h-[31px] w-[51px] shrink-0 items-center rounded-full p-[2px] transition-colors duration-200 disabled:opacity-50",
-        checked ? "bg-tide-strong" : "bg-gray-300",
+        "relative inline-flex h-6 w-10 shrink-0 items-center rounded-full p-[3px] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+        checked ? "bg-accent" : "bg-line-2",
         className,
       )}
     >
       <span
         aria-hidden
         className={cn(
-          "h-[27px] w-[27px] rounded-full bg-segment shadow-card transition-transform duration-200",
-          checked ? "translate-x-5" : "translate-x-0",
+          "h-[18px] w-[18px] rounded-full transition-[transform,background-color] duration-150",
+          checked ? "translate-x-4 bg-on-grad" : "translate-x-0 bg-fg-2",
         )}
       />
     </button>

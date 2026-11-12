@@ -8,13 +8,13 @@ export function PasswordField({ className, ...props }: Omit<ComponentProps<"inpu
   const [shown, setShown] = useState(false);
   return (
     <div className="relative">
-      <Input {...props} type={shown ? "text" : "password"} autoCapitalize="none" autoCorrect="off" spellCheck={false} className={cn("h-12 rounded-2xl pr-[72px] text-[17px]", className)} />
+      <Input {...props} type={shown ? "text" : "password"} autoCapitalize="none" autoCorrect="off" spellCheck={false} className={cn("pr-[72px] text-[15px]", className)} />
       <button
         type="button"
         onClick={() => setShown((v) => !v)}
         aria-pressed={shown}
         aria-label={shown ? "Hide the password" : "Show the password"}
-        className="absolute top-1/2 right-1.5 flex min-h-9 min-w-[56px] -translate-y-1/2 items-center justify-center rounded-xl px-2 text-[13px] font-bold text-accent-text hover:bg-tint"
+        className="absolute top-1/2 right-1.5 flex min-h-8 min-w-[56px] -translate-y-1/2 items-center justify-center rounded-lg px-2 text-[12.5px] font-medium text-accent-text hover:bg-accent-soft"
       >
         {shown ? "Hide" : "Show"}
       </button>

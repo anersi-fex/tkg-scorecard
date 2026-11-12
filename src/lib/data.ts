@@ -5,6 +5,7 @@ import { addMonths, datesOfMonth, isMonthKey } from "./month";
 import { DEFAULT_COLORWAY, isColorwayKey } from "./colorways";
 import { DEFAULT_PC_COLOR, isPcColorKey } from "./pc-colors";
 import { isSoundKey } from "./sounds";
+import { FALLBACK_PRODUCTS, carrierProductsFrom, type CarrierProducts } from "./policy-types";
 
 /**
  * Every read and write, with the service key, after the caller checked the session. Rows come
@@ -84,7 +85,7 @@ function toSale(r: SaleRow): SaleWithAgent {
 // read right even if that second link is ever made a real one.
 const SALE_COLUMNS = "id, agent_id, premium_cents, policies, product, carrier, kind, client, note, sold_on, logged_by, logged_by_agent, created_at, agents!agent_id(name)";
 // pass_hash and phone are never selected here: only src/lib/people.ts reads them, for sign-in.
-const AGENT_COLUMNS = "id, name, active, sort, pc_licensed, upline_id, in_office, role, joined_at";
+const AGENT_COLUMNS = "id, name, active, sort, pc_licensed, upline_id, upline_confirmed, in_office, role, joined_at";
 
 export async function listAgents(opts: { includeInactive?: boolean } = {}): Promise<Agent[]> {
   let q = db().from("agents").select(AGENT_COLUMNS).order("sort").order("name");
@@ -310,7 +311,33 @@ export async function getSettings(): Promise<AppSettings> {
     agencyName: typeof v.agencyName === "string" && v.agencyName.trim() ? v.agencyName.trim().slice(0, 40) : DEFAULT_SETTINGS.agencyName,
     pcEnabled: v.pcEnabled === true,
     teamPasswordLogs: v.teamPasswordLogs !== false,
+    carrierProducts: carrierProductList(v.carrierProducts, list(v.carriers, DEFAULT_SETTINGS.carriers)),
+    rateClasses: list(v.rateClasses, DEFAULT_SETTINGS.rateClasses).map((x) => x.trim().slice(0, 40)),
+    leadSources: list(v.leadSources, DEFAULT_SETTINGS.leadSources).map((x) => x.trim().slice(0, 60)),
   };
+}
+
+/**
+ * Each carrier with its products (Settings > Carriers and products). A row without the list (every
+ * row before 0006) builds it from the carriers it has: each gets the default products for its name,
+ * else WL/FEX (contract decision 15).
+ */
+function carrierProductList(raw: unknown, carriers: string[]): CarrierProducts {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return carrierProductsFrom(carriers);
+  const out: CarrierProducts = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>).slice(0, 30)) {
+    const name = key.trim().slice(0, 40);
+    if (!name || Object.keys(out).some((k) => k.toLowerCase() === name.toLowerCase())) continue;
+    const products = Array.isArray(value)
+      ? value
+          .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+          .map((p) => p.trim().slice(0, 40))
+          .filter((p, i, all) => all.findIndex((q) => q.toLowerCase() === p.toLowerCase()) === i)
+          .slice(0, 12)
+      : [];
+    out[name] = products.length ? products : [...FALLBACK_PRODUCTS];
+  }
+  return Object.keys(out).length ? out : carrierProductsFrom(carriers);
 }
 
 /** The stored P&C carriers, each with its lines; the owner's defaults when the row has none. */

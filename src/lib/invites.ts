@@ -22,11 +22,13 @@ export interface Invite {
   agent_id: string | null;
   /** An agency link for one leader's team. */
   upline_id: string | null;
+  /** Who made the link (null: the owner password with no owner row, or a row since removed). */
+  created_by: string | null;
   expires_at: string | null;
   uses: number;
 }
 
-const INVITE_COLUMNS = "id, kind, agent_id, upline_id, expires_at, revoked_at, used_at, uses";
+const INVITE_COLUMNS = "id, kind, agent_id, upline_id, created_by, expires_at, revoked_at, used_at, uses";
 type InviteRow = Invite & { revoked_at: string | null; used_at: string | null };
 const ONE_USE_DAYS = 7;
 
@@ -63,7 +65,7 @@ export function inviteLive(row: Pick<InviteRow, "kind" | "revoked_at" | "used_at
 }
 
 function strip(row: InviteRow): Invite {
-  return { id: row.id, kind: row.kind, agent_id: row.agent_id, upline_id: row.upline_id, expires_at: row.expires_at, uses: row.uses };
+  return { id: row.id, kind: row.kind, agent_id: row.agent_id, upline_id: row.upline_id, created_by: row.created_by ?? null, expires_at: row.expires_at, uses: row.uses };
 }
 
 /**
@@ -145,6 +147,17 @@ export async function revokePersonInvites(agentId: string): Promise<void> {
  */
 export async function revokeInvitesMadeBy(agentId: string): Promise<void> {
   const { error } = await db().from("invites").update({ revoked_at: new Date().toISOString() }).eq("created_by", agentId).in("kind", ["person", "reset"]).is("used_at", null).is("revoked_at", null);
+  if (error) fail("invites.revoke", error);
+}
+
+/**
+ * Turns off the team links a person made for their own team (an agency link with upline_id = them,
+ * made by them): they stopped being a manager or an admin, or were taken off the board, and only a
+ * manager or an admin hands out a team link (contract decision 7). A team link an admin made for
+ * them stays.
+ */
+export async function revokeOwnTeamLinks(agentId: string): Promise<void> {
+  const { error } = await db().from("invites").update({ revoked_at: new Date().toISOString() }).eq("kind", "agency").eq("upline_id", agentId).eq("created_by", agentId).is("revoked_at", null);
   if (error) fail("invites.revoke", error);
 }
 

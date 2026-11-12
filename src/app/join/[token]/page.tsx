@@ -5,7 +5,7 @@ import { ScoreLockup } from "@/components/brand";
 import { clientAddress, JOIN_MAX_PER_IP, joinKey, loginThrottled, recordLoginFailure } from "@/lib/auth";
 import { readInvite, type Invite } from "@/lib/invites";
 import { loadLook } from "@/lib/look-setting";
-import { getPerson, listPeople } from "@/lib/people";
+import { claimableNames, getPerson, listPeople } from "@/lib/people";
 import { PHONE_VIEWPORT } from "@/lib/phone-viewport";
 import { dbConfigured } from "@/lib/supabase";
 import { JoinForm, type JoinFormProps } from "./join-form";
@@ -34,14 +34,12 @@ export const viewport = PHONE_VIEWPORT;
 function Shell({ agency, children }: { agency: string; children: ReactNode }) {
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-4 py-10">
-      <div className="w-full max-w-sm">
-        <div className="rounded-[28px] bg-surface px-5 pt-7 pb-6 shadow-card sm:px-7">
-          <div className="flex flex-col items-center text-center">
-            <ScoreLockup size={52} agency={agency} />
-          </div>
-          {children}
+      <div className="w-full max-w-[440px]">
+        <div className="mb-6 flex justify-center">
+          <ScoreLockup size={44} agency={agency} />
         </div>
-        <p className="mt-4 text-center text-[12px] text-gray-500">Private to The Koka Group and {agency}.</p>
+        <div className="rounded-2xl border border-line bg-surface px-5 pt-1 pb-6 sm:px-7">{children}</div>
+        <p className="mt-4 text-center text-[12px] text-fg-3">Private to The Koka Group and {agency}.</p>
       </div>
     </main>
   );
@@ -51,12 +49,12 @@ function Shell({ agency, children }: { agency: string; children: ReactNode }) {
 function Closed({ agency, title, line }: { agency: string; title: string; line: string }) {
   return (
     <Shell agency={agency}>
-      <div className="mt-7 text-center" data-join="closed">
-        <h1 className="text-[22px] leading-tight font-extrabold tracking-[-0.03em] text-gray-900">{title}</h1>
-        <p className="mt-2 text-[14px] leading-snug text-gray-600">{line}</p>
-        <p className="mt-5 text-[14px] text-gray-600">
+      <div className="mt-6 text-center" data-join="closed">
+        <h1 className="text-[22px] leading-tight font-medium tracking-[-0.01em] text-fg">{title}</h1>
+        <p className="mt-2 text-[13.5px] leading-snug text-fg-2">{line}</p>
+        <p className="mt-5 text-[13.5px] text-fg-2">
           Already joined?{" "}
-          <Link href="/login" className="font-bold text-accent-text">
+          <Link href="/login" className="font-medium text-accent-text hover:underline">
             Sign in
           </Link>
         </p>
@@ -101,11 +99,12 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
       const board = await listPeople();
       const people = board.map((a) => ({ id: a.id, name: a.name }));
       const leader = invite.upline_id && people.some((p) => p.id === invite.upline_id) ? invite.upline_id : null;
-      // The people already on the board who have no sign-in yet (members only: an owner's or an
-      // admin's row is claimed through its own link). "Matt" on the board and "Matthew" typed would
-      // make a second row, so the card offers the board's own spelling to tap. Names and nothing
-      // else: no id, no number, nobody's numbers.
-      const unclaimed = [...new Set(board.filter((a) => !a.has_login && (a.role ?? "member") === "member").map((a) => a.name))].sort((x, y) => x.localeCompare(y));
+      // The people already on the board who have no sign-in yet and whose row a typed name may
+      // claim (agents with no team and no policies: people.ts claimableNames; a manager, a leader,
+      // an admin or the owner gets their own link from an admin). "Matt" on the board and
+      // "Matthew" typed would make a second row, so the card offers the board's own spelling to
+      // tap. Names and nothing else: no id, no number, nobody's numbers.
+      const unclaimed = await claimableNames();
       props = { kind: "agency", people, unclaimed, leaderId: leader, needsPhone: true, inOffice: false };
     } else {
       const person = invite.agent_id ? await getPerson(invite.agent_id) : null;
@@ -126,9 +125,9 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
         : `${props.firstName}, pick a new password. It signs your other phones and computers out.`;
   return (
     <Shell agency={agency}>
-      <div className="mt-7 text-center">
-        <h1 className="text-[22px] leading-tight font-extrabold tracking-[-0.03em] text-balance text-gray-900">{title}</h1>
-        <p className="mt-1.5 text-[14px] leading-snug text-gray-600">{line}</p>
+      <div className="mt-6 text-center">
+        <h1 className="text-[22px] leading-tight font-medium tracking-[-0.01em] text-balance text-fg">{title}</h1>
+        <p className="mt-1.5 text-[13.5px] leading-snug text-fg-2">{line}</p>
       </div>
       <div className="mt-6">
         <JoinForm token={token} {...props} />

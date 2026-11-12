@@ -11,6 +11,7 @@ import { broken, form, req, request, tables, type Row } from "./stand-in";
  * the TV, and the database's own words never reach a screen.
  */
 const actions = req("../src/app/(app)/actions") as typeof import("../src/app/(app)/actions");
+const sales = req("../src/app/(app)/sale-actions") as typeof import("../src/app/(app)/sale-actions");
 const people = req("../src/app/(app)/people-actions") as typeof import("../src/app/(app)/people-actions");
 const team = req("../src/app/(app)/team/actions") as typeof import("../src/app/(app)/team/actions");
 const session = req("../src/lib/session") as typeof import("../src/lib/session");
@@ -165,7 +166,7 @@ test("an admin who stops being one loses the links they made: by the owner, and 
   assert.equal(admin.role, "admin", "nothing changes until the owner says yes");
   assert.equal(made2.revoked_at, null);
   const waiting = tables.approvals[0];
-  assert.equal(waiting.summary, "Make Adam Admin a member again (not an admin)");
+  assert.equal(waiting.summary, "Make Adam Admin an agent (not an admin)");
   waiting.id = randomUUID();
   waiting.status = "pending";
   assert.deepEqual(await as("owner", () => people.decideApproval(String(waiting.id), true)), { ok: true, message: "Adam Admin is not an admin anymore." });
@@ -180,7 +181,7 @@ const pastSale = (extra: Row = {}): Row => {
   return sale;
 };
 const fix = (sale: Row, fields: Record<string, string>) =>
-  as(admin, () => actions.editSale(id(sale), form({ premium: "777", policies: "1", product: "Term", carrier: "AHL", kind: "life", note: "", sold_on: String(sale.sold_on), agent_id: id(ivy), ...fields })));
+  as(admin, () => sales.editSale(id(sale), form({ premium: "777", policies: "1", product: "Term", carrier: "AHL", kind: "life", note: "", sold_on: String(sale.sold_on), agent_id: id(ivy), ...fields })));
 
 test("an admin's fix to a past month: the owner's sentence shows cents, a changed kind and everything else that changes", async () => {
   reset();

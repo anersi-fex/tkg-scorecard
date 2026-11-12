@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation";
 import type { FeedSale, MonthSnapshot } from "@/lib/board";
 import type { BoardTheme } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
-import { dayLabel, daysLeftLabel } from "@/lib/month";
+import { daysLeftLabel } from "@/lib/month";
 import { TEAM_TIME_ZONE } from "@/lib/timezone";
-import { Avatar } from "@/components/avatar";
 import { ScoreMark, TkgMark } from "@/components/brand";
 import { cn, formatClock } from "@/components/ui";
-import { burst } from "./confetti";
+import { Icon } from "@/components/ui/icon";
+import "./tv.css";
 import { soundFile, type SoundKey } from "@/lib/sounds";
 import { SCREEN_LABEL, nextScreen, rotationScreens, screenFacts, screenFor, screenMs, type Screen } from "@/lib/views";
 import { LifeScreen } from "./life-screen";
@@ -23,7 +23,8 @@ import { TeamsScreen } from "./teams-screen";
 /**
  * The TV board. One screen, no scrolling, sized from the viewport (1em = about 1% of the width,
  * capped for 4K), so a 1080p TV, a 4K TV and a laptop all show the same layout. Polls /api/board
- * every few seconds; a sale that was not there before gets a celebration with confetti.
+ * every few seconds; a sale that was not there before gets its moment: a calm banner over the
+ * screen pills for 9 s and the owner's sale sound (the calmer look, 2026-11-12: no confetti).
  * Dark or light is the owner's TV look (Settings), applied before paint and again from every poll,
  * so the TV follows a change within 5 s; nothing on the TV itself changes it. When a poll comes
  * from a newer deploy the page reloads itself once, so the TV never runs last week's code. Key: F
@@ -323,29 +324,22 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
   const tones = Object.fromEntries(snap.agents.map((a) => [a.id, a.tone]));
 
   return (
-    <main
-      data-screen={screen}
-      className="relative flex h-dvh w-full flex-col overflow-hidden bg-ink px-[1.6em] pt-[1em] pb-[0.9em] text-gray-900 select-none"
-      style={{ fontSize: "clamp(10px, min(1vw, 1.78vh), 36px)" }}
-    >
-      {/* Header */}
-      <header className="flex shrink-0 items-center justify-between gap-[1em]">
+    <main data-screen={screen} className="tvb">
+      <header className="tvb-top">
         <BoardLockup agency={snap.agencyName} />
-        <div className="flex flex-col items-center text-center">
-          <p className="text-[1.75em] leading-none font-extrabold tracking-[-0.03em]">{month.label}</p>
-          {/* One pill per screen in rotation; kept on one screen (or with nothing else to show), only its pill */}
-          <ScreenPills screen={screen} shown={cycling ? inRotation : [screen]} timed={cycling} turn={turn} ms={stay} />
-        </div>
-        <div className="flex items-center gap-[0.8em]">
-          {month.position === "current" && (
-            <span className={cn("rounded-full px-[0.9em] py-[0.35em] text-[0.9em] font-bold", month.remaining <= 2 ? "bg-amber-100 text-amber-800" : "bg-tint text-accent-text")}>
-              {daysLeftLabel(month)}
-            </span>
-          )}
-          <div className="flex flex-col items-end">
-            <p className="min-w-[4.6em] text-right font-mono text-[1.75em] leading-none font-bold tracking-[-0.02em]">{clock}</p>
-            <p className="mt-[0.3em] text-[0.9em] leading-none font-semibold text-gray-500">{dayLabel(month.today)}</p>
-          </div>
+        {/* One pill per screen in rotation; kept on one screen (or with nothing else to show), only its pill */}
+        <ScreenPills screen={screen} shown={cycling ? inRotation : [screen]} timed={cycling} turn={turn} ms={stay} />
+        <div className="tvb-when">
+          <span className="tvb-month">
+            {month.label}
+            {month.position === "current" && (
+              <>
+                {" · "}
+                <span className="num">{daysLeftLabel(month)}</span>
+              </>
+            )}
+          </span>
+          <span className="tvb-clock num">{clock}</span>
         </div>
       </header>
 
@@ -356,95 +350,84 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
       ) : screen === "teams" ? (
         <TeamsScreen snap={snap} onPages={onPages} />
       ) : screen === "pc" ? (
-        <PcScreen snap={snap} tones={tones} flash={flash} />
+        <div className="tvb-legacy">
+          <PcScreen snap={snap} tones={tones} flash={flash} />
+        </div>
       ) : screen === "total" ? (
-        <MainScreen snap={snap} view="total" tones={tones} flash={flash} onPages={onPages} />
+        <div className="tvb-legacy">
+          <MainScreen snap={snap} view="total" tones={tones} flash={flash} onPages={onPages} />
+        </div>
       ) : (
-        <LifeScreen snap={snap} tones={tones} flash={flash} onPages={onPages} />
+        <LifeScreen snap={snap} flash={flash} onPages={onPages} />
       )}
 
-      {/* Footer */}
-      <footer className="mt-[0.8em] flex shrink-0 items-center justify-between gap-[1em] text-[0.85em] font-semibold text-gray-500">
-        <p className="min-w-0 truncate text-[1.1em] font-bold text-gray-700">{snap.message || " "}</p>
-        <p className="shrink-0">
-          {offline >= 3 ? <span className="text-amber-800">Reconnecting…</span> : <>Updated {formatClock(snap.generatedAt)}</>}
-          {sound.blocked && snap.sound !== "off" && <span className="ml-[1em] text-amber-800">Click or press a key once for sound</span>}
-          <span className="ml-[1em] text-gray-500">F full screen</span>
+      <footer className="tvb-foot">
+        <p className="tvb-msg ell">{snap.message || " "}</p>
+        <p>
+          {offline >= 3 ? <span className="tvb-warn">Reconnecting…</span> : <span className="num">Updated {formatClock(snap.generatedAt)}</span>}
+          {sound.blocked && snap.sound !== "off" && <span className="tvb-warn">Click or press a key once for sound</span>}
+          <span className="tvb-key">F full screen</span>
         </p>
       </footer>
 
-      {showing && <Celebration sale={showing} sound={snap.sound} pc={pcEnabled && showing.kind === "pc"} onRefused={sound.refused} onPlayed={sound.played} />}
+      {showing && <Celebration key={showing.id} sale={showing} sound={snap.sound} pc={pcEnabled && showing.kind === "pc"} onRefused={sound.refused} onPlayed={sound.played} />}
     </main>
   );
 }
 
 /**
- * The screens under the month: one pill per screen in rotation, the one on screen lit with a line
- * that runs out with its time; only the kept screen when the TV is kept on one.
+ * The screens in the middle of the header: one pill per screen in rotation, the one on screen lit
+ * with a line that runs out with its time; only the kept screen when the TV is kept on one.
  */
 function ScreenPills({ screen, shown, timed, turn, ms }: { screen: Screen; shown: Screen[]; timed: boolean; turn: number; ms: number }) {
   return (
-    <div className="mt-[0.45em] inline-flex gap-[0.3em] rounded-full bg-track p-[0.22em]">
+    <nav className="tvb-seg" aria-label="TV screens">
       {shown.map((v) => {
         const on = v === screen;
         return (
-          <span
-            key={v}
-            data-pill={v}
-            aria-current={on ? "true" : undefined}
-            className={cn(
-              "relative inline-flex items-center overflow-hidden rounded-full px-[1.05em] pt-[0.28em] pb-[0.34em] text-[0.95em] font-bold whitespace-nowrap",
-              on ? "bg-segment shadow-card" : "text-gray-500",
-              on && (v === "pc" ? "text-pc-text" : v === "total" ? "text-gray-900" : "text-accent-text"),
+          <span key={v} data-pill={v} aria-current={on ? "true" : undefined} className={cn("tvb-pill", on && "on")}>
+            {(v === "pc" || v === "total") && <ViewDot view={v} className="tvb-pill-dot" />}
+            <span>{SCREEN_LABEL[v]}</span>
+            {on && (
+              <span className="tvb-timer" aria-hidden>
+                {/* The line runs out with the screen's time while the TV rotates; kept on one screen it stays full. */}
+                <i key={`${turn}-${ms}`} className={timed ? "board-timer" : undefined} style={timed ? { animationDuration: `${ms}ms` } : undefined} />
+              </span>
             )}
-          >
-            {(v === "pc" || v === "total") && <ViewDot view={v} className="mr-[0.45em] h-[0.5em] w-[0.5em]" />}
-            {SCREEN_LABEL[v]}
-            {on && timed && <span key={`${turn}-${ms}`} aria-hidden className="board-timer absolute bottom-0 left-0 h-[0.17em] w-full rounded-full bg-current opacity-80" style={{ animationDuration: `${ms}ms` }} />}
           </span>
         );
       })}
-    </div>
+    </nav>
   );
 }
 
 /**
- * The lockup at the board's size (all in em, so it scales with the TV): the mark, "Scorecard", and
- * under it "by TKG × <the agency's name>" (owner, 2026-11-12: "you can still put 'by tkg' ... just
- * needs to also say Lineage Financial"), the same words as ScoreLockup on the phone; "by TKG" alone
- * without an agency name.
+ * The lockup at the TV's size: the mark, "Scorecard", and under it "by TKG × <the agency's name>"
+ * (owner, 2026-11-12: "you can still put 'by tkg' ... just needs to also say Lineage Financial"), the
+ * same words as ScoreLockup on the phone; "by TKG" alone without an agency name.
  */
 function BoardLockup({ agency }: { agency: string }) {
   const name = agency.trim();
   return (
-    <div className="flex min-w-0 items-center gap-[0.7em]">
-      <ScoreMark size={64} className="!h-[2.9em] !w-[2.9em] !rounded-[0.8em] [&>svg]:!h-[2.9em] [&>svg]:!w-[2.9em]" />
-      <div className="flex min-w-0 flex-col leading-none">
-        <span className="text-[1.6em] font-extrabold tracking-[-0.03em] text-gray-900">Scorecard</span>
-        <span data-lockup-by className="mt-[0.2em] flex min-w-0 items-center gap-[0.35em] text-[0.85em] font-semibold text-gray-500">
-          by <TkgMark className="!h-[0.72em] !w-auto text-gray-700" />
+    <div className="tvb-lockup">
+      <ScoreMark size={58} className="tvb-lockup-mark" />
+      <div className="min-w-0">
+        <div className="tvb-lockup-name">Scorecard</div>
+        <div data-lockup-by className="tvb-lockup-by">
+          by <TkgMark />
           {name && (
             <>
               <span aria-hidden>×</span>
-              {/* Its own line height: a truncated line at leading-none cuts the tail of a "g". */}
-              <span data-agency className="max-w-[18em] min-w-0 truncate leading-[1.3] font-bold tracking-[0.01em] text-gray-700">
-                {name}
-              </span>
+              <span data-agency>{name}</span>
             </>
           )}
-        </span>
+        </div>
       </div>
     </div>
   );
 }
 
 function Celebration({ sale, sound, pc, onRefused, onPlayed }: { sale: FeedSale; sound: SoundKey; pc: boolean; onRefused: () => void; onPlayed: () => void }) {
-  const canvas = useRef<HTMLCanvasElement | null>(null);
-  useEffect(() => {
-    if (!canvas.current) return;
-    const stop = burst(canvas.current, { count: 320, duration: CELEBRATE_MS - 1500 });
-    return stop;
-  }, [sale.id]);
   // The owner's sale sound, once per celebration; a long one fades out before the overlay leaves.
   useEffect(() => {
     const file = soundFile(sound);
@@ -470,22 +453,29 @@ function Celebration({ sale, sound, pc, onRefused, onPlayed }: { sale: FeedSale;
       audio.pause();
     };
   }, [sale.id, sound, onRefused, onPlayed]);
+  const what = [pc ? "P&C" : null, sale.carrier, sale.product, sale.policies > 1 ? `${sale.policies} policies` : null].filter(Boolean).join(" · ");
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-ink/70" role="status" aria-live="polite" data-sound={sound}>
-      <canvas ref={canvas} className="pointer-events-none absolute inset-0 h-full w-full" />
-      <div className="board-pop relative flex flex-col items-center rounded-[2em] bg-surface px-[3.2em] py-[2.4em] text-center shadow-float">
-        <Avatar name={sale.agentName} tone="bg-tide text-white shadow-glow" size={96} className="!h-[6em] !w-[6em] !text-[2.2em]" />
-        <p className={cn("mt-[0.9em] text-[1.1em] font-bold tracking-[0.1em] uppercase", pc ? "text-pc-text" : "text-accent-text")}>{pc ? "New P&C sale" : "New sale"}</p>
-        <p className="mt-[0.2em] text-[2.8em] leading-tight font-extrabold tracking-[-0.03em]">{sale.agentName}</p>
-        <p className="mt-[0.4em] font-mono text-[3.6em] leading-none font-bold tracking-[-0.035em] text-gray-900">{formatMoney(sale.premiumCents)}</p>
-        <p className="mt-[0.6em] text-[1.2em] font-semibold text-gray-500">
-          annual premium
-          {pc ? " · P&C" : ""}
-          {sale.carrier ? ` · ${sale.carrier}` : ""}
-          {sale.product ? ` · ${sale.product}` : ""}
-          {sale.policies > 1 ? ` · ${sale.policies} policies` : ""}
-        </p>
-      </div>
+    <div className="tvb-banner enter" role="status" aria-live="polite" data-sound={sound}>
+      <span className="tvb-banner-ico">
+        <Icon name="star" size={22} stroke={1.9} className="tvb-ico" />
+      </span>
+      <span className="tvb-banner-k">{pc ? "New P&C sale" : "New sale"}</span>
+      <span className="tvb-dot" aria-hidden>
+        ·
+      </span>
+      <span className="tvb-banner-name">{sale.agentName}</span>
+      <span className="tvb-dot" aria-hidden>
+        ·
+      </span>
+      <span className="tvb-banner-amt num">{formatMoney(sale.premiumCents)}</span>
+      {what && (
+        <>
+          <span className="tvb-dot" aria-hidden>
+            ·
+          </span>
+          <span className="tvb-banner-k">{what}</span>
+        </>
+      )}
     </div>
   );
 }

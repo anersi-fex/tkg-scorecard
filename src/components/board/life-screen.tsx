@@ -3,59 +3,50 @@
 import { useCallback, useState } from "react";
 import type { AgentLine, MonthSnapshot } from "@/lib/board";
 import { formatDollars } from "@/lib/money";
-import { Avatar, shortName } from "@/components/avatar";
-import { GoalBar } from "@/components/goal-bar";
 import { cn } from "@/components/ui";
-import { boardGroups, pageCount, pageOf } from "@/lib/views";
-import { PageDots, PlaceMark, RightSide, useBoxEm, usePager, useReportPages } from "./parts";
+import { Medal, RankChip } from "@/components/ui/kit";
+import { boardGroups, pageCount, pageOf, shareOf } from "@/lib/views";
+import { PageDots, RightSide, useBoxEm, usePager, useReportPages } from "./parts";
+import { ArrowsKey } from "./production-screen";
 
 /**
- * The leaderboard screen (owner, 2026-11-12: "the ones in the office are like a group of like 27,
- * and I feel like ... their numbers should be showing at the top"): the office group as a dense
- * leaderboard in up to three columns, ranked among themselves, over "Everyone else" in smaller
- * rows; the shared right side (goal ring, tiles, chart, latest sales) in the last third. Nothing
- * scrolls and no row is cut: each block measures its own room and pages through its people when
- * they do not fit. With nobody marked in office it is one list, "Leaderboard".
+ * The leaderboard screen in the calmer CRM look (the approved demo's TV, 2026-11-12): everyone on
+ * the board in up to three columns (the place, places gained or lost since yesterday, a medal for
+ * the top three, the name over "N policies", the amount, a thin bar against the leader), and the
+ * right side with Production, the goal line and "On pace for". With people marked in the office,
+ * "In the office" stays on top with places of its own, over "Everyone else" in smaller rows (owner,
+ * 2026-11-12: "their numbers should be showing at the top"). Nothing scrolls and no row is cut:
+ * each block measures its own room and pages through its people when they do not fit.
  */
 type Ranked = AgentLine & { place: number };
 
-/** The smallest row of each block, in the board's em; rows grow from there when there is room. */
-const MAIN_ROW = 2.85;
-const SMALL_ROW = 2.7;
-/** The row heights the two blocks share out between them (about what a 16:9 screen has). */
-const ROOM = 38;
+/** A row's height in the board's em (1em = 16 of the demo's pixels): a full row, and the smaller "Everyone else" row. */
+const ROW = 67 / 16;
+const SMALL_ROW = 51 / 16;
+/** The demo's most rows a column holds before the list pages. */
+const MAX_ROWS = 12;
+const COLS = 3;
 
-/** One column up to ten people, two up to twenty, three from there. */
-function columnsFor(count: number): number {
-  return count <= 10 ? 1 : count <= 20 ? 2 : 3;
-}
-
-export function LifeScreen({ snap, tones, flash, onPages }: { snap: MonthSnapshot; tones: Record<string, string>; flash: string[]; onPages?: (pages: number) => void }) {
-  const { clock: month } = snap;
+export function LifeScreen({ snap, flash, onPages }: { snap: MonthSnapshot; tones?: Record<string, string>; flash: string[]; onPages?: (pages: number) => void }) {
   const { split, office, others } = boardGroups(snap.agents);
   const everyone = [...office, ...others];
   const max = Math.max(1, ...everyone.map((a) => a.lifeCents));
-  const current = month.position === "current";
-  // The goal line today, the same tick on every bar: how far through its business days the month is.
-  const goalLine = current && month.elapsed > 0 && everyone.some((a) => a.goalCents > 0) ? Math.round(month.progress * 100) : null;
-  const mainCols = columnsFor(office.length);
-  // Never a fourth column: it is the width, not the height, that cuts a name beside a five-figure amount.
-  const smallCols = Math.min(3, mainCols + 1);
-  const mainRows = Math.max(1, Math.min(10, Math.ceil(office.length / mainCols)));
-  // The rows "Everyone else" has room for under the office block (also its first paint, before it measures itself).
-  const smallFit = Math.max(3, Math.floor((ROOM - mainRows * MAIN_ROW) / SMALL_ROW));
-  const smallRows = Math.max(1, Math.min(smallFit, Math.ceil(others.length / smallCols)));
-  // The screen stays until the block with the most pages has shown each of them.
+  // Places since yesterday come from the agency's own ranking (the Scoreboard's), shown in both
+  // groups as Home shows them (the arrow is the agency move, the number the place in the group).
+  const change = new Map((snap.scoreboard?.rows ?? []).map((r) => [r.agentId, r.rankChange]));
+  const mainRows = Math.max(1, Math.min(MAX_ROWS, Math.ceil(office.length / COLS)));
+  const smallRows = Math.max(1, Math.ceil(others.length / COLS));
   const [pages, setPages] = useState({ main: 1, small: 1 });
   const onMain = useCallback((n: number) => setPages((p) => (p.main === n ? p : { ...p, main: n })), []);
   const onSmall = useCallback((n: number) => setPages((p) => (p.small === n ? p : { ...p, small: n })), []);
   useReportPages(Math.max(pages.main, others.length > 0 ? pages.small : 1), onPages);
   return (
-    <div className="mt-[0.9em] grid min-h-0 flex-1 grid-cols-12 gap-[1em]">
-      <div className="col-span-8 flex min-h-0 flex-col gap-[0.8em]">
+    <div className="tvb-main tvb-board">
+      <div className="tvb-left">
         {everyone.length === 0 ? (
-          <section className="flex min-h-0 flex-1 items-center justify-center rounded-[1.4em] bg-surface shadow-card">
-            <p className="text-[1.2em] font-semibold text-gray-500">Add your team in Scorecard on your phone.</p>
+          <section className="tvb-card tvb-lb" aria-label="Leaderboard">
+            <h2 className="tvb-title">Leaderboard</h2>
+            <p className="tvb-lb-empty">Add your team in Scorecard on your phone.</p>
           </section>
         ) : (
           <>
@@ -63,24 +54,18 @@ export function LifeScreen({ snap, tones, flash, onPages }: { snap: MonthSnapsho
               name="office"
               title={split ? "In the office" : "Leaderboard"}
               people={office}
-              cols={mainCols}
-              rowEm={MAIN_ROW}
-              weight={mainRows * MAIN_ROW + 3.6}
-              maxScale={mainCols === 1 ? 1.5 : mainCols === 2 ? 1.3 : 1.06}
+              rowEm={ROW}
+              weight={split ? mainRows * ROW + 5 : 1}
               max={max}
-              today={current}
-              goalLine={goalLine}
-              guess={10}
+              change={change}
               legend
               onPages={onMain}
             />
-            {others.length > 0 && (
-              <Group name="others" title="Everyone else" people={others} cols={smallCols} rowEm={SMALL_ROW} weight={smallRows * SMALL_ROW + 3.2} maxScale={1.08} guess={smallFit} small max={max} today={current} goalLine={goalLine} onPages={onSmall} />
-            )}
+            {others.length > 0 && <Group name="others" title="Everyone else" people={others} rowEm={SMALL_ROW} weight={Math.min(smallRows, MAX_ROWS) * SMALL_ROW + 4} small max={max} change={change} onPages={onSmall} />}
           </>
         )}
       </div>
-      <RightSide snap={snap} view="life" tones={tones} flash={flash} className="col-span-4" />
+      <RightSide snap={snap} view="life" flash={flash} />
     </div>
   );
 }
@@ -90,114 +75,92 @@ function Group({
   name,
   title,
   people,
-  cols,
   rowEm,
   weight,
-  maxScale,
-  guess,
   small = false,
   max,
-  today,
-  goalLine,
+  change,
   legend = false,
   onPages,
 }: {
   name: string;
   title: string;
   people: Ranked[];
-  cols: number;
-  /** The smallest row, in the board's em. */
   rowEm: number;
   /** This block's share of the height against the other block. */
   weight: number;
-  maxScale: number;
-  /** The rows to show before the first measure: what a 16:9 screen holds. */
-  guess: number;
   small?: boolean;
   max: number;
-  today: boolean;
-  goalLine: number | null;
+  change?: Map<string, number | null>;
   legend?: boolean;
   onPages: (pages: number) => void;
 }) {
   const [ref, box] = useBoxEm();
+  const cols = people.length <= 4 ? 1 : people.length <= 10 ? 2 : COLS;
   const need = Math.ceil(people.length / cols);
   // Before the first measure: what a 16:9 screen holds, so the first paint is already right there.
-  const fit = box ? Math.max(1, Math.floor(box.h / rowEm + 0.02)) : guess;
-  const rows = Math.max(1, Math.min(need, fit));
+  const fit = box ? Math.max(1, Math.floor(box.h / rowEm + 0.02)) : small ? 5 : 11;
+  const rows = Math.max(1, Math.min(need, fit, MAX_ROWS));
   const per = rows * cols;
   const pages = pageCount(people.length, per);
   const page = usePager(pages);
   useReportPages(pages, onPages);
   const shown = pageOf(people, page, per);
-  // Fewer people, taller rows: the type grows with the room, up to what the column's width holds.
-  const slot = box ? box.h / rows : rowEm;
-  const scale = Math.min(maxScale, Math.max(1, slot / rowEm)) * (small ? 0.93 : 1);
   const sold = people.filter((a) => a.lifeCents > 0).length;
+  const columns = Array.from({ length: cols }, (_, c) => shown.slice(c * rows, c * rows + rows));
+  const moves = change !== undefined && people.some((a) => a.lifeCents > 0 && (change.get(a.id) ?? 0) !== 0);
   return (
-    <section data-group={name} data-pages={pages} className="flex min-h-0 flex-col rounded-[1.4em] bg-surface px-[1em] pt-[0.75em] pb-[0.7em] shadow-card" style={{ flex: `${weight} 1 0%` }}>
-      <div className="flex shrink-0 items-baseline justify-between gap-[1em]">
-        <h2 className={cn("flex items-baseline gap-[0.6em] font-extrabold tracking-[-0.02em]", small ? "text-[1.05em]" : "text-[1.25em]")}>
-          {title}
-          <span className="text-[0.68em] font-semibold tracking-normal text-gray-500">
-            {people.length} {people.length === 1 ? "person" : "people"} · {sold} sold
-          </span>
-        </h2>
-        <p className="flex items-center gap-[0.45em] text-[0.8em] font-semibold text-gray-500">
-          {legend && goalLine !== null && (
-            <>
-              <span aria-hidden className="inline-block h-[0.9em] w-[0.12em] rounded-full bg-gray-500" />
-              goal line today
-              <span aria-hidden>·</span>
-            </>
-          )}
-          {legend && "annual premium · policies"}
-          <PageDots pages={pages} page={page} className={legend ? "ml-[0.6em]" : undefined} />
-        </p>
+    <section data-group={name} data-pages={pages} aria-label={title} className={cn("tvb-card tvb-lb", small && "tvb-small", cols === 1 && "tvb-one", cols === 2 && "tvb-two")} style={{ flex: `${weight} 1 0%` }}>
+      <div className="tvb-lb-head">
+        <div className="min-w-0">
+          <h2 className="tvb-title">{title}</h2>
+          <div className="tvb-sub">
+            <span className="num">{people.length}</span> {people.length === 1 ? "person" : "people"} · <span className="num">{sold}</span> sold
+            {legend && change !== undefined && <> · {moves ? "Arrows show places gained or lost since yesterday" : <ArrowsKey />}</>}
+          </div>
+        </div>
+        <PageDots pages={pages} page={page} />
       </div>
-      <div ref={ref} className="mt-[0.45em] min-h-0 flex-1">
-        <ol key={page} className={cn("grid h-full gap-x-[1.1em]", pages > 1 && "board-page")} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`, gridAutoFlow: "column" }}>
-          {shown.map((a) => (
-            <DenseRow key={a.id} line={a} max={max} today={today} goalLine={goalLine} scale={scale} roomy={cols < 3 && !small} />
-          ))}
-        </ol>
+      <div ref={ref} className="tvb-cols" style={{ display: "grid" }}>
+        {columns.map((list, c) => {
+          const medals = list.some((a) => a.lifeCents > 0 && a.place <= 3);
+          return (
+            <ol key={`${page}-${c}`} className={cn("tvb-col", medals && "medals", pages > 1 && "board-page")} style={{ gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}>
+              {list.map((a) => (
+                <Row key={a.id} line={a} max={max} medal={medals} change={change?.get(a.id)} showChange={change !== undefined} />
+              ))}
+            </ol>
+          );
+        })}
       </div>
     </section>
   );
 }
 
 /**
- * One person: the place (a crown, a medal, the number), initials, the name, the amount, a slim
- * bar of their own goal (of the leader's premium without one), policies and today's gain in green.
- * Someone with no sale this month still shows, dimmed, after the sellers.
+ * One person: the place and the change under it, a medal for the top three, the name over
+ * "N policies" (and today's gain in green), the amount, and a thin bar against the leader. Someone
+ * with no sale this month still shows, dimmed, after the sellers.
  */
-function DenseRow({ line, max, today, goalLine, scale, roomy }: { line: Ranked; max: number; today: boolean; goalLine: number | null; scale: number; roomy: boolean }) {
+function Row({ line, max, medal, change, showChange }: { line: Ranked; max: number; medal: boolean; change: number | null | undefined; showChange: boolean }) {
   const sold = line.lifeCents > 0;
-  const hasGoal = line.goalCents > 0;
-  const width = hasGoal ? Math.min(100, line.goalPct) : Math.round((line.lifeCents / max) * 100);
-  const done = hasGoal && line.goalPct >= 100;
-  const first = sold && line.place === 1;
-  const name = line.name.length > (roomy ? 24 : 15) ? shortName(line.name) : line.name;
   return (
-    <li className="flex min-h-0 min-w-0 items-center" data-person={line.id} data-place={line.place}>
-      <div className={cn("flex w-full min-w-0 items-center gap-[0.5em] rounded-[0.8em] px-[0.4em] py-[0.2em]", first && "bg-tint/60", !sold && "opacity-50")} style={{ fontSize: `${scale}em` }}>
-        <PlaceMark place={line.place} sold={sold} className="w-[1.45em] text-[1.15em]" />
-        <Avatar name={line.name} tone={line.tone} size={36} className="!h-[1.9em] !w-[1.9em] !text-[0.74em]" />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline justify-between gap-[0.5em]">
-            <p className="min-w-0 truncate text-[1.05em] leading-[1.2] font-extrabold tracking-[-0.02em]">{name}</p>
-            <p className="shrink-0 font-mono text-[1.15em] leading-[1.1] font-bold tracking-[-0.03em]">{sold ? formatDollars(line.lifeCents) : "–"}</p>
-          </div>
-          <div className="mt-[0.26em] flex items-center gap-[0.5em]">
-            <GoalBar width={width} lifeShare={width} goalLine={hasGoal ? goalLine : null} className="h-[0.36em]" tickClassName="-top-[0.22em] h-[0.8em] w-[0.1em]" />
-            {roomy && hasGoal && <p className={cn("shrink-0 font-mono text-[0.8em] leading-none font-bold", done ? "text-up" : "text-gray-700")}>{line.goalPct}%</p>}
-            <p className="shrink-0 text-[0.88em] leading-none font-semibold whitespace-nowrap text-gray-500">
-              {line.lifePolicies} {line.lifePolicies === 1 ? "policy" : "policies"}
-            </p>
-            {today && line.todayLifeCents > 0 && <p className="shrink-0 font-mono text-[0.88em] leading-none font-bold whitespace-nowrap text-up">+{formatDollars(line.todayLifeCents)}</p>}
-          </div>
-        </div>
-      </div>
+    <li className={cn("tvb-row", !sold && "none")} data-person={line.id} data-place={line.place}>
+      <span className="tvb-rank num">{sold ? line.place : "–"}</span>
+      <span className="tvb-chg">{sold && showChange ? <RankChip change={change === undefined ? 0 : change} /> : null}</span>
+      {medal && <span className="tvb-medal">{sold ? <Medal rank={line.place} size={28} /> : null}</span>}
+      <span className="tvb-name ell">{line.name}</span>
+      <span className="tvb-rsub ell num">
+        {sold ? `${line.lifePolicies} ${line.lifePolicies === 1 ? "policy" : "policies"}` : "No sale yet"}
+        {sold && line.todayLifeCents > 0 && (
+          <>
+            {" · "}
+            <span className="tvb-today">+{formatDollars(line.todayLifeCents)} today</span>
+          </>
+        )}
+      </span>
+      <span className="tvb-amt num">{sold ? formatDollars(line.lifeCents) : "—"}</span>
+      {sold && <span className="tvb-bar" style={{ width: `${shareOf(line.lifeCents, max)}%` }} />}
     </li>
   );
 }

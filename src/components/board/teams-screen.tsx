@@ -3,106 +3,148 @@
 import type { MonthSnapshot } from "@/lib/board";
 import type { ScoreRow, ScoreTeam } from "@/lib/scoreboard-types";
 import { formatDollars } from "@/lib/money";
-import { Avatar, shortName } from "@/components/avatar";
 import { cn } from "@/components/ui";
-import { pageCount, pageOf } from "@/lib/views";
-import { EmptyScreen, PageDots, PlaceMark, useBoxEm, usePager, useReportPages } from "./parts";
-import { ChangeChip } from "./production-screen";
+import { Medal, RankChip } from "@/components/ui/kit";
+import { pageCount, pageOf, quietTeams, shareOf, teamLabel, type QuietTeam } from "@/lib/views";
+import { EmptyScreen, PageDots, useBoxEm, usePager, useReportPages } from "./parts";
 
 /**
- * The Teams screen (the CRM's "Agency totals", decision 11): one row per leader, a leader being
- * anyone with people under them and the team the leader plus everyone below, all levels. Each row:
- * the place, "Anersi Koka's team" over a bar against the top team, the people on it and how many
- * sold, policies, the team's top three sellers and the total. More teams than fit page.
+ * The Teams screen (the CRM's "Agency totals") in the calmer CRM look (the approved demo,
+ * 2026-11-12): one row per leader, a leader being anyone with people under them on confirmed
+ * uplines and the team the leader plus everyone below, all levels. Each row: the place and its
+ * change, a medal for the top three, "<Leader>'s team" over a thin bar against the top team, the
+ * people on it and how many sold, policies, the top seller and the total. The leaders whose people
+ * have not sold yet follow, dimmed. More teams than fit page.
  */
-const ROW = 4.5;
+/** A row's least height in the board's em (1em = 16 of the demo's pixels), and the demo's rows a page. */
+const ROW = 76 / 16;
+const MAX_ROWS = 9;
 /** The same sentence as the phone Scoreboard's Teams view. */
 const NO_UPLINES = "Teams show here once people have an upline. Set uplines on the People page.";
-const COLUMNS = "3.2em minmax(0, 1.2fr) 8.5em 7em minmax(0, 1.75fr) 9.5em";
+
+type Item = { kind: "team"; team: ScoreTeam } | { kind: "quiet"; team: QuietTeam };
 
 export function TeamsScreen({ snap, onPages }: { snap: MonthSnapshot; onPages?: (pages: number) => void }) {
   const sb = snap.scoreboard;
   const teams = sb?.teams ?? [];
+  // The snapshot's upline is the confirmed one: a joiner waiting for an OK is on nobody's team.
+  const quiet = sb ? quietTeams(snap.agents, teams.map((t) => t.leaderId)) : [];
+  const items: Item[] = [...teams.map((team): Item => ({ kind: "team", team })), ...quiet.map((team): Item => ({ kind: "quiet", team }))];
   const [ref, box] = useBoxEm();
-  const fit = box ? Math.max(1, Math.floor(box.h / ROW + 0.02)) : 9;
-  const pages = pageCount(teams.length, fit);
+  const fit = Math.min(MAX_ROWS, box ? Math.max(1, Math.floor(box.h / ROW + 0.02)) : MAX_ROWS);
+  const pages = pageCount(items.length, fit);
   const page = usePager(pages);
   useReportPages(pages, onPages);
   // Uplines make teams: before anyone has one, say where to set them, not that nobody sold.
   const uplines = snap.agents.some((a) => a.active && a.uplineId);
   if (!sb || teams.length === 0) return <EmptyScreen title="Teams" line={!uplines ? NO_UPLINES : sb ? "A team shows here once someone on it sells." : "The numbers are on their way."} />;
   const byId = new Map(sb.rows.map((r) => [r.agentId, r]));
-  const top = Math.max(1, ...teams.map((t) => t.totalCents));
-  const shown = pageOf(teams, page, fit);
-  const rows = Math.min(fit, teams.length);
+  const lead = Math.max(1, ...teams.map((t) => t.totalCents));
+  const shown = pageOf(items, page, fit);
+  const rows = Math.min(fit, Math.max(1, shown.length));
   return (
-    <section className="mt-[0.9em] flex min-h-0 flex-1 flex-col rounded-[1.4em] bg-surface px-[1.2em] pt-[0.85em] pb-[0.7em] shadow-card">
-      <div className="flex shrink-0 items-baseline justify-between gap-[1em]">
-        <h2 className="flex items-baseline gap-[0.7em] text-[1.35em] font-extrabold tracking-[-0.02em]">
-          Teams
-          <span className="text-[0.66em] font-semibold tracking-normal text-gray-500">A leader and everyone under them, added up</span>
-        </h2>
-        <p className="flex items-center gap-[0.8em] text-[0.9em] font-semibold text-gray-500">
-          {sb.range.label} · {teams.length} {teams.length === 1 ? "team" : "teams"}
-          <PageDots pages={pages} page={page} />
-        </p>
-      </div>
-      <div className="mt-[0.5em] grid shrink-0 items-end gap-x-[1.2em] border-b border-line pb-[0.3em] font-bold tracking-[0.04em] text-gray-500 uppercase [&>p]:text-[0.8em]" style={{ gridTemplateColumns: COLUMNS }}>
-        <p />
-        <p>Team</p>
-        <p>People</p>
-        <p className="text-center">Policies</p>
-        <p>Top sellers</p>
-        <p className="text-right">Total</p>
-      </div>
-      <div ref={ref} className="min-h-0 flex-1">
-        <ol key={page} className={cn("grid h-full", pages > 1 && "board-page")} style={{ gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`, maxHeight: `${rows * 7.2}em` }}>
-          {shown.map((t) => (
-            <TeamRow key={t.leaderId} team={t} top={top} sellers={t.memberIds.map((id) => byId.get(id)).filter((r): r is ScoreRow => r !== undefined).slice(0, 3)} />
-          ))}
-        </ol>
-      </div>
-    </section>
+    <div className="tvb-main tvb-teamsmain">
+      <section className="tvb-card tvb-tbl tvb-teams" aria-label="Teams" data-card="teams">
+        <div className="tvb-tbl-head">
+          <div className="tvb-lhs">
+            <h2 className="tvb-title">Teams</h2>
+            <div className="tvb-sub">A leader and everyone under them, added up</div>
+          </div>
+          <div className="tvb-rhs">
+            <span className="num">
+              {sb.range.label} · {items.length} {items.length === 1 ? "team" : "teams"}, {teams.length} with a sale
+            </span>
+            <PageDots pages={pages} page={page} />
+          </div>
+        </div>
+        <div className="tvb-teamgrid">
+          <div className="tvb-thead tvb-teamhead">
+            <span />
+            <span />
+            <span>Team</span>
+            <span>People</span>
+            <span className="tvb-n">Policies</span>
+            <span className="tvb-th-top">Top seller</span>
+            <span className="tvb-n">Total</span>
+          </div>
+          <div ref={ref} className="min-h-0 flex-1">
+            <ol key={page} className={cn("tvb-tbody h-full", pages > 1 && "board-page")} style={{ gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}>
+              {shown.map((it) =>
+                it.kind === "team" ? (
+                  <TeamRow key={it.team.leaderId} team={it.team} lead={lead} top={it.team.memberIds.map((id) => byId.get(id)).find((r): r is ScoreRow => r !== undefined) ?? null} />
+                ) : (
+                  <QuietRow key={it.team.leaderId} team={it.team} />
+                ),
+              )}
+            </ol>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 
-function TeamRow({ team, top, sellers }: { team: ScoreTeam; top: number; sellers: ScoreRow[] }) {
+function TeamRow({ team, lead, top }: { team: ScoreTeam; lead: number; top: ScoreRow | null }) {
   return (
-    <li data-team={team.leaderId} className="grid min-h-0 items-center gap-x-[1.2em] border-b border-line/60 last:border-b-0" style={{ gridTemplateColumns: COLUMNS }}>
-      <PlaceMark place={team.rank} sold={team.totalCents > 0} className="text-[1.5em]" />
-      <div className="min-w-0">
-        <p className="flex min-w-0 items-center gap-[0.6em]">
-          <span className="min-w-0 truncate text-[1.35em] leading-tight font-extrabold tracking-[-0.02em]">
-            {team.name}
-            {/s$/i.test(team.name.trim()) ? "’" : "’s"} team
-          </span>
-          {team.rankChange !== null && team.rankChange !== 0 && <ChangeChip change={team.rankChange} className="shrink-0" />}
-        </p>
-        <div className="mt-[0.4em] h-[0.5em] overflow-hidden rounded-full bg-track">
-          <div className="h-full rounded-full bg-tide" style={{ width: `${Math.max(1, Math.round((team.totalCents / top) * 100))}%` }} />
-        </div>
-      </div>
-      <div className="min-w-0 leading-tight">
-        <p className="text-[1.15em] font-extrabold whitespace-nowrap">
-          <span className="font-mono">{team.members}</span> {team.members === 1 ? "person" : "people"}
-        </p>
-        <p className="text-[0.95em] font-semibold whitespace-nowrap text-gray-500">
-          <span className="font-mono">{team.activeAgents}</span> sold
-        </p>
-      </div>
-      <p className="text-center font-mono text-[1.6em] font-bold tracking-[-0.02em]">{team.policies}</p>
-      <ul className="grid min-w-0 grid-cols-3 gap-[0.8em]">
-        {sellers.map((s) => (
-          <li key={s.agentId} className="flex min-w-0 items-center gap-[0.5em]">
-            <Avatar name={s.name} tone={s.tone} size={32} className="!h-[1.9em] !w-[1.9em] !text-[0.72em]" />
-            <span className="min-w-0 leading-tight">
-              <span className="block truncate text-[1.15em] font-bold">{shortName(s.name)}</span>
-              <span className="block font-mono text-[1.15em] font-semibold text-gray-600">{formatDollars(s.totalCents)}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-      <p className="text-right font-mono text-[1.75em] font-bold tracking-[-0.03em]">{formatDollars(team.totalCents)}</p>
+    <li data-team={team.leaderId} className="tvb-team">
+      <span className="tvb-trank">
+        <span className="tvb-rk num">{team.rank}</span>
+        <span className="tvb-rchg">
+          <RankChip change={team.rankChange} />
+        </span>
+      </span>
+      <span className="tvb-tmedal">
+        <Medal rank={team.rank} size={28} />
+      </span>
+      <span className="tvb-tname">
+        <span className="tvb-tn-row">
+          <span className="tvb-nm ell">{teamLabel(team.name)}</span>
+        </span>
+        <span className="tvb-share" style={{ width: `${shareOf(team.totalCents, lead).toFixed(1)}%` }} />
+      </span>
+      <span className="tvb-tpeople">
+        <span className="num">
+          {team.members} {team.members === 1 ? "person" : "people"}
+        </span>
+        <span className="tvb-tsold num">{team.activeAgents} sold</span>
+      </span>
+      <span className="tvb-n num">{team.policies}</span>
+      <span className="tvb-ttop">
+        {top && (
+          <>
+            <span className="tvb-ttop-nm ell">{top.name}</span>
+            <span className="tvb-ttop-amt num">{formatDollars(top.totalCents)}</span>
+          </>
+        )}
+      </span>
+      <span className="tvb-n tvb-total num">{formatDollars(team.totalCents)}</span>
+    </li>
+  );
+}
+
+/** A leader whose people have not sold yet: dimmed, after the ranked teams. */
+function QuietRow({ team }: { team: QuietTeam }) {
+  return (
+    <li data-quiet-team={team.leaderId} className="tvb-team none">
+      <span className="tvb-trank">
+        <span className="tvb-rk num">–</span>
+        <span className="tvb-rchg" />
+      </span>
+      <span className="tvb-tmedal" />
+      <span className="tvb-tname">
+        <span className="tvb-tn-row">
+          <span className="tvb-nm ell">{teamLabel(team.name)}</span>
+        </span>
+      </span>
+      <span className="tvb-tpeople">
+        <span className="num">
+          {team.members} {team.members === 1 ? "person" : "people"}
+        </span>
+        <span className="tvb-tsold">No sale yet</span>
+      </span>
+      <span className="tvb-n">—</span>
+      <span className="tvb-ttop" />
+      <span className="tvb-n tvb-total">—</span>
     </li>
   );
 }

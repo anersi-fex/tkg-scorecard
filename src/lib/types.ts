@@ -11,16 +11,22 @@ export interface Agent {
   upline_id?: string | null;
   /** Works in the office: the office group leads every board. */
   in_office?: boolean;
-  /** owner (Anersi, everything), admin (runs the agency), member (everyone else). */
+  /** owner (Anersi, everything), admin (runs the agency), manager (leads a team; 0006), member (everyone else: "Agent" on screen). */
   role?: AgentRole;
+  /**
+   * 0006_crm.sql. False while the upline a joiner picked on the agency link waits for that upline (a
+   * manager above them, or an admin) to confirm it: they count on the agency board, are on nobody's
+   * team, and nobody above sees their clients. Missing (older rows, tests) reads as confirmed.
+   */
+  upline_confirmed?: boolean;
   /** They made their own sign-in (the phone number and the hash never leave the server). */
   has_login?: boolean;
   joined_at?: string | null;
 }
 
-export type AgentRole = "owner" | "admin" | "member";
+export type AgentRole = "owner" | "admin" | "manager" | "member";
 export function isAgentRole(v: unknown): v is AgentRole {
-  return v === "owner" || v === "admin" || v === "member";
+  return v === "owner" || v === "admin" || v === "manager" || v === "member";
 }
 
 export type LoggedBy = "owner" | "team" | "shortcut";
@@ -55,6 +61,7 @@ export interface Sale {
 import { DEFAULT_COLORWAY, type ColorwayKey } from "./colorways";
 import { DEFAULT_PC_COLOR, type PcColorKey } from "./pc-colors";
 import { DEFAULT_SOUND, type SoundKey } from "./sounds";
+import { DEFAULT_CARRIER_PRODUCTS, DEFAULT_LEAD_SOURCES, DEFAULT_RATE_CLASSES, type CarrierProducts } from "./policy-types";
 
 /** The TV's look (Settings > TV look): dark, or light. Browser-safe. */
 export type BoardTheme = "dark" | "light";
@@ -101,8 +108,17 @@ export interface AppSettings {
   agencyName: string;
   /** P&C and the life + P&C total: off (owner, 2026-11-12: "only gonna be life insurance"). Off hides every mention and stops P&C counting. */
   pcEnabled: boolean;
-  /** The shared team password may still log sales (on while people move to their own sign-ins). */
+  /**
+   * Ignored since the CRM (contract decision 2: the shared team password shows the boards only and
+   * never logs). Kept in the JSON so an older row reads the same.
+   */
   teamPasswordLogs: boolean;
+  /** 0006, Settings > Carriers and products: each carrier with the products it writes (Log a sale offers them). */
+  carrierProducts: CarrierProducts;
+  /** Settings > Rate classes. */
+  rateClasses: string[];
+  /** Settings > Lead sources. */
+  leadSources: string[];
 }
 
 export interface PcCarrier {
@@ -138,4 +154,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   agencyName: DEFAULT_AGENCY_NAME,
   pcEnabled: false,
   teamPasswordLogs: true,
+  carrierProducts: DEFAULT_CARRIER_PRODUCTS,
+  rateClasses: DEFAULT_RATE_CLASSES,
+  leadSources: DEFAULT_LEAD_SOURCES,
 };

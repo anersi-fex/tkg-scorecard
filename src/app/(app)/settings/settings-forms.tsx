@@ -1,19 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { COLORWAYS, COLORWAY_KEYS, type ColorwayKey } from "@/lib/colorways";
 import { PC_COLORS, PC_COLOR_KEYS, pcLooksLikeLife, type PcColorKey } from "@/lib/pc-colors";
 import { cn } from "@/components/ui";
 import { BOARD_THEMES, TV_SCREENS, type AppSettings, type BoardTheme, type TvScreens } from "@/lib/types";
 import { SOUNDS, type SoundKey } from "@/lib/sounds";
-import { Button, Input, Label, Notice, Textarea } from "@/components/ui";
-import { ListCard, ListTitle, ROW_INSET } from "@/components/tide";
-import { saveBoardSettings, saveBoardTheme, saveColorway, savePcColor, saveSaleSound, saveTeamGoal, saveTeamPcGoal, saveTvScreens } from "../actions";
-import { saveAgencyName, savePcEnabled, saveTeamPasswordLogs } from "../people-actions";
+import { Icon } from "@/components/ui/icon";
+import { Field, MoneyInput, Panel, Rail, TextArea, TextInput, btn } from "@/components/ui/kit";
+import { Segmented } from "@/components/ui/segmented";
+import { saveBoardSettings, saveBoardTheme, saveColorway, savePcColor, saveSaleLists, saveSaleSound, saveTeamGoal, saveTeamPcGoal, saveTvScreens } from "../actions";
+import { saveAgencyName, savePcEnabled } from "../people-actions";
 import { Switch } from "@/components/switch";
 import { toast } from "@/components/toaster";
-import { KindDot } from "@/components/kind";
+import s from "./settings.module.css";
 
 interface MonthGoal {
   key: string;
@@ -24,9 +26,30 @@ interface MonthGoal {
   current: boolean;
 }
 
+type Result = { ok: true; message?: string } | { ok: false; error: string };
+
+/** Runs an action and says how it went; a dropped connection is said plainly. */
+async function say(work: () => Promise<Result>): Promise<boolean> {
+  try {
+    const r = await work();
+    toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+    return r.ok;
+  } catch {
+    toast("Couldn't reach the server. Try again.", false);
+    return false;
+  }
+}
+
+/**
+ * Settings (the demo the owner approved on 2026-11-12): the agency's name and the board message,
+ * the goals; the lists Log a sale offers (carriers and products, rate classes, lead sources); the
+ * TV (screens, look, sale sound) and the colorway. The sign-ins, the Shortcut and the P&C switch
+ * are the owner's alone; an admin sees them locked, and is sent nothing they would show.
+ */
 export function SettingsForms({
   settings,
   months,
+  progress,
   shortcutReady,
   shortcutTooShort,
   teamPasswordSet,
@@ -35,165 +58,167 @@ export function SettingsForms({
 }: {
   settings: AppSettings;
   months: MonthGoal[];
+  /** This month's life production against its goal, for the line under the goal. */
+  progress: { pct: number; projected: string } | null;
   shortcutReady: boolean;
   /** LOG_TOKEN is set but shorter than the route accepts. */
   shortcutTooShort: boolean;
   teamPasswordSet: boolean;
   base: string;
-  /** The owner alone gets Sign-ins, the Shortcut card and the "Other lines of business" row at the bottom (an admin never sees them). */
+  /** The owner alone gets Sign-ins, the Shortcut card and the P&C switch (an admin never sees them). */
   owner?: boolean;
 }) {
   // Life only (owner, 2026-11-12): with the P&C board off, nothing on this screen names P&C
-  // except the owner's one switch at the very bottom.
+  // except the owner's one switch.
   const pcOn = settings.pcEnabled === true;
   return (
-    <div className="space-y-6">
-      <section>
-        <ListTitle>{pcOn ? "Life goal" : "Goal"}</ListTitle>
-        <p className="mt-1 px-1 text-[13px] text-gray-500">{pcOn ? "Life annual premium" : "Annual premium"} for the whole team: the goal the board measures, with what each day needs.</p>
-        <ListCard className="mt-2 divide-y divide-line">
-          {months.map((m) => (
-            <li key={m.key} className="px-4 py-3">
-              <GoalForm month={m} />
-            </li>
-          ))}
-        </ListCard>
-      </section>
-
-      {pcOn && owner && (
-        <section>
-          <ListTitle>P&amp;C goal</ListTitle>
-          <p className="mt-1 px-1 text-[13px] text-gray-500">P&amp;C annual premium for the P&amp;C team. The P&amp;C screen measures it; the agency total adds both goals up.</p>
-          <ListCard className="mt-2 divide-y divide-line">
+    <div className={s.grid}>
+      <div className={s.col}>
+        <Panel title="Agency name and board message" sub="The agency's name shows beside the Scorecard mark on every screen and the TV." data-agency-name>
+          <AgencyForm name={settings.agencyName} message={settings.message} />
+        </Panel>
+        <Panel title="Goals" sub={pcOn ? "Life annual premium for the whole agency: the line the board measures." : "Annual premium for the whole agency: the line the board measures."}>
+          <div className="stack">
             {months.map((m) => (
-              <li key={m.key} className="px-4 py-3">
-                <GoalForm month={m} pc />
-              </li>
+              <GoalForm key={m.key} month={m} />
             ))}
-          </ListCard>
-        </section>
-      )}
-
-      <section data-agency-name>
-        <ListTitle>Agency name</ListTitle>
-        <p className="mt-1 px-1 text-[13px] text-gray-500">The agency&apos;s name on every screen and the TV, beside the Scorecard mark.</p>
-        <AgencyNameForm name={settings.agencyName} />
-      </section>
-
-      <section>
-        <ListTitle>Colorway</ListTitle>
-        <p className="mt-1 px-1 text-[13px] text-gray-500">The color story on every phone and the TV. Crimson is the default; the app icon stays Crimson.</p>
-        <ColorwayPicker current={settings.colorway} />
-      </section>
-
-      {pcOn && owner && (
-        <section>
-          <ListTitle>P&amp;C color</ListTitle>
-          <p className="mt-1 px-1 text-[13px] text-gray-500">P&amp;C&apos;s own color on the bars, rings and tags, next to life&apos;s. Dusty blue is the default.</p>
-          <PcColorPicker current={settings.pcColor} colorway={settings.colorway} />
-        </section>
-      )}
-
-      <section>
-        <ListTitle>TV look</ListTitle>
-        <p className="mt-1 px-1 text-[13px] text-gray-500">Light or dark on the office TV. The TV follows this within a few seconds.</p>
-        <BoardThemePicker current={settings.boardTheme} />
-      </section>
-
-      <section>
-        <ListTitle>TV screens</ListTitle>
-        <p className="mt-1 px-1 text-[13px] text-gray-500">What the office TV shows. It follows within a few seconds.</p>
-        {/* A TV left on "P&C only" or "Agency total only" from before shows the leaderboard while P&C is off: light that row. */}
-        <TvScreensPicker current={!pcOn && (settings.tvScreens === "pc" || settings.tvScreens === "total") ? "life" : settings.tvScreens} pcOn={pcOn} />
-      </section>
-
-      <section>
-        <ListTitle>Sale sound</ListTitle>
-        <p className="mt-1 px-1 text-[13px] text-gray-500">What the TV plays when a sale lands, with the confetti. Tap the play button to hear one here; tap its name to pick it.</p>
-        <SoundPicker current={settings.sound} />
-      </section>
-
-      <section>
-        <ListTitle>The board</ListTitle>
-        <BoardForm settings={settings} owner={owner} />
-      </section>
-
-      {owner && (
-      <section data-sign-ins>
-        <ListTitle>Sign-ins</ListTitle>
-        <p className="mt-1 px-1 text-[13px] text-gray-500">Only you see this part. Everyone else signs in with their own cell number and password; the join link is on the People page.</p>
-        <ListCard className="mt-2">
-          <li className="px-4 py-3 text-[14px] text-gray-700">
-            <p className="font-bold text-gray-900">Owner password</p>
-            <p className="mt-0.5 text-gray-600">Yours. Changing OWNER_PASSWORD in Vercel signs out every device that used it.</p>
-          </li>
-          <li className="border-t border-line px-4 py-3 text-[14px] text-gray-700">
-            <p className="font-bold text-gray-900">Team password {teamPasswordSet ? "" : "(not set yet)"}</p>
-            <p className="mt-0.5 text-gray-600">
-              {teamPasswordSet
-                ? "For everyone's phone and the TV: they can log sales and see everything, not change goals or the team."
-                : "Add TEAM_PASSWORD in Vercel so the team can sign in on their phones and the TV without your password."}
-            </p>
-          </li>
-          <TeamPasswordLogsRow on={settings.teamPasswordLogs} />
-        </ListCard>
-      </section>
-      )}
-
-      {owner && (
-      <section data-shortcut>
-        <ListTitle>iPhone Shortcut and NFC tags</ListTitle>
-        <ListCard className="mt-2">
-          <li className="px-4 py-3 text-[14px] text-gray-700">
-            {shortcutReady ? (
-              <>
-                <p className="font-bold text-gray-900">Ready</p>
-                <p className="mt-0.5 text-gray-600">
-                  A Shortcut can post a sale straight to the board. The recipe is in SETUP.md (Phase 2). It sends to{" "}
-                  <code className="rounded bg-surface-2 px-1 font-mono text-[12px]">{base || ""}/api/sales</code> with your LOG_TOKEN.
-                </p>
-              </>
-            ) : shortcutTooShort ? (
-              <>
-                <p className="font-bold text-gray-900">LOG_TOKEN is too short</p>
-                <p className="mt-0.5 text-gray-600">Use at least 12 characters (24 or more is best) in Vercel, then redeploy. Until then every Shortcut call is refused.</p>
-              </>
-            ) : (
-              <>
-                <p className="font-bold text-gray-900">Not set up yet</p>
-                <p className="mt-0.5 text-gray-600">Add LOG_TOKEN in Vercel (any long random text) to let a Shortcut log sales. Until then, a tag can simply open each person&apos;s desk link from the People page.</p>
-              </>
+            {progress && (
+              <div>
+                <Rail value={progress.pct / 100} label={`${progress.pct}% of the goal`} />
+                <div className="mt-2 flex justify-between gap-3 small muted">
+                  <span>
+                    <b className="strong">{progress.pct}%</b> so far
+                  </span>
+                  <span>
+                    On pace for <b className="strong">{progress.projected}</b>
+                  </span>
+                </div>
+              </div>
             )}
-          </li>
-        </ListCard>
-      </section>
-      )}
+            <p className="small muted flex items-start gap-2 border-t border-line pt-3">
+              <Icon name="user" size={15} className="mt-0.5 flex-none" />
+              <span>
+                Personal goals are on each person&apos;s card in{" "}
+                <Link href="/team" className="link">
+                  People
+                </Link>
+                .
+              </span>
+            </p>
+          </div>
+        </Panel>
+        {pcOn && owner && (
+          <Panel title="P&C goal" sub="P&C annual premium for the P&C team. The agency total adds both goals up.">
+            <div className="stack">
+              {months.map((m) => (
+                <GoalForm key={m.key} month={m} pc />
+              ))}
+            </div>
+          </Panel>
+        )}
+      </div>
 
-      {owner && (
-        <section data-other-lines>
-          <ListTitle>Other lines of business</ListTitle>
-          <PcBoardSwitch on={pcOn} />
-        </section>
-      )}
+      <div className={s.col}>
+        <Panel title="Carriers and products" sub="What Log a sale offers, one carrier per line with its products after a colon. A change shows there at once." data-carriers>
+          <ListForm field="carrier_products" label="Carriers and products" rows={10} value={Object.entries(settings.carrierProducts).map(([c, p]) => `${c}: ${p.join(", ")}`).join("\n")} help={'Like "Americo: WL/FEX, TERM, IUL". A carrier with no products gets WL/FEX.'} />
+        </Panel>
+        <Panel title="Rate classes" sub="The choices on Log a sale, one per line." data-rate-classes>
+          <ListForm field="rate_classes" label="Rate classes" rows={6} value={settings.rateClasses.join("\n")} />
+        </Panel>
+        <Panel title="Lead sources" sub="The choices on Log a sale, one per line." data-lead-sources>
+          <ListForm field="lead_sources" label="Lead sources" rows={8} value={settings.leadSources.join("\n")} />
+        </Panel>
+        {pcOn && owner && (
+          <Panel title="P&C carriers" sub='The P&C carriers and the lines each one writes, one per line, like "Progressive: Auto, Renters, ATV".'>
+            <PcCarriersForm settings={settings} />
+          </Panel>
+        )}
+      </div>
+
+      <div className={s.col}>
+        <Panel title={owner ? "Only you" : "Only Anersi"} sub={owner ? "Admins see these locked." : "These stay with the owner."} data-owner-only-settings>
+          {owner ? (
+            <div>
+              <div className={s.ownerRow} data-sign-ins>
+                <b>Sign-ins</b>
+                Everyone signs in with their own cell number and password; the join link is on People. Changing OWNER_PASSWORD in Vercel signs out every device that used it.{" "}
+                {teamPasswordSet ? "The team password is for the TV and phones that haven't joined: it shows the boards and never logs a sale." : "Add TEAM_PASSWORD in Vercel for the TV and phones that haven't joined yet."}
+              </div>
+              <div className={s.ownerRow} data-shortcut>
+                <b>iPhone Shortcut and NFC tags</b>
+                {shortcutReady ? (
+                  <>
+                    Ready. A Shortcut can log a sale straight to the board (SETUP.md, Phase 2). It sends to <code className="font-mono">{base || ""}/api/sales</code> with your LOG_TOKEN.
+                  </>
+                ) : shortcutTooShort ? (
+                  "LOG_TOKEN is too short: use at least 12 characters (24 or more is best) in Vercel, then redeploy. Until then every Shortcut call is refused."
+                ) : (
+                  "Not set up yet. Add LOG_TOKEN in Vercel (any long random text) to let a Shortcut log sales. A tag can open each person's desk link from People."
+                )}
+              </div>
+              <div className={s.ownerRow} data-other-lines>
+                <b>Other lines of business</b>
+                <PcBoardSwitch on={pcOn} />
+              </div>
+            </div>
+          ) : (
+            <div>
+              {["Sign-ins", "Other lines of business"].map((t) => (
+                <div key={t} className={s.locked}>
+                  <span className={s.lockIco}>
+                    <Icon name="lock" size={16} />
+                  </span>
+                  <span>
+                    <span className={s.rTitle}>{t}</span>
+                    <span className={s.rSub}>Only Anersi can change this</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+        <Panel title="TV screens" sub="What the office TV shows. It follows within a few seconds.">
+          {/* A TV left on "P&C only" or "Agency total only" from before shows the leaderboard while P&C is off: light that row. */}
+          <TvScreensPicker current={!pcOn && (settings.tvScreens === "pc" || settings.tvScreens === "total") ? "life" : settings.tvScreens} pcOn={pcOn} />
+        </Panel>
+        <Panel title="TV look" sub="Light or dark on the office TV.">
+          <BoardThemePicker current={settings.boardTheme} />
+        </Panel>
+        <Panel title="Sale sound" sub="What the TV plays when a sale lands. Tap a name to pick it; the play button tries it here.">
+          <SoundPicker current={settings.sound} />
+        </Panel>
+        <Panel title="Colorway" sub="The accent on every screen and the TV. The app icon stays Crimson.">
+          <ColorwayPicker current={settings.colorway} />
+        </Panel>
+        {pcOn && owner && (
+          <Panel title="P&C color" sub="P&C's own color on the bars, rings and tags.">
+            <PcColorPicker current={settings.pcColor} colorway={settings.colorway} />
+          </Panel>
+        )}
+      </div>
     </div>
   );
 }
 
-/** The agency's name (the owner or an admin): typed, then Save; every screen shows it on its next load. */
-function AgencyNameForm({ name }: { name: string }) {
+/** The agency's name and the one line at the bottom of the TV, saved together. */
+function AgencyForm({ name, message }: { name: string; message: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   return (
     <form
-      // A tap before the page's script has loaded sends the form the plain way: by post, so what was
-      // typed never lands in the address.
+      // A tap before the page's script has loaded sends the form the plain way: by post, so what was typed never lands in the address.
       method="post"
       onSubmit={(e) => {
         e.preventDefault();
         const form = new FormData(e.currentTarget);
         start(async () => {
           try {
-            const r = await saveAgencyName(form);
+            const msg = String(form.get("message") ?? "").trim();
+            const named = String(form.get("agency_name") ?? "").trim();
+            // The message first (it never fails on its own), then the name, whose words say what changed.
+            const m = msg !== message.trim() ? await saveBoardSettings(form) : null;
+            if (m && !m.ok) return void toast(m.error, false);
+            const r = named !== name || !m ? await saveAgencyName(form) : m;
             toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
             if (r.ok) router.refresh();
           } catch {
@@ -201,57 +226,74 @@ function AgencyNameForm({ name }: { name: string }) {
           }
         });
       }}
-      className="mt-2 flex items-end gap-2 rounded-[22px] bg-surface p-4 shadow-card"
+      className="stack"
     >
-      <div className="min-w-0 flex-1">
-        <Label htmlFor="agency_name">Name</Label>
-        <Input id="agency_name" name="agency_name" defaultValue={name} maxLength={40} placeholder="Lineage Financial" autoComplete="off" required />
+      <Field label="Agency name" htmlFor="agency_name" required>
+        <TextInput id="agency_name" name="agency_name" defaultValue={name} maxLength={40} placeholder="Lineage Financial" autoComplete="off" required />
+      </Field>
+      <Field label="Board message" htmlFor="message" help="One line at the bottom of the TV. Optional.">
+        <TextInput id="message" name="message" defaultValue={message} maxLength={120} placeholder="Every policy counts. Finish strong." />
+      </Field>
+      <div className={s.foot}>
+        <button type="submit" className={btn("primary")} disabled={pending}>
+          {pending ? "Saving..." : "Save"}
+        </button>
       </div>
-      <Button type="submit" className="h-11 rounded-xl" disabled={pending}>
-        {pending ? "Saving..." : "Save"}
-      </Button>
     </form>
   );
 }
 
-/** The owner's switch for the shared team password: on, it logs sales as it always did; off, it only looks. */
-function TeamPasswordLogsRow({ on }: { on: boolean }) {
+/** One list in Settings (one entry per line), saved by saveSaleLists. */
+function ListForm({ field, label, value, rows, help }: { field: "carrier_products" | "rate_classes" | "lead_sources"; label: string; value: string; rows: number; help?: ReactNode }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [checked, setChecked] = useState(on);
-  const [seen, setSeen] = useState(on);
-  if (seen !== on) {
-    setSeen(on);
-    setChecked(on);
-  }
   return (
-    <li className="flex items-center justify-between gap-3 border-t border-line px-4 py-3" data-team-password-logs>
-      <div className="min-w-0">
-        <p className="text-[14px] font-bold text-gray-900">The shared team password can log sales</p>
-        <p className="mt-0.5 text-[13px] text-gray-600">
-          {checked ? "On: a phone on the team password logs for anyone, as before. Turn it off once people have their own sign-ins." : "Off: the team password only looks (the TV). People log with their own sign-in."}
-        </p>
+    <form
+      method="post"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const form = new FormData(e.currentTarget);
+        start(async () => {
+          if (await say(() => saveSaleLists(form))) router.refresh();
+        });
+      }}
+      className="stack"
+    >
+      <Field label={label} htmlFor={field} help={help}>
+        <TextArea id={field} name={field} defaultValue={value} rows={rows} className={s.textarea} spellCheck={false} />
+      </Field>
+      <div className={s.foot}>
+        <button type="submit" className={btn("secondary")} disabled={pending}>
+          {pending ? "Saving..." : "Save"}
+        </button>
       </div>
-      <Switch
-        checked={checked}
-        disabled={pending}
-        label="The shared team password can log sales"
-        onChange={(next) => {
-          setChecked(next);
-          start(async () => {
-            try {
-              const r = await saveTeamPasswordLogs(next);
-              toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-              if (r.ok) router.refresh();
-              else setChecked(!next);
-            } catch {
-              toast("Couldn't reach the server. Try again.", false);
-              setChecked(!next);
-            }
-          });
-        }}
-      />
-    </li>
+    </form>
+  );
+}
+
+/** The P&C carriers (the owner, while P&C is on): the board form with only that box and the message it keeps. */
+function PcCarriersForm({ settings }: { settings: AppSettings }) {
+  const [pending, start] = useTransition();
+  return (
+    <form
+      method="post"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const form = new FormData(e.currentTarget);
+        start(async () => {
+          await say(() => saveBoardSettings(form));
+        });
+      }}
+      className="stack"
+    >
+      <input type="hidden" name="message" value={settings.message} />
+      <TextArea id="pc_carriers" name="pc_carriers" aria-label="P&C carriers" defaultValue={settings.pcCarriers.map((c) => (c.lines.length ? `${c.name}: ${c.lines.join(", ")}` : c.name)).join("\n")} rows={6} />
+      <div className={s.foot}>
+        <button type="submit" className={btn("secondary")} disabled={pending}>
+          {pending ? "Saving..." : "Save"}
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -270,35 +312,21 @@ function PcBoardSwitch({ on }: { on: boolean }) {
     setChecked(on);
   }
   return (
-    <ListCard className="mt-2">
-      <li className="flex items-center justify-between gap-3 px-4 py-3">
-        <div className="min-w-0">
-          <p className="text-[15px] font-bold text-gray-900">P&amp;C board</p>
-          <p className="text-[12px] font-medium text-gray-500">
-            {checked ? "On: P&C sales count on their own board, beside life." : "Off: Scorecard is life insurance only. Turning it on brings back the P&C board and its settings. Nothing is deleted."}
-          </p>
-        </div>
-        <Switch
-          checked={checked}
-          disabled={pending}
-          label="P&C board"
-          onChange={(next) => {
-            setChecked(next);
-            start(async () => {
-              try {
-                const r = await savePcEnabled(next);
-                toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-                if (r.ok) router.refresh();
-                else setChecked(!next);
-              } catch {
-                toast("Couldn't reach the server. Try again.", false);
-                setChecked(!next);
-              }
-            });
-          }}
-        />
-      </li>
-    </ListCard>
+    <div className="mt-2 flex items-center justify-between gap-3">
+      <span>{checked ? "P&C board on: P&C sales count on their own board, beside life." : "P&C board off: life insurance only. Turning it on brings back the P&C board and its settings. Nothing is deleted."}</span>
+      <Switch
+        checked={checked}
+        disabled={pending}
+        label="P&C board"
+        onChange={(next) => {
+          setChecked(next);
+          start(async () => {
+            if (await say(() => savePcEnabled(next))) router.refresh();
+            else setChecked(!next);
+          });
+        }}
+      />
+    </div>
   );
 }
 
@@ -307,7 +335,7 @@ function ColorwayPicker({ current }: { current: ColorwayKey }) {
   const [pending, start] = useTransition();
   const [picked, setPicked] = useState<ColorwayKey>(current);
   return (
-    <div role="radiogroup" aria-label="Colorway" className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <div role="radiogroup" aria-label="Colorway" className={s.swatches}>
       {COLORWAY_KEYS.map((key) => {
         const c = COLORWAYS[key];
         const on = picked === key;
@@ -318,32 +346,25 @@ function ColorwayPicker({ current }: { current: ColorwayKey }) {
             role="radio"
             aria-checked={on}
             disabled={pending}
+            data-colorway={key}
             onClick={() => {
               setPicked(key);
               // This screen changes at once; every other screen on the next load; the TV on its next poll.
               document.documentElement.setAttribute("data-colorway", key);
               start(async () => {
-                let ok = false;
-                try {
-                  const r = await saveColorway(key);
-                  toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-                  ok = r.ok;
-                } catch {
-                  toast("Couldn't reach the server. Try again.", false);
-                }
-                if (ok) router.refresh();
+                if (await say(() => saveColorway(key))) router.refresh();
                 else {
                   setPicked(current);
                   document.documentElement.setAttribute("data-colorway", current);
                 }
               });
             }}
-            className={cn("flex min-h-14 items-center gap-3 rounded-2xl bg-surface px-3 text-left shadow-card transition", on ? "outline-2 outline-accent" : "hover:bg-gray-50")}
+            className={cn(s.swatch, on && s.on)}
           >
-            <span aria-hidden className="h-9 w-9 shrink-0 rounded-xl" style={{ background: `linear-gradient(135deg, ${c.swatch[0]}, ${c.swatch[1]})` }} />
+            <span aria-hidden className={s.chipSq} style={{ background: `linear-gradient(135deg, ${c.swatch[0]}, ${c.swatch[1]})` }} />
             <span className="min-w-0">
-              <span className={cn("block text-[15px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{c.name}</span>
-              <span className="block truncate text-[12px] font-medium text-gray-500">{c.idea}</span>
+              <span className={cn(s.rTitle, on && "accent-text")}>{c.name}</span>
+              <span className={cn(s.rSub, "truncate")}>{c.idea}</span>
             </span>
           </button>
         );
@@ -358,7 +379,7 @@ function PcColorPicker({ current, colorway }: { current: PcColorKey; colorway: C
   const [picked, setPicked] = useState<PcColorKey>(current);
   return (
     <>
-      <div role="radiogroup" aria-label="P&C color" className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div role="radiogroup" aria-label="P&C color" className={s.swatches}>
         {PC_COLOR_KEYS.map((key) => {
           const c = PC_COLORS[key];
           const on = picked === key;
@@ -372,37 +393,28 @@ function PcColorPicker({ current, colorway }: { current: PcColorKey; colorway: C
               disabled={pending}
               onClick={() => {
                 setPicked(key);
-                // This screen changes at once; every other screen on the next load; the TV on its next poll.
                 document.documentElement.setAttribute("data-pc-color", key);
                 start(async () => {
-                  let ok = false;
-                  try {
-                    const r = await savePcColor(key);
-                    toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-                    ok = r.ok;
-                  } catch {
-                    toast("Couldn't reach the server. Try again.", false);
-                  }
-                  if (ok) router.refresh();
+                  if (await say(() => savePcColor(key))) router.refresh();
                   else {
                     setPicked(current);
                     document.documentElement.setAttribute("data-pc-color", current);
                   }
                 });
               }}
-              className={cn("flex min-h-14 items-center gap-3 rounded-2xl bg-surface px-3 text-left shadow-card transition", on ? "outline-2 outline-accent" : "hover:bg-gray-50")}
+              className={cn(s.swatch, on && s.on)}
             >
-              <span aria-hidden className="h-9 w-9 shrink-0 rounded-xl" style={{ background: `linear-gradient(135deg, ${c.swatch[0]}, ${c.swatch[1]})` }} />
+              <span aria-hidden className={s.chipSq} style={{ background: `linear-gradient(135deg, ${c.swatch[0]}, ${c.swatch[1]})` }} />
               <span className="min-w-0">
-                <span className={cn("block text-[15px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{c.name}</span>
-                <span className="block truncate text-[12px] font-medium text-gray-500">{c.idea}</span>
+                <span className={cn(s.rTitle, on && "accent-text")}>{c.name}</span>
+                <span className={cn(s.rSub, "truncate")}>{c.idea}</span>
               </span>
             </button>
           );
         })}
       </div>
       {pcLooksLikeLife(colorway, picked) && (
-        <p className="mt-2 px-1 text-[13px] font-medium text-down">
+        <p className="mt-2 small down-text">
           {COLORWAYS[colorway].name} is close to {PC_COLORS[picked].name}, so P&amp;C can look like life. {colorway === "emerald" ? "Dusty blue or Silver" : "Silver or Sage"} keeps them apart.
         </p>
       )}
@@ -410,27 +422,7 @@ function PcColorPicker({ current, colorway }: { current: PcColorKey; colorway: C
   );
 }
 
-const BOARD_THEME_OPTIONS: Record<BoardTheme, { label: string; icon: React.ReactNode }> = {
-  dark: {
-    label: "Dark",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
-      </svg>
-    ),
-  },
-  light: {
-    label: "Light",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-        <circle cx="12" cy="12" r="4" />
-        <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-      </svg>
-    ),
-  },
-};
-
-/** Light / Dark for the TV, saved on tap (like the colorway); the TV picks it up on its next poll. */
+/** Light / Dark for the TV, saved on tap; the TV picks it up on its next poll. */
 function BoardThemePicker({ current }: { current: BoardTheme }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -442,74 +434,30 @@ function BoardThemePicker({ current }: { current: BoardTheme }) {
     setPicked(current);
   }
   return (
-    <div role="radiogroup" aria-label="TV look" className="mt-2 grid grid-cols-2 gap-1 rounded-2xl bg-track p-1">
-      {BOARD_THEMES.map((key) => {
-        const o = BOARD_THEME_OPTIONS[key];
-        const on = picked === key;
-        return (
-          <button
-            key={key}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            disabled={pending}
-            onClick={() => {
-              setPicked(key);
-              start(async () => {
-                try {
-                  const r = await saveBoardTheme(key);
-                  toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-                  if (r.ok) router.refresh();
-                  else setPicked(current);
-                } catch {
-                  toast("Couldn't reach the server. Try again.", false);
-                  setPicked(current);
-                }
-              });
-            }}
-            className={cn(
-              "flex min-h-12 items-center justify-center gap-2 rounded-xl text-[15px] font-bold transition",
-              on ? "bg-segment text-gray-900 shadow-card" : "text-gray-600 hover:text-gray-900",
-            )}
-          >
-            {o.icon}
-            {o.label}
-          </button>
-        );
-      })}
-    </div>
+    <Segmented<BoardTheme>
+      label="TV look"
+      full
+      value={picked}
+      items={BOARD_THEMES.map((key) => ({ key, label: key === "dark" ? "Dark" : "Light", disabled: pending }))}
+      onChange={(key) => {
+        setPicked(key);
+        start(async () => {
+          if (await say(() => saveBoardTheme(key))) router.refresh();
+          else setPicked(current);
+        });
+      }}
+    />
   );
 }
 
-const screenIcon = (d: string) => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d={d} />
-  </svg>
-);
-
-const TV_SCREEN_OPTIONS: Record<TvScreens, { label: string; note: string; icon: React.ReactNode; tone: string }> = {
-  rotate: {
-    label: "Rotate",
-    note: "The leaderboard 40 s, then each other screen 20 s",
-    tone: "bg-surface-2 text-gray-700",
-    icon: screenIcon("M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"),
-  },
-  life: { label: "Leaderboard", note: "everyone's month, the office group on top", tone: "bg-tint text-accent-text", icon: screenIcon("M4 20v-6h4v6M10 20V5h4v15M16 20v-9h4v9") },
-  scoreboard: { label: "Scoreboard", note: "the top numbers, where agents stand, who moved most", tone: "bg-surface-2 text-gray-700", icon: screenIcon("M4 5h7v6H4zM13 5h7v6h-7zM4 13h16v6H4z") },
-  production: { label: "Production", note: "the day-by-day table", tone: "bg-surface-2 text-gray-700", icon: screenIcon("M4 5h16v14H4zM4 10h16M4 15h16M10 5v14") },
-  teams: { label: "Teams", note: "each team's numbers", tone: "bg-surface-2 text-gray-700", icon: screenIcon("M12 4v5M6 20v-4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4M12 9v5M10 4h4M4 20h4M16 20h4") },
-  pc: { label: "P&C only", note: "P&C sales and the P&C team", tone: "bg-pc-tint", icon: <KindDot kind="pc" className="h-3 w-3" /> },
-  total: {
-    label: "Agency total only",
-    note: "life and P&C added up",
-    tone: "bg-surface-2",
-    icon: (
-      <span aria-hidden className="flex h-3 w-3 overflow-hidden rounded-full">
-        <span className="h-full w-1/2 bg-accent" />
-        <span className="h-full w-1/2 bg-pc" />
-      </span>
-    ),
-  },
+const TV_SCREEN_OPTIONS: Record<TvScreens, { label: string; note: string }> = {
+  rotate: { label: "Rotate", note: "Leaderboard 40 s, the others 20 s each" },
+  life: { label: "Leaderboard", note: "Everyone's month, ranked" },
+  scoreboard: { label: "Scoreboard", note: "Production, policies, where agents stand" },
+  production: { label: "Production", note: "Day by day for each person" },
+  teams: { label: "Teams", note: "One row per leader" },
+  pc: { label: "P&C only", note: "P&C sales and the P&C team" },
+  total: { label: "Agency total only", note: "Life and P&C added up" },
 };
 
 /** Settings > TV screens: the TV rotates its screens, or stays on one; saved on a tap. P&C's two screens are offered only while P&C is on. */
@@ -517,7 +465,6 @@ function TvScreensPicker({ current, pcOn }: { current: TvScreens; pcOn: boolean 
   const router = useRouter();
   const [pending, start] = useTransition();
   const [picked, setPicked] = useState<TvScreens>(current);
-  // Follow the saved value when the page refreshes (a change made on another phone shows here).
   const [seen, setSeen] = useState(current);
   if (seen !== current) {
     setSeen(current);
@@ -527,55 +474,34 @@ function TvScreensPicker({ current, pcOn }: { current: TvScreens; pcOn: boolean 
     if (key === picked) return;
     setPicked(key);
     start(async () => {
-      try {
-        const r = await saveTvScreens(key);
-        toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-        if (r.ok) router.refresh();
-        else setPicked(current);
-      } catch {
-        toast("Couldn't reach the server. Try again.", false);
-        setPicked(current);
-      }
+      if (await say(() => saveTvScreens(key))) router.refresh();
+      else setPicked(current);
     });
   };
   return (
-    <div role="radiogroup" aria-label="TV screens">
-      <ListCard className="mt-2">
-        {TV_SCREENS.filter((key) => pcOn || (key !== "pc" && key !== "total")).map((key) => {
-          const o = TV_SCREEN_OPTIONS[key];
-          const on = picked === key;
-          return (
-            <li key={key} className={ROW_INSET.button}>
-              <button type="button" role="radio" aria-checked={on} disabled={pending} onClick={() => pick(key)} className="flex min-h-[60px] w-full items-center gap-3 px-4 py-2 text-left">
-                <span aria-hidden className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full", o.tone)}>
-                  {o.icon}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className={cn("block truncate text-[15px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{o.label}</span>
-                  <span className="block truncate text-[12px] font-medium text-gray-500">{o.note}</span>
-                </span>
-                <span aria-hidden className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", on ? "bg-tide-strong text-white" : "border border-line")}>
-                  {on && (
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                      <path d="M5 12.5l4.5 4.5L19 7.5" />
-                    </svg>
-                  )}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ListCard>
+    <div role="radiogroup" aria-label="TV screens" className={s.radios}>
+      {TV_SCREENS.filter((key) => pcOn || (key !== "pc" && key !== "total")).map((key) => {
+        const o = TV_SCREEN_OPTIONS[key];
+        const on = picked === key;
+        return (
+          <button key={key} type="button" role="radio" aria-checked={on} disabled={pending} onClick={() => pick(key)} className={s.radio}>
+            <span aria-hidden className={cn(s.dot, on && s.on)} />
+            <span className="min-w-0">
+              <span className={s.rTitle}>{o.label}</span>
+              <span className={s.rSub}>{o.note}</span>
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-/** The sound rows: a play button hears one here; a tap on the name picks it and saves at once. */
+/** The sound rows: the play button hears one here; a tap on the name picks it and saves at once. */
 function SoundPicker({ current }: { current: SoundKey }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [picked, setPicked] = useState<SoundKey>(current);
-  // Follow the saved value when the page refreshes (a change made on another phone shows here).
   const [seen, setSeen] = useState(current);
   if (seen !== current) {
     setSeen(current);
@@ -611,61 +537,33 @@ function SoundPicker({ current }: { current: SoundKey }) {
     if (key === picked) return;
     setPicked(key);
     start(async () => {
-      try {
-        const r = await saveSaleSound(key);
-        toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-        if (r.ok) router.refresh();
-        else setPicked(current);
-      } catch {
-        toast("Couldn't reach the server. Try again.", false);
-        setPicked(current);
-      }
+      if (await say(() => saveSaleSound(key))) router.refresh();
+      else setPicked(current);
     });
   };
-  const rows: Array<{ key: SoundKey; label: string; note: string; file: string | null }> = [...SOUNDS, { key: "off", label: "Off", note: "confetti only", file: null }];
+  const rows: Array<{ key: SoundKey; label: string; note: string; file: string | null }> = [...SOUNDS, { key: "off", label: "Off", note: "The banner only, no sound", file: null }];
   return (
-    <div role="radiogroup" aria-label="Sale sound">
-      <ListCard className="mt-2">
-        {rows.map((r) => {
-          const on = picked === r.key;
-          const live = playing === r.key;
-          return (
-            <li key={r.key} className={cn("flex items-center gap-3 px-4 py-2", ROW_INSET.button)}>
-              {r.file ? (
-                <button
-                  type="button"
-                  aria-label={`${live ? "Stop" : "Play"} ${r.label}`}
-                  onClick={() => play(r.key, r.file as string)}
-                  className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition", live ? "bg-tide-strong text-white shadow-glow" : "bg-tint text-accent-text")}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" className={cn("fill-current", !live && "ml-0.5")} aria-hidden>
-                    {live ? <rect x="6.5" y="6.5" width="11" height="11" rx="2" /> : <path d="M7 5.5v13l11-6.5z" />}
-                  </svg>
-                </button>
-              ) : (
-                <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-2 text-gray-400">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <path d="M4 9.5v5h3.5L13 19V5L7.5 9.5zM17 9l4 6M21 9l-4 6" />
-                  </svg>
-                </span>
-              )}
-              <button type="button" role="radio" aria-checked={on} disabled={pending} onClick={() => pick(r.key)} className="flex min-h-11 min-w-0 flex-1 items-center justify-between gap-3 text-left">
-                <span className="min-w-0">
-                  <span className={cn("block truncate text-[15px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{r.label}</span>
-                  <span className="block truncate text-[12px] font-medium text-gray-500">{r.note}</span>
-                </span>
-                <span aria-hidden className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", on ? "bg-tide-strong text-white" : "border border-line")}>
-                  {on && (
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                      <path d="M5 12.5l4.5 4.5L19 7.5" />
-                    </svg>
-                  )}
-                </span>
+    <div role="radiogroup" aria-label="Sale sound" className={s.radios} data-sound>
+      {rows.map((r) => {
+        const on = picked === r.key;
+        const live = playing === r.key;
+        return (
+          <div key={r.key} className={s.soundRow}>
+            <button type="button" role="radio" aria-checked={on} disabled={pending} onClick={() => pick(r.key)} className={s.radio}>
+              <span aria-hidden className={cn(s.dot, on && s.on)} />
+              <span className="min-w-0">
+                <span className={s.rTitle}>{r.label}</span>
+                <span className={s.rSub}>{r.note.charAt(0).toUpperCase() + r.note.slice(1)}</span>
+              </span>
+            </button>
+            {r.file && (
+              <button type="button" aria-label={`${live ? "Stop" : "Play"} ${r.label}`} onClick={() => play(r.key, r.file as string)} className={cn(s.play, live && s.live)}>
+                <Icon name={live ? "close" : "play"} size={16} />
               </button>
-            </li>
-          );
-        })}
-      </ListCard>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -677,78 +575,23 @@ function GoalForm({ month, pc = false }: { month: MonthGoal; pc?: boolean }) {
   const cents = pc ? month.pcCents : month.cents;
   return (
     <form
-      // A tap before the page's script has loaded sends the form the plain way: by post, so what was
-      // typed never lands in the address.
+      // A tap before the page's script has loaded sends the form the plain way: by post, so what was typed never lands in the address.
       method="post"
       onSubmit={(e) => {
         e.preventDefault();
         const form = new FormData(e.currentTarget);
         start(async () => {
-          const r = pc ? await saveTeamPcGoal(month.key, form) : await saveTeamGoal(month.key, form);
-          toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+          await say(() => (pc ? saveTeamPcGoal(month.key, form) : saveTeamGoal(month.key, form)));
         });
       }}
-      className="flex items-end gap-2"
+      className={s.formRow}
     >
-      <div className="min-w-0 flex-1">
-        <Label htmlFor={id}>
-          {month.label}
-          {month.current ? " (this month)" : ""}
-        </Label>
-        <div className="relative">
-          <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 font-mono text-[16px] font-bold text-gray-400">$</span>
-          <Input id={id} name={pc ? "pc_goal" : "goal"} inputMode="decimal" defaultValue={cents ? String(cents / 100) : ""} placeholder={pc ? "30000" : "150000"} className="pl-7 font-mono" />
-        </div>
-      </div>
-      <Button type="submit" className="h-11 rounded-xl" disabled={pending}>
+      <Field label={`${month.label}${month.current ? " (this month)" : ""}`} htmlFor={id}>
+        <MoneyInput id={id} name={pc ? "pc_goal" : "goal"} defaultValue={cents ? String(cents / 100) : ""} placeholder={pc ? "30000" : "150000"} />
+      </Field>
+      <button type="submit" className={btn("primary")} disabled={pending}>
         {pending ? "Saving..." : "Save"}
-      </Button>
-    </form>
-  );
-}
-
-function BoardForm({ settings, owner }: { settings: AppSettings; owner: boolean }) {
-  const [pending, start] = useTransition();
-  // The P&C carriers are the owner's (saveBoardSettings keeps the stored ones for an admin).
-  const pcOn = settings.pcEnabled === true && owner;
-  return (
-    <form
-      // A tap before the page's script has loaded sends the form the plain way: by post, so what was
-      // typed never lands in the address.
-      method="post"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const form = new FormData(e.currentTarget);
-        start(async () => {
-          const r = await saveBoardSettings(form);
-          toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
-        });
-      }}
-      className="mt-2 space-y-3 rounded-[22px] bg-surface p-4 shadow-card"
-    >
-      <div>
-        <Label htmlFor="message">Message on the board (one line, optional)</Label>
-        <Input id="message" name="message" defaultValue={settings.message} maxLength={120} placeholder="Every policy counts. Finish strong." />
-      </div>
-      <div>
-        <Label htmlFor="carriers">{pcOn ? "Life carriers" : "Carriers"} on Log a sale (one per line; a sale always names one)</Label>
-        <Textarea id="carriers" name="carriers" defaultValue={settings.carriers.join("\n")} rows={7} className="font-medium" />
-      </div>
-      <div>
-        <Label htmlFor="products">{pcOn ? "Life product chips" : "Product chips"} on Log a sale (one per line)</Label>
-        <Textarea id="products" name="products" defaultValue={settings.products.join("\n")} rows={5} className="font-medium" />
-      </div>
-      {/* Without this box the stored P&C carriers stay as they are (saveBoardSettings keeps them). */}
-      {pcOn && (
-        <div>
-          <Label htmlFor="pc_carriers">P&amp;C carriers and the lines each one writes (one per line, like &quot;Progressive: Auto, Renters, ATV&quot;)</Label>
-          <Textarea id="pc_carriers" name="pc_carriers" defaultValue={settings.pcCarriers.map((c) => (c.lines.length ? `${c.name}: ${c.lines.join(", ")}` : c.name)).join("\n")} rows={6} className="font-medium" />
-        </div>
-      )}
-      <Button type="submit" className="h-11 rounded-xl" disabled={pending}>
-        {pending ? "Saving..." : "Save"}
-      </Button>
-      <Notice tone="blue">The TV board refreshes on its own every few seconds. Open it from the initials menu, then press F for full screen.</Notice>
+      </button>
     </form>
   );
 }

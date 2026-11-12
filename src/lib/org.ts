@@ -10,6 +10,12 @@ import type { Agent } from "./types";
  *
  * Bad data never hangs anything: an upline that does not exist counts as none, a person who is
  * their own upline counts as having none, and a loop is walked once (every walk stops at a repeat).
+ *
+ * Confirmed uplines only (0006_crm.sql, contract decision 6): an upline a joiner picked that waits
+ * to be confirmed (`upline_confirmed` false) counts as none, so that person is on nobody's team
+ * (team numbers, Teams, My team) and nobody above sees their clients, while they still count on
+ * the agency board. `{ includeUnconfirmed: true }` builds the tree as typed (the People page's
+ * "wants to join" list, and a loop check, read the waiting upline too).
  */
 export interface Org {
   /** The people directly under `id`, by name. */
@@ -37,7 +43,17 @@ export interface Org {
   myTeamLeader(id: string): string | null;
 }
 
-export function buildOrg(agents: Agent[]): Org {
+export interface OrgOptions {
+  /** Count an upline that waits to be confirmed as if it were confirmed (default false). */
+  includeUnconfirmed?: boolean;
+}
+
+/** The upline that counts for teams and client visibility: null while a picked upline waits to be confirmed. */
+export function confirmedUplineOf(a: Pick<Agent, "upline_id" | "upline_confirmed">): string | null {
+  return a.upline_confirmed === false ? null : (a.upline_id ?? null);
+}
+
+export function buildOrg(agents: Agent[], opts: OrgOptions = {}): Org {
   const byId = new Map<string, Agent>();
   for (const a of agents) byId.set(a.id, a);
   const byName = (x: string, y: string) => (byId.get(x)?.name ?? "").localeCompare(byId.get(y)?.name ?? "") || x.localeCompare(y);
@@ -45,7 +61,8 @@ export function buildOrg(agents: Agent[]): Org {
   const upline = new Map<string, string | null>();
   const children = new Map<string, string[]>();
   for (const a of agents) {
-    const up = a.upline_id && a.upline_id !== a.id && byId.has(a.upline_id) ? a.upline_id : null;
+    const raw = opts.includeUnconfirmed ? (a.upline_id ?? null) : confirmedUplineOf(a);
+    const up = raw && raw !== a.id && byId.has(raw) ? raw : null;
     upline.set(a.id, up);
     if (up) {
       const list = children.get(up);

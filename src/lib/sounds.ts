@@ -18,7 +18,7 @@ export const SOUNDS: SoundChoice[] = [
   { key: "register", label: "Cash register", note: "ka-ching, 3 seconds", file: "/sounds/register.mp3" },
   { key: "air-horn", label: "Air horn", note: "the stadium one, 2 seconds", file: "/sounds/air-horn.mp3" },
   { key: "guitar-riff", label: "Guitar riff", note: "one riff, 2 seconds", file: "/sounds/guitar-riff.mp3" },
-  { key: "upbeat-intro", label: "Upbeat intro", note: "plays while the confetti falls", file: "/sounds/upbeat-intro.mp3" },
+  { key: "upbeat-intro", label: "Upbeat intro", note: "a few seconds of music", file: "/sounds/upbeat-intro.mp3" },
 ];
 
 export const DEFAULT_SOUND: SoundKey = "register";

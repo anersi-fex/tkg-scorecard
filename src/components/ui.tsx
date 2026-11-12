@@ -6,87 +6,69 @@ export function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+type ButtonVariant = "primary" | "secondary" | "danger" | "ghost" | "quiet";
 
+/**
+ * Buttons in the demo's look (the .btn classes in globals.css): primary wears the Scorecard
+ * gradient with white words; secondary is a hairline outline; quiet a raised fill; ghost the
+ * secondary text color; danger a rose outline (behind and removing never wear the brand red).
+ */
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: "bg-tide-strong text-white shadow-glow hover:brightness-110 disabled:opacity-50 disabled:shadow-none",
-  secondary: "bg-surface text-gray-900 border border-line shadow-card hover:bg-gray-50 disabled:text-gray-400",
-  danger: "bg-danger text-white hover:brightness-110 disabled:opacity-50",
-  ghost: "text-accent-text hover:bg-tint",
+  primary: "btn btn-primary",
+  secondary: "btn btn-secondary",
+  danger: "btn btn-danger",
+  ghost: "btn btn-ghost",
+  quiet: "btn btn-quiet",
 };
 
 export function Button({ variant = "primary", className, ...props }: ComponentProps<"button"> & { variant?: ButtonVariant }) {
-  return (
-    <button
-      {...props}
-      className={cn(
-        "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed",
-        variantClasses[variant],
-        className,
-      )}
-    />
-  );
+  return <button {...props} className={cn(variantClasses[variant], "h-auto min-h-10 py-2 text-center leading-tight whitespace-normal", className)} />;
 }
 
 export function LinkButton({ variant = "primary", className, ...props }: ComponentProps<typeof Link> & { variant?: ButtonVariant }) {
-  return (
-    <Link
-      {...props}
-      className={cn("inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition", variantClasses[variant], className)}
-    />
-  );
+  return <Link {...props} className={cn(variantClasses[variant], "h-auto min-h-10 py-2 text-center leading-tight whitespace-normal", className)} />;
 }
 
+/** The filled input (no border, radius 10, 44px tall; a coral ring on keyboard focus). */
 export function Input({ className, ...props }: ComponentProps<"input">) {
-  return (
-    <input
-      {...props}
-      className={cn(
-        "min-h-11 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-gray-900 placeholder:text-gray-500 focus:border-accent focus:ring-2 focus:ring-tint focus:outline-none",
-        className,
-      )}
-    />
-  );
+  return <input {...props} className={cn("input", className)} />;
 }
 
 export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
+  return <textarea {...props} className={cn("textarea", className)} />;
+}
+
+/** A select with the chevron (the wrapper takes `wrapClassName`; `className` goes on the select itself). */
+export function Select({ className, wrapClassName, ...props }: ComponentProps<"select"> & { wrapClassName?: string }) {
   return (
-    <textarea
-      {...props}
-      className={cn(
-        "w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-gray-900 placeholder:text-gray-500 focus:border-accent focus:ring-2 focus:ring-tint focus:outline-none",
-        className,
-      )}
-    />
+    <span className={cn("select-wrap block", props.disabled && "is-disabled", wrapClassName)}>
+      <select {...props} className={cn("select", className)} />
+      <span className="select-chev" aria-hidden>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6.5 9.5 12 15l5.5-5.5" />
+        </svg>
+      </span>
+    </span>
   );
 }
 
-export function Select({ className, ...props }: ComponentProps<"select">) {
-  return (
-    <select
-      {...props}
-      className={cn(
-        "min-h-11 w-full rounded-xl border border-line bg-surface px-3 py-2.5 text-base text-gray-900 focus:border-accent focus:ring-2 focus:ring-tint focus:outline-none",
-        className,
-      )}
-    />
-  );
-}
-
+/** The label above a field (500 weight, the main text color). */
 export function Label({ className, ...props }: ComponentProps<"label">) {
-  return <label {...props} className={cn("mb-1 block text-sm font-medium text-gray-700", className)} />;
+  return <label {...props} className={cn("mb-2 block text-[13.5px] font-medium text-fg", className)} />;
 }
 
+/** A card: the card color, a 1px hairline, radius 16, no shadow (the demo's .card). */
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn("rounded-[22px] bg-surface p-4 shadow-card", className)}>{children}</div>;
+  return <div className={cn("rounded-2xl border border-line bg-surface p-4 sm:p-5", className)}>{children}</div>;
 }
 
+/** The page title (500 weight, 27px; 24px on a phone) with a line under it and an action at the right. */
 export function PageTitle({ children, action, sub }: { children: ReactNode; action?: ReactNode; sub?: ReactNode }) {
   return (
-    <div className="mb-4 flex items-end justify-between gap-3">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0">
-        <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.035em] text-gray-900">{children}</h1>
-        {sub && <p className="mt-0.5 text-[14px] font-medium text-gray-500">{sub}</p>}
+        <h1 className="text-[24px] leading-tight font-medium tracking-[-0.01em] text-fg sm:text-[27px]">{children}</h1>
+        {sub && <p className="mt-1 text-[13.5px] text-fg-2">{sub}</p>}
       </div>
       {action}
     </div>
@@ -95,26 +77,28 @@ export function PageTitle({ children, action, sub }: { children: ReactNode; acti
 
 type BadgeTone = "gray" | "blue" | "green" | "amber" | "red" | "purple";
 const badgeTones: Record<BadgeTone, string> = {
-  gray: "bg-gray-100 text-gray-700",
+  gray: "bg-flat-bg text-flat",
   blue: "bg-chip text-chip-text",
-  green: "bg-green-100 text-green-800",
-  amber: "bg-amber-100 text-amber-800",
-  red: "bg-red-100 text-red-800",
+  green: "bg-up-bg text-up",
+  amber: "bg-down-bg text-down",
+  red: "bg-rose-bg text-rose",
   purple: "bg-purple-100 text-purple-800",
 };
 
+/** A small pill (the demo's .pill). */
 export function Badge({ tone = "gray", children, className }: { tone?: BadgeTone; children: ReactNode; className?: string }) {
-  return <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold", badgeTones[tone], className)}>{children}</span>;
+  return <span className={cn("inline-flex h-[22px] items-center rounded-full px-[9px] text-[12px] leading-none font-medium whitespace-nowrap", badgeTones[tone], className)}>{children}</span>;
 }
 
+/** A quiet message in a tinted box (blue = info, red = a problem, green = done, amber = behind or waiting). */
 export function Notice({ tone = "blue", children }: { tone?: "blue" | "red" | "green" | "amber"; children: ReactNode }) {
   const tones = {
-    blue: "border-blue-200 bg-blue-50 text-blue-900",
-    red: "border-red-200 bg-red-50 text-red-900",
-    green: "border-green-200 bg-green-50 text-green-900",
-    amber: "border-amber-200 bg-amber-50 text-amber-900",
+    blue: "border-blue-200 bg-info-bg text-info",
+    red: "border-red-200 bg-rose-bg text-rose",
+    green: "border-green-200 bg-up-bg text-up",
+    amber: "border-amber-200 bg-down-bg text-down",
   };
-  return <div className={cn("rounded-2xl border px-3.5 py-2.5 text-sm", tones[tone])}>{children}</div>;
+  return <div className={cn("rounded-xl border px-3.5 py-2.5 text-[13.5px] font-medium", tones[tone])}>{children}</div>;
 }
 
 /** "Oct 27, 2026" from a date-only string or an instant (shown in Detroit time). */

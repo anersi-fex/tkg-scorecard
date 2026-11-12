@@ -1,9 +1,8 @@
 "use client";
 
 import { useRef, useState, useTransition, type FormEvent } from "react";
-import { Button, Card, Input, Label } from "@/components/ui";
 import { Switch } from "@/components/switch";
-import { Eyebrow } from "@/components/tide";
+import { Field, Panel, TextInput, btn } from "@/components/ui/kit";
 import { toast } from "@/components/toaster";
 import { PasswordField } from "@/app/login/password-field";
 import { changeMyPassword, signOutEverywhere, updateMyProfile } from "@/app/(app)/people-actions";
@@ -20,16 +19,16 @@ interface Props {
   ownSession: boolean;
 }
 
-const FIELD = "h-12 rounded-2xl text-[17px]";
-
 /** Forms submit through onSubmit, so a refused save keeps what was typed. */
 export function ProfileForms({ name, phone, inOffice, upline, hasLogin, ownSession }: Props) {
   return (
-    <>
+    <div className="grid-2 items-start">
       <AboutForm name={name} phone={phone} inOffice={inOffice} upline={upline} />
-      <PasswordForm hasLogin={hasLogin} />
-      {ownSession && <SignOutCard />}
-    </>
+      <div className="stack">
+        <PasswordForm hasLogin={hasLogin} />
+        {ownSession && <SignOutCard />}
+      </div>
+    </div>
   );
 }
 
@@ -66,39 +65,34 @@ function AboutForm({ name, phone, inOffice, upline }: Pick<Props, "name" | "phon
   }
 
   return (
-    <Card className="space-y-4">
-      <form method="post" onSubmit={onSubmit} className="space-y-4" data-me="about">
-        <div>
-          <Label htmlFor="me-name" className="font-semibold">
-            First and last name
-          </Label>
-          <Input id="me-name" name="name" defaultValue={name} autoComplete="name" autoCapitalize="words" maxLength={60} className={FIELD} required />
+    <Panel title="About you" sub="Your name and number, as the board and your sign-in know them.">
+      <form method="post" onSubmit={onSubmit} className="stack" data-me="about">
+        <Field label="First and last name" htmlFor="me-name" required>
+          <TextInput id="me-name" name="name" defaultValue={name} autoComplete="name" autoCapitalize="words" maxLength={60} required />
+        </Field>
+        <Field label="Cell number" htmlFor="me-phone" help="This is the number you sign in with.">
+          <TextInput id="me-phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" defaultValue={phone} placeholder="248 555 0100" />
+        </Field>
+        {error && <p className="form-alert">{error}</p>}
+        <div className="flex justify-end">
+          <button type="submit" className={btn("primary")} disabled={pending}>
+            {pending ? "Saving..." : "Save"}
+          </button>
         </div>
-        <div>
-          <Label htmlFor="me-phone" className="font-semibold">
-            Cell number
-          </Label>
-          <Input id="me-phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" defaultValue={phone} placeholder="248 555 0100" className={FIELD} />
-          <p className="mt-1.5 text-[12.5px] text-gray-500">This is the number you sign in with.</p>
-        </div>
-        {error && <p className="text-[13px] leading-snug text-red-700">{error}</p>}
-        <Button type="submit" className="h-12 w-full rounded-2xl text-[15px]" disabled={pending}>
-          {pending ? "Saving..." : "Save"}
-        </Button>
       </form>
-      <div className="flex min-h-12 items-center justify-between gap-3 border-t border-line pt-4">
+      <div className="mt-4 flex min-h-12 items-center justify-between gap-3 border-t border-line pt-4">
         <div className="min-w-0">
-          <p className="text-[16px] font-semibold text-gray-900">I work in the office</p>
-          <p className="text-[13px] leading-snug text-gray-500">The office group is at the top of the board.</p>
+          <p className="strong">I work in the office</p>
+          <p className="small muted">The office group is at the top of the board.</p>
         </div>
         <Switch checked={office} onChange={toggleOffice} disabled={officeBusy} label="I work in the office" />
       </div>
-      <div className="border-t border-line pt-4" data-me="upline">
-        <Eyebrow>Your upline</Eyebrow>
-        <p className="mt-1.5 text-[16px] font-semibold text-gray-900">{upline ?? "Nobody yet"}</p>
-        <p className="text-[13px] text-gray-500">Ask an admin to change it.</p>
+      <div className="mt-4 border-t border-line pt-4" data-me="upline">
+        <p className="small muted">Your upline</p>
+        <p className="mt-1 strong">{upline ?? "Nobody yet"}</p>
+        <p className="small muted">Ask an admin to change it.</p>
       </div>
-    </Card>
+    </Panel>
   );
 }
 
@@ -122,30 +116,24 @@ function PasswordForm({ hasLogin }: { hasLogin: boolean }) {
   }
 
   return (
-    <Card>
-      <form ref={formRef} method="post" onSubmit={onSubmit} className="space-y-4" data-me="password">
-        <h2 className="text-[18px] leading-tight font-extrabold tracking-[-0.02em] text-gray-900">{hasLogin ? "Change password" : "Set a password"}</h2>
+    <Panel title={hasLogin ? "Change password" : "Set a password"} sub="8 characters or more. Your other phones and computers are signed out.">
+      <form ref={formRef} method="post" onSubmit={onSubmit} className="stack" data-me="password">
         {hasLogin && (
-          <div>
-            <Label htmlFor="me-current" className="font-semibold">
-              Current password
-            </Label>
+          <Field label="Current password" htmlFor="me-current" required>
             <PasswordField id="me-current" name="current" autoComplete="current-password" required />
-          </div>
+          </Field>
         )}
-        <div>
-          <Label htmlFor="me-password" className="font-semibold">
-            New password
-          </Label>
+        <Field label="New password" htmlFor="me-password" required>
           <PasswordField id="me-password" name="password" autoComplete="new-password" minLength={8} maxLength={200} required />
-          <p className="mt-1.5 text-[12.5px] text-gray-500">8 characters or more. Your other phones and computers are signed out.</p>
+        </Field>
+        {error && <p className="form-alert">{error}</p>}
+        <div className="flex justify-end">
+          <button type="submit" className={btn("secondary")} disabled={pending}>
+            {pending ? "Saving..." : hasLogin ? "Change password" : "Set password"}
+          </button>
         </div>
-        {error && <p className="text-[13px] leading-snug text-red-700">{error}</p>}
-        <Button type="submit" variant="secondary" className="h-12 w-full rounded-2xl text-[15px]" disabled={pending}>
-          {pending ? "Saving..." : hasLogin ? "Change password" : "Set password"}
-        </Button>
       </form>
-    </Card>
+    </Panel>
   );
 }
 
@@ -153,15 +141,12 @@ function SignOutCard() {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   return (
-    <Card>
-      <h2 className="text-[18px] leading-tight font-extrabold tracking-[-0.02em] text-gray-900">Sign out everywhere</h2>
-      <p className="mt-1 text-[13.5px] leading-snug text-gray-600">Signs you out on every phone and computer, this one too. Use it if you lost a phone.</p>
-      {error && <p className="mt-2 text-[13px] leading-snug text-red-700">{error}</p>}
-      <Button
+    <Panel title="Sign out everywhere" sub="Signs you out on every phone and computer, this one too. Use it if you lost a phone.">
+      {error && <p className="form-alert mb-3">{error}</p>}
+      <button
         type="button"
-        variant="secondary"
         data-me="signout"
-        className="mt-3 h-12 w-full rounded-2xl text-[15px] text-red-700"
+        className={btn("danger")}
         disabled={pending}
         onClick={() => {
           if (!window.confirm("Sign out on every phone and computer, this one too?")) return;
@@ -174,7 +159,7 @@ function SignOutCard() {
         }}
       >
         {pending ? "Signing out..." : "Sign out everywhere"}
-      </Button>
-    </Card>
+      </button>
+    </Panel>
   );
 }

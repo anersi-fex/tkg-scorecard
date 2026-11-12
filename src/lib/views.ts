@@ -1,3 +1,4 @@
+import { isBusinessDay } from "./month";
 import type { SaleKind, TvScreens } from "./types";
 
 /**
@@ -228,4 +229,96 @@ export function lifeDaily<T extends { cents: number; cumulativeCents: number; li
 /** The month chart for P&C alone: each day's P&C premium and its running total. */
 export function pcDaily<T extends { cents: number; cumulativeCents: number; lifeCents: number; lifeCumulativeCents: number }>(daily: T[]): T[] {
   return daily.map((d) => ({ ...d, cents: d.cents - d.lifeCents, cumulativeCents: d.cumulativeCents - d.lifeCumulativeCents }));
+}
+
+// ------------------------------------------------------------------ the new look (2026-11-12, CRM build)
+
+/**
+ * True when the comparison range held nothing at all (no production, no policy, nobody sold): the
+ * Scoreboard's cards then say "First month on Scorecard" instead of arrows that only go up (contract
+ * decision 13: the board starts clean on November 1, 2026).
+ */
+export function firstCompare(k: { prevProductionCents: number; prevPolicies: number; prevActiveAgents: number }): boolean {
+  return k.prevProductionCents === 0 && k.prevPolicies === 0 && k.prevActiveAgents === 0;
+}
+
+/**
+ * The points of a card's small chart: one per business day through yesterday, and today once it
+ * has something (a morning with nothing yet would read as a drop). `days` and `values` line up.
+ */
+export function sparkValues(days: string[], values: number[], today: string): number[] {
+  const out: number[] = [];
+  days.forEach((d, i) => {
+    const v = values[i] ?? 0;
+    if (isBusinessDay(d) && (d < today || (d === today && v > 0))) out.push(v);
+  });
+  return out;
+}
+
+/**
+ * The TV Production table's day columns: the last `n` days that count, oldest first. A day counts
+ * when it is a business day before today, or any day (today, a Saturday) on which someone sold.
+ */
+export function tableDays(days: string[], sold: (day: string) => boolean, today: string, n = 5): string[] {
+  return days.filter((d) => d <= today && ((isBusinessDay(d) && d < today) || sold(d))).slice(-Math.max(1, n));
+}
+
+/** A leader whose team has no sale yet in the range (the TV's Teams screen shows them dimmed, after the ranked teams). */
+export interface QuietTeam {
+  leaderId: string;
+  name: string;
+  /** The team's active people, the leader included when active. */
+  members: number;
+}
+
+/**
+ * The leaders whose teams are not in `ranked` (no sale yet), by name. A leader is anyone with an
+ * active person under them, all levels, through `uplineId` (the snapshot's, already the confirmed
+ * upline); a loop or a missing upline never hangs it.
+ */
+export function quietTeams(people: Array<{ id: string; name: string; active: boolean; uplineId: string | null }>, ranked: Iterable<string>): QuietTeam[] {
+  const byId = new Map(people.map((p) => [p.id, p]));
+  const kids = new Map<string, string[]>();
+  for (const p of people) {
+    const up = p.uplineId && p.uplineId !== p.id && byId.has(p.uplineId) ? p.uplineId : null;
+    if (!up) continue;
+    const list = kids.get(up);
+    if (list) list.push(p.id);
+    else kids.set(up, [p.id]);
+  }
+  const below = (id: string): string[] => {
+    const seen = new Set([id]);
+    const out: string[] = [];
+    let level = kids.get(id) ?? [];
+    while (level.length) {
+      const next: string[] = [];
+      for (const c of level) {
+        if (seen.has(c)) continue;
+        seen.add(c);
+        out.push(c);
+        next.push(...(kids.get(c) ?? []));
+      }
+      level = next;
+    }
+    return out;
+  };
+  const skip = new Set(ranked);
+  const out: QuietTeam[] = [];
+  for (const p of people) {
+    if (skip.has(p.id)) continue;
+    const down = below(p.id).filter((id) => byId.get(id)?.active);
+    if (down.length === 0) continue;
+    out.push({ leaderId: p.id, name: p.name, members: down.length + (p.active ? 1 : 0) });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** "Nora's team", or "Lucas' team" for a name that ends in s (a curly apostrophe, as every board prints it). */
+export function teamLabel(name: string): string {
+  return `${name}${/s$/i.test(name.trim()) ? "\u2019" : "\u2019s"} team`;
+}
+
+/** A share of the leader's amount as a width in percent: at least `min` (a sliver still shows), at most 100. */
+export function shareOf(cents: number, lead: number, min = 2): number {
+  return Math.max(min, Math.min(100, (cents / Math.max(1, lead)) * 100));
 }

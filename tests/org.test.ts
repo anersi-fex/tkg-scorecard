@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildOrg } from "../src/lib/org";
+import { buildOrg, confirmedUplineOf } from "../src/lib/org";
 import type { Agent } from "../src/lib/types";
 
 const person = (id: string, name: string, upline: string | null, active = true): Agent => ({ id, name, active, sort: 0, pc_licensed: false, upline_id: upline, in_office: true, role: "member" });
@@ -91,4 +91,15 @@ test("an empty agency", () => {
   const org = buildOrg([]);
   assert.deepEqual(org.leaders(), []);
   assert.deepEqual(org.teamOf("x"), ["x"]);
+});
+
+test("an upline that waits to be confirmed counts as none, unless asked for as typed (0006)", () => {
+  const waiting: Agent[] = [person("lead", "Lea Lead", null), person("kid", "Kit Kid", "lead"), { ...person("new", "Ned New", "lead"), upline_confirmed: false }];
+  const org = buildOrg(waiting);
+  assert.deepEqual(org.downlineOf("lead"), ["kid"]);
+  assert.equal(org.uplineOf("new"), null);
+  assert.equal(org.myTeamLeader("new"), null, "on nobody's team");
+  assert.deepEqual(buildOrg(waiting, { includeUnconfirmed: true }).downlineOf("lead").sort(), ["kid", "new"]);
+  assert.equal(confirmedUplineOf({ upline_id: "lead", upline_confirmed: false }), null);
+  assert.equal(confirmedUplineOf({ upline_id: "lead" }), "lead", "a row from before 0006 is confirmed");
 });

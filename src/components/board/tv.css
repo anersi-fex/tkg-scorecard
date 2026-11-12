@@ -1,0 +1,284 @@
+/* The office TV (/board) in the calmer CRM look (owner, 2026-11-12: "too playful ... too much going
+   on"; the approved demo's TV, option 2). Everything is sized from the viewport through --u, one
+   pixel of the demo's 1920x1080 frame: a 1080p TV, a 4K TV and a laptop show the same layout, and
+   nothing ever scrolls. Colors are tokens only (the TV look, Settings > TV look, sets light or dark
+   on <html>). The gradient shows only on the logo, the lit pill's timer line and the goal line. */
+
+.tvb {
+  --u: calc(clamp(10px, min(1vw, 1.78vh), 36px) / 19.2);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  padding: calc(34 * var(--u)) calc(40 * var(--u)) calc(28 * var(--u));
+  background: var(--t-page);
+  color: var(--t-text);
+  font-size: calc(16 * var(--u));
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+.tvb .ell { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
+.tvb .num { font-variant-numeric: tabular-nums; }
+/* the kit's medal and chip icons at TV size (the kit draws them in px) */
+.tvb .medal { width: calc(28 * var(--u)) !important; height: calc(28 * var(--u)) !important; }
+.tvb .medal svg { width: 100%; height: 100%; }
+.tvb .chip svg { width: calc(13 * var(--u)); height: calc(13 * var(--u)); }
+.tvb-ico { width: calc(20 * var(--u)); height: calc(20 * var(--u)); }
+
+/* the lockup at the TV's size */
+.tvb-lockup { display: flex; align-items: center; gap: calc(16 * var(--u)); min-width: 0; }
+.tvb-lockup-mark { width: calc(58 * var(--u)) !important; height: calc(58 * var(--u)) !important; border-radius: calc(16 * var(--u)) !important; }
+.tvb-lockup-mark > svg { width: 100% !important; height: 100% !important; }
+.tvb-lockup-name { font-size: calc(26 * var(--u)); font-weight: 500; line-height: 1.15; }
+.tvb-lockup-by { display: flex; align-items: center; gap: calc(6 * var(--u)); min-width: 0; margin-top: calc(2 * var(--u)); font-size: calc(17 * var(--u)); color: var(--t-text-2); }
+.tvb-lockup-by svg { height: calc(12 * var(--u)) !important; width: auto !important; color: var(--t-text); }
+.tvb-lockup-by [data-agency] { max-width: calc(340 * var(--u)); overflow: hidden; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+
+/* header: the lockup, the four screens (the active one with its timer line), the month and the clock */
+.tvb-top { position: relative; flex: none; height: calc(84 * var(--u)); display: flex; align-items: center; justify-content: space-between; }
+.tvb-seg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; gap: calc(4 * var(--u)); padding: calc(5 * var(--u)); background: var(--t-track); border-radius: calc(18 * var(--u)); }
+.tvb-pill { position: relative; padding: calc(12 * var(--u)) calc(26 * var(--u)) calc(14 * var(--u)); border-radius: calc(14 * var(--u)); color: var(--t-text-2); font-size: calc(18 * var(--u)); line-height: calc(24 * var(--u)); white-space: nowrap; }
+.tvb-pill:hover { color: var(--t-text); }
+.tvb-pill.on { background: var(--t-segment); color: var(--t-text); font-weight: 500; }
+.tvb-timer { position: absolute; left: calc(26 * var(--u)); right: calc(26 * var(--u)); bottom: calc(6 * var(--u)); height: calc(3 * var(--u)); border-radius: calc(2 * var(--u)); background: var(--t-line); overflow: hidden; }
+.tvb-timer > i { display: block; width: 100%; height: 100%; border-radius: calc(2 * var(--u)); background: var(--t-grad); }
+/* while rotating the line runs out with the screen's time (a negative delay picks up where it was) */
+.tvb-timer > i.run { animation: tvb-run var(--dur, 40000ms) linear var(--past, 0ms) both; }
+@keyframes tvb-run { from { width: 100%; } to { width: 0%; } }
+.tvb-when { display: flex; align-items: baseline; gap: calc(22 * var(--u)); white-space: nowrap; }
+.tvb-month { font-size: calc(18 * var(--u)); color: var(--t-text-2); }
+.tvb-clock { font-size: calc(28 * var(--u)); font-weight: 500; }
+
+.tvb-main { flex: 1; min-height: 0; margin-top: calc(18 * var(--u)); }
+.tvb-foot { flex: none; height: calc(26 * var(--u)); margin-top: calc(12 * var(--u)); display: flex; align-items: center; justify-content: space-between; gap: calc(24 * var(--u)); font-size: calc(17 * var(--u)); color: var(--t-text-2); }
+
+/* shared pieces */
+.tvb-card { min-width: 0; min-height: 0; background: var(--t-card); border: 1px solid var(--t-line); border-radius: calc(16 * var(--u)); }
+.tvb-title { font-size: calc(26 * var(--u)); font-weight: 500; line-height: calc(32 * var(--u)); }
+.tvb-sub { margin-top: calc(2 * var(--u)); font-size: calc(17 * var(--u)); line-height: calc(24 * var(--u)); color: var(--t-text-2); }
+.tvb-label { font-size: calc(18 * var(--u)); line-height: calc(24 * var(--u)); color: var(--t-text-2); }
+.tvb-big { margin-top: calc(2 * var(--u)); font-size: calc(64 * var(--u)); font-weight: 600; line-height: calc(72 * var(--u)); letter-spacing: -.01em; white-space: nowrap; }
+.tvb-up { color: var(--t-up); }
+.tvb-down { color: var(--t-down); }
+.tvb-empty-line { margin-top: calc(14 * var(--u)); font-size: calc(20 * var(--u)); color: var(--t-text-2); }
+.tvb .spark { flex: none; }
+.tvb .spark polyline { stroke-width: 1.6; }
+/* Kit's chips at TV size */
+.tvb .chip { height: calc(24 * var(--u)); min-width: calc(24 * var(--u)); padding: 0 calc(8 * var(--u)); gap: calc(3 * var(--u)); font-size: calc(16 * var(--u)); }
+.tvb .chip .ico { width: calc(13 * var(--u)); height: calc(13 * var(--u)); }
+.tvb .chip.dash { width: calc(24 * var(--u)); padding: 0; }
+.tvb .chip-note { font-size: calc(17 * var(--u)); color: var(--t-text-2); }
+.tvb .chip-vs { margin-left: calc(8 * var(--u)); font-size: calc(17 * var(--u)); }
+.tvb .chip.tvb-key { position: relative; top: calc(-2 * var(--u)); width: calc(30 * var(--u)); height: calc(22 * var(--u)); margin: 0 calc(2 * var(--u)); padding: 0; vertical-align: middle; }
+.tvb-delta { display: flex; align-items: center; gap: calc(10 * var(--u)); min-height: calc(28 * var(--u)); margin-top: calc(8 * var(--u)); }
+.tvb-delta .chip { height: calc(28 * var(--u)); padding: 0 calc(11 * var(--u)); font-size: calc(17 * var(--u)); }
+.tvb .rail { height: calc(6 * var(--u)); }
+
+/* page dots */
+.tvb-pager { display: inline-flex; align-items: center; gap: calc(12 * var(--u)); font-size: calc(17 * var(--u)); color: var(--t-text-2); white-space: nowrap; }
+.tvb-dots { display: inline-flex; align-items: center; gap: calc(7 * var(--u)); }
+.tvb-dots > i, .tvb-dots > button { display: block; width: calc(10 * var(--u)); height: calc(10 * var(--u)); padding: 0; border-radius: 50%; background: var(--t-line-2); }
+.tvb-dots > button { cursor: pointer; }
+.tvb-dots > button:hover { background: var(--t-text-3); }
+.tvb-dots > .on, .tvb-dots > button.on { background: var(--t-text-2); }
+
+/* ------------------------------------------------------------------ Leaderboard */
+.tvb-board { display: grid; grid-template-columns: minmax(0, 1fr) calc(496 * var(--u)); gap: calc(24 * var(--u)); }
+.tvb-lb { display: flex; flex-direction: column; padding: calc(24 * var(--u)) calc(30 * var(--u)) calc(20 * var(--u)); }
+.tvb-lb-head { display: flex; align-items: flex-start; justify-content: space-between; gap: calc(20 * var(--u)); }
+/* unequal columns: the long names and five-figure amounts live in the first two */
+.tvb-cols { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1.04fr) minmax(0, .88fr); margin-top: calc(18 * var(--u)); }
+.tvb-col { display: grid; min-height: 0; padding: 0 calc(22 * var(--u)); }
+.tvb-col:first-child { padding-left: 0; }
+.tvb-col:last-child { padding-right: 0; }
+.tvb-row { display: grid; grid-template-columns: calc(38 * var(--u)) minmax(0, 1fr) auto; grid-template-rows: calc(29 * var(--u)) calc(24 * var(--u)) calc(10 * var(--u)); column-gap: calc(12 * var(--u)); align-content: center; min-height: 0; padding-bottom: calc(4 * var(--u)); }
+.tvb-col.medals .tvb-row { grid-template-columns: calc(38 * var(--u)) calc(28 * var(--u)) minmax(0, 1fr) auto; column-gap: calc(10 * var(--u)); }
+.tvb-rank { grid-row: 1; grid-column: 1; font-size: calc(22 * var(--u)); line-height: calc(29 * var(--u)); color: var(--t-text-2); text-align: center; }
+.tvb-chg { grid-row: 2; grid-column: 1; display: flex; align-items: center; justify-content: center; }
+.tvb-medal { grid-row: 1; grid-column: 2; display: flex; align-self: center; }
+.tvb-name { grid-row: 1; grid-column: -3; font-size: calc(22 * var(--u)); font-weight: 500; line-height: calc(29 * var(--u)); }
+.tvb-rsub { grid-row: 2; grid-column: -3; font-size: calc(16 * var(--u)); line-height: calc(24 * var(--u)); color: var(--t-text-2); }
+.tvb-today { color: var(--t-up); }
+.tvb-amt { grid-row: 1; grid-column: -2; font-size: calc(24 * var(--u)); font-weight: 600; line-height: calc(29 * var(--u)); text-align: right; white-space: nowrap; }
+/* the share bar starts under the rank; its width is one pixel scale for all columns (set after render) */
+.tvb-bar { grid-row: 3; grid-column: 1 / -1; justify-self: start; align-self: end; width: 0; height: calc(6 * var(--u)); border-radius: calc(3 * var(--u)); background: var(--t-bar); }
+.tvb-row.none .tvb-rank, .tvb-row.none .tvb-name, .tvb-row.none .tvb-amt, .tvb-row.none .tvb-rsub { color: var(--t-text-3); }
+
+.tvb-side { display: flex; flex-direction: column; gap: calc(20 * var(--u)); min-height: 0; }
+.tvb-prod { padding: calc(24 * var(--u)) calc(28 * var(--u)) calc(22 * var(--u)); }
+.tvb-prod-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; column-gap: calc(12 * var(--u)); }
+.tvb-prod .spark { margin-bottom: calc(6 * var(--u)); }
+.tvb-goal { margin-top: calc(20 * var(--u)); }
+.tvb-goal-text { display: flex; justify-content: space-between; gap: calc(12 * var(--u)); margin-top: calc(12 * var(--u)); font-size: calc(17 * var(--u)); line-height: calc(24 * var(--u)); color: var(--t-text-2); white-space: nowrap; }
+.tvb-goal-text b { font-weight: 600; color: var(--t-text); }
+.tvb-goal-text b.tvb-up { color: var(--t-up); }
+.tvb-goal-text b.tvb-down { color: var(--t-down); }
+.tvb-pace { display: flex; align-items: baseline; justify-content: space-between; gap: calc(12 * var(--u)); margin-top: calc(16 * var(--u)); padding-top: calc(14 * var(--u)); border-top: 1px solid var(--t-line); }
+.tvb-pace-k { display: inline-flex; align-items: center; gap: calc(9 * var(--u)); font-size: calc(18 * var(--u)); color: var(--t-text-2); white-space: nowrap; }
+.tvb-pace-k .ico { align-self: center; color: var(--t-accent); }
+.tvb-pace-v { font-size: calc(32 * var(--u)); font-weight: 600; line-height: calc(38 * var(--u)); letter-spacing: -.01em; }
+
+.tvb-pair { display: grid; grid-template-columns: 1fr 1fr; gap: calc(20 * var(--u)); }
+.tvb-mini { padding: calc(20 * var(--u)) calc(26 * var(--u)) calc(20 * var(--u)); }
+.tvb-mini .tvb-big { font-size: calc(48 * var(--u)); line-height: calc(56 * var(--u)); }
+.tvb-cap { margin-top: calc(8 * var(--u)); font-size: calc(16 * var(--u)); line-height: calc(22 * var(--u)); color: var(--t-text-2); }
+
+.tvb-latest { flex: 1; display: flex; flex-direction: column; padding: calc(22 * var(--u)) calc(28 * var(--u)) calc(8 * var(--u)); }
+.tvb-latest-head { display: flex; align-items: baseline; justify-content: space-between; gap: calc(12 * var(--u)); }
+.tvb-on-day { font-size: calc(17 * var(--u)); color: var(--t-text-2); }
+.tvb-list { flex: 1; min-height: 0; display: grid; grid-template-rows: repeat(4, minmax(0, 1fr)); margin-top: calc(6 * var(--u)); }
+.tvb-sale { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: calc(16 * var(--u)); align-content: center; border-top: 1px solid var(--t-line); }
+.tvb-sale:first-child { border-top: 0; }
+.tvb-sale-who { font-size: calc(22 * var(--u)); font-weight: 500; line-height: calc(30 * var(--u)); }
+.tvb-sale-what { font-size: calc(16 * var(--u)); line-height: calc(24 * var(--u)); color: var(--t-text-2); }
+.tvb-sale-amt { font-size: calc(24 * var(--u)); font-weight: 600; line-height: calc(30 * var(--u)); text-align: right; }
+.tvb-sale-when { font-size: calc(16 * var(--u)); line-height: calc(24 * var(--u)); color: var(--t-text-2); text-align: right; }
+
+/* ------------------------------------------------------------------ Scoreboard */
+.tvb-sb { display: grid; grid-template-rows: calc(236 * var(--u)) minmax(0, 1fr); row-gap: calc(24 * var(--u)); }
+.tvb-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: calc(24 * var(--u)); min-height: 0; }
+.tvb-kpi { position: relative; display: flex; flex-direction: column; padding: calc(22 * var(--u)) calc(32 * var(--u)) calc(20 * var(--u)); }
+.tvb-kpi-label { font-size: calc(20 * var(--u)); line-height: calc(26 * var(--u)); color: var(--t-text-2); }
+.tvb-kpi-big { margin-top: calc(8 * var(--u)); font-size: calc(72 * var(--u)); font-weight: 600; line-height: 1; letter-spacing: -.01em; }
+.tvb-kpi-vs { display: flex; align-items: center; gap: calc(14 * var(--u)); min-height: calc(30 * var(--u)); margin-top: calc(14 * var(--u)); font-size: calc(18 * var(--u)); color: var(--t-text-2); }
+.tvb-kpi-vs .chip { height: calc(30 * var(--u)); padding: 0 calc(13 * var(--u)); font-size: calc(18 * var(--u)); }
+.tvb-kpi-vs .chip-note { font-size: calc(18 * var(--u)); }
+.tvb-kpi-cap { margin-top: auto; font-size: calc(18 * var(--u)); line-height: calc(26 * var(--u)); color: var(--t-text-2); }
+.tvb-kpi .spark { position: absolute; right: calc(32 * var(--u)); bottom: calc(26 * var(--u)); }
+.tvb-kpi-pace { position: absolute; top: calc(22 * var(--u)); right: calc(32 * var(--u)); display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+.tvb-kpi-pace-k { display: inline-flex; align-items: center; gap: calc(8 * var(--u)); font-size: calc(18 * var(--u)); line-height: calc(26 * var(--u)); color: var(--t-text-2); white-space: nowrap; }
+.tvb-kpi-pace-k .ico { color: var(--t-accent); }
+.tvb-kpi-pace-v { margin-top: calc(4 * var(--u)); font-size: calc(34 * var(--u)); font-weight: 600; line-height: calc(40 * var(--u)); letter-spacing: -.01em; }
+
+.tvb-mid { display: grid; grid-template-columns: 1fr 1fr; gap: calc(24 * var(--u)); min-height: 0; }
+.tvb-panel { display: flex; flex-direction: column; min-height: 0; padding: calc(28 * var(--u)) calc(34 * var(--u)) calc(26 * var(--u)); }
+.tvb-middle { margin-top: calc(20 * var(--u)); font-size: calc(22 * var(--u)); line-height: calc(30 * var(--u)); color: var(--t-text-2); }
+.tvb-middle b { font-weight: 500; color: var(--t-text); }
+.tvb-hist { flex: 1; min-height: 0; display: flex; align-items: flex-end; gap: calc(14 * var(--u)); margin-top: calc(10 * var(--u)); border-bottom: 1px solid var(--t-line); }
+.tvb-hcol { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+.tvb-hcount { margin-bottom: calc(10 * var(--u)); font-size: calc(20 * var(--u)); line-height: calc(26 * var(--u)); color: var(--t-text-2); text-align: center; }
+.tvb-hbar { height: calc(6 * var(--u)); border-radius: calc(14 * var(--u)) calc(14 * var(--u)) 0 0; background: var(--t-hist); }
+.tvb-hlabels { display: flex; gap: calc(14 * var(--u)); margin-top: calc(12 * var(--u)); }
+.tvb-hlabels > span { flex: 1; font-size: calc(18 * var(--u)); color: var(--t-text-2); text-align: center; white-space: nowrap; }
+.tvb-hfoot { margin-top: calc(16 * var(--u)); padding-top: calc(14 * var(--u)); border-top: 1px solid var(--t-line); font-size: calc(17 * var(--u)); line-height: calc(24 * var(--u)); color: var(--t-text-2); }
+
+/* Moved most this week: one grid, so every was-line and delta lines up */
+.tvb-mgrid { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: calc(16 * var(--u)); align-content: start; margin-top: calc(20 * var(--u)); }
+.tvb-mh { grid-column: 1 / -1; display: flex; align-items: center; gap: calc(10 * var(--u)); margin-bottom: calc(10 * var(--u)); font-size: calc(19 * var(--u)); line-height: calc(26 * var(--u)); color: var(--t-text-2); }
+.tvb-mh.up .ico { color: var(--t-up); }
+.tvb-mh.down { margin-top: calc(12 * var(--u)); }
+.tvb-mh.down .ico { color: var(--t-down); }
+.tvb-mrow { grid-column: 1 / -1; position: relative; display: grid; grid-template-columns: subgrid; align-items: center; height: calc(56 * var(--u)); margin-bottom: calc(10 * var(--u)); padding: 0 calc(20 * var(--u)); }
+.tvb-mrow > * { position: relative; }
+.tvb-mbar { position: absolute !important; left: 0; top: 0; bottom: 0; border-radius: calc(12 * var(--u)); background: var(--t-line); }
+.tvb-mname { font-size: calc(22 * var(--u)); font-weight: 500; line-height: calc(30 * var(--u)); }
+.tvb-mwas { font-size: calc(18 * var(--u)); line-height: calc(26 * var(--u)); color: var(--t-text-2); text-align: right; white-space: nowrap; }
+.tvb-mdelta { font-size: calc(24 * var(--u)); font-weight: 600; line-height: calc(30 * var(--u)); text-align: right; white-space: nowrap; }
+.tvb-mnone { grid-column: 1 / -1; margin-bottom: calc(10 * var(--u)); font-size: calc(18 * var(--u)); color: var(--t-text-2); }
+
+/* ------------------------------------------------------------------ Production and Teams (tables) */
+.tvb-tbl { height: 100%; display: flex; flex-direction: column; padding: calc(18 * var(--u)) calc(28 * var(--u)) calc(10 * var(--u)); }
+.tvb-tbl-head { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: calc(24 * var(--u)); }
+.tvb-lhs { display: flex; align-items: baseline; gap: calc(18 * var(--u)); min-width: 0; }
+.tvb-lhs .tvb-sub { margin-top: 0; }
+.tvb-rhs { display: flex; align-items: center; gap: calc(22 * var(--u)); flex: none; font-size: calc(17 * var(--u)); color: var(--t-text-2); white-space: nowrap; }
+.tvb-grid { --cols: minmax(0, 1fr) calc(132 * var(--u)) repeat(var(--ndays), calc(168 * var(--u))) calc(188 * var(--u)); flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: calc(14 * var(--u)); }
+/* a flush, square-cornered header band, as AgentSpace's table */
+.tvb-thead { flex: none; display: grid; grid-template-columns: var(--cols); align-items: center; height: calc(44 * var(--u)); padding: 0 calc(22 * var(--u)) 0 calc(18 * var(--u)); background: var(--t-raised); font-size: calc(17 * var(--u)); color: var(--t-text-2); }
+.tvb-th-today { color: var(--t-text); }
+.tvb-sorted { display: inline-flex; align-items: center; justify-content: flex-end; gap: calc(6 * var(--u)); color: var(--t-text); }
+.tvb-tbody { flex: 1; min-height: 0; display: grid; }
+.tvb-tr { display: grid; grid-template-columns: var(--cols); align-items: center; min-height: 0; padding: 0 calc(22 * var(--u)) 0 calc(8 * var(--u)); border-top: 1px solid var(--t-line); }
+.tvb-tr:first-child { border-top: 0; }
+.tvb-n { font-size: calc(24 * var(--u)); text-align: right; white-space: nowrap; }
+.tvb-thead .tvb-n { font-size: calc(17 * var(--u)); }
+.tvb-n.nil { color: var(--t-text-3); }
+.tvb-total { font-weight: 600; }
+/* the name cell: the rank and its chip in a tinted block, the outline medal, the name over a thin share bar */
+.tvb-namecell { display: grid; grid-template-columns: calc(104 * var(--u)) calc(28 * var(--u)) minmax(0, 1fr); align-items: center; column-gap: calc(14 * var(--u)); margin-right: calc(28 * var(--u)); }
+.tvb-rankblock { display: grid; grid-template-columns: calc(46 * var(--u)) 1fr; align-items: center; height: calc(34 * var(--u)); padding-right: calc(6 * var(--u)); border-radius: calc(10 * var(--u)); background: var(--t-line); }
+.tvb-rk { font-size: calc(22 * var(--u)); color: var(--t-text-2); text-align: center; }
+.tvb-rchg { display: flex; align-items: center; }
+.tvb-pmedal, .tvb-tmedal { display: flex; }
+.tvb-who { display: flex; flex-direction: column; min-width: 0; }
+.tvb-nm { font-size: calc(22 * var(--u)); font-weight: 500; line-height: calc(28 * var(--u)); }
+.tvb-share { display: block; height: calc(4 * var(--u)); margin-top: calc(4 * var(--u)); border-radius: calc(2 * var(--u)); background: var(--t-bar); }
+
+/* Teams: one row per leader */
+.tvb-teamgrid { --tcols: calc(112 * var(--u)) calc(28 * var(--u)) minmax(0, 1.25fr) calc(200 * var(--u)) calc(140 * var(--u)) minmax(0, 1fr) calc(190 * var(--u)); flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: calc(14 * var(--u)); }
+.tvb-teamhead { grid-template-columns: var(--tcols); column-gap: calc(18 * var(--u)); padding: 0 calc(22 * var(--u)) 0 calc(8 * var(--u)); }
+.tvb-team { display: grid; grid-template-columns: var(--tcols); column-gap: calc(18 * var(--u)); align-items: center; min-height: 0; max-height: calc(108 * var(--u)); padding: 0 calc(22 * var(--u)) 0 calc(8 * var(--u)); border-top: 1px solid var(--t-line); }
+.tvb-team:first-child { border-top: 0; }
+.tvb-trank { display: grid; grid-template-columns: calc(46 * var(--u)) 1fr; align-items: center; height: calc(34 * var(--u)); padding-right: calc(6 * var(--u)); border-radius: calc(10 * var(--u)); background: var(--t-line); }
+.tvb-tname { display: flex; flex-direction: column; min-width: 0; }
+.tvb-tn-row { display: flex; align-items: center; gap: calc(12 * var(--u)); min-width: 0; }
+.tvb-tname .tvb-nm { font-size: calc(24 * var(--u)); line-height: calc(30 * var(--u)); }
+.tvb-tname .tvb-share { height: calc(5 * var(--u)); margin-top: calc(8 * var(--u)); }
+.tvb-demo { flex: none; height: calc(24 * var(--u)); padding: 0 calc(10 * var(--u)); font-size: calc(16 * var(--u)); font-weight: 500; }
+.tvb-sub .tvb-demo { position: relative; top: calc(-2 * var(--u)); height: calc(22 * var(--u)); }
+.tvb-tpeople { display: flex; flex-direction: column; font-size: calc(22 * var(--u)); line-height: calc(28 * var(--u)); }
+.tvb-tsold { font-size: calc(17 * var(--u)); line-height: calc(24 * var(--u)); color: var(--t-text-2); }
+.tvb-ttop { display: flex; flex-direction: column; min-width: 0; padding-left: calc(36 * var(--u)); }
+.tvb-teamhead .tvb-th-top { padding-left: calc(36 * var(--u)); }
+.tvb-ttop-nm { font-size: calc(22 * var(--u)); line-height: calc(28 * var(--u)); }
+.tvb-ttop-amt { font-size: calc(18 * var(--u)); line-height: calc(24 * var(--u)); color: var(--t-text-2); }
+.tvb-team.none .tvb-trank { background: var(--t-track); }
+.tvb-team.none .tvb-rk, .tvb-team.none .tvb-nm, .tvb-team.none .tvb-tpeople, .tvb-team.none .tvb-n, .tvb-team.none .tvb-tsold { color: var(--t-text-3); }
+.tvb-ttop-nm.nil { color: var(--t-text-3); }
+
+.tvb-emptycard { height: 100%; padding: calc(28 * var(--u)) calc(34 * var(--u)); }
+
+/* ------------------------------------------------------------------ the new-sale banner (8 s, no confetti)
+   It sits over the header's screen pills for its 8 seconds, so it never covers a number; clicks pass through it. */
+.tvb-banner { pointer-events: none; position: absolute; top: calc(76 * var(--u)); left: 50%; z-index: 5; display: flex; align-items: center; gap: calc(14 * var(--u)); max-width: calc(1040 * var(--u)); padding: calc(16 * var(--u)) calc(30 * var(--u)) calc(16 * var(--u)) calc(18 * var(--u)); transform: translate(-50%, -50%); border: 1px solid var(--t-line-2); border-radius: calc(16 * var(--u)); background: var(--t-raised); box-shadow: var(--t-shadow-pop); font-size: calc(24 * var(--u)); line-height: calc(32 * var(--u)); white-space: nowrap; }
+.tvb-banner.enter { animation: tvb-banner-in .35s ease-out; }
+@keyframes tvb-banner-in { from { opacity: 0; transform: translate(-50%, -62%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+.tvb-banner-ico { display: grid; place-items: center; width: calc(40 * var(--u)); height: calc(40 * var(--u)); border-radius: calc(12 * var(--u)); background: var(--t-accent-soft); color: var(--t-accent-text); }
+.tvb-banner-k { color: var(--t-text-2); }
+.tvb-banner-name { overflow: hidden; max-width: calc(460 * var(--u)); font-weight: 500; text-overflow: ellipsis; }
+.tvb-banner-amt { font-weight: 600; }
+.tvb-dot { color: var(--t-text-3); }
+
+
+/* ================================================================== Scorecard's own pieces */
+/* the lit pill's line runs out with the screen's time (the global .board-timer grows; this one shrinks) */
+.tvb .tvb-timer > i.board-timer { transform-origin: left; animation-name: tvb-out; }
+@keyframes tvb-out { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.tvb-pill { display: inline-flex; align-items: center; gap: calc(8 * var(--u)); }
+.tvb-pill-dot { width: calc(9 * var(--u)); height: calc(9 * var(--u)); }
+.tvb-foot .tvb-msg { min-width: 0; color: var(--t-text); }
+.tvb-foot .tvb-warn { margin-left: calc(18 * var(--u)); color: var(--t-down); }
+.tvb-foot .tvb-key { margin-left: calc(18 * var(--u)); }
+.tvb-foot > p:last-child { flex: none; }
+
+/* the leaderboard's two groups (In the office over Everyone else), or one ("Leaderboard") */
+.tvb-left { display: flex; flex-direction: column; gap: calc(20 * var(--u)); min-height: 0; }
+.tvb-lb.tvb-small { padding: calc(18 * var(--u)) calc(30 * var(--u)) calc(14 * var(--u)); }
+.tvb-lb.tvb-small .tvb-title { font-size: calc(22 * var(--u)); line-height: calc(28 * var(--u)); }
+.tvb-lb.tvb-small .tvb-cols { margin-top: calc(10 * var(--u)); }
+.tvb-lb.tvb-small .tvb-row { grid-template-rows: calc(23 * var(--u)) calc(19 * var(--u)) calc(6 * var(--u)); padding-bottom: calc(3 * var(--u)); }
+.tvb-lb.tvb-small .tvb-rank, .tvb-lb.tvb-small .tvb-name { font-size: calc(19 * var(--u)); line-height: calc(23 * var(--u)); }
+.tvb-lb.tvb-small .tvb-amt { font-size: calc(20 * var(--u)); line-height: calc(23 * var(--u)); }
+.tvb-lb.tvb-small .tvb-rsub { font-size: calc(15 * var(--u)); line-height: calc(19 * var(--u)); }
+.tvb-lb.tvb-small .tvb-bar { height: calc(5 * var(--u)); }
+/* the columns fill the block's room exactly (the block measures it to know how many rows fit) */
+.tvb-lb .tvb-cols { grid-template-rows: minmax(0, 1fr); }
+.tvb-lb .tvb-col { height: 100%; }
+.tvb-lb.tvb-small .medal { width: calc(24 * var(--u)) !important; height: calc(24 * var(--u)) !important; }
+.tvb-lb.tvb-one .tvb-cols { grid-template-columns: minmax(0, 1fr); max-width: calc(760 * var(--u)); }
+.tvb-lb.tvb-two .tvb-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tvb-row .tvb-bar { width: auto; }
+.tvb-row.flash { animation: board-flash 2.4s ease-out both; border-radius: calc(10 * var(--u)); }
+.tvb-goal-none { margin-top: calc(14 * var(--u)); font-size: calc(17 * var(--u)); color: var(--t-text-2); }
+.tvb-sale.flash { animation: board-flash 2.4s ease-out both; }
+.tvb-lb-empty { flex: 1; display: grid; place-items: center; font-size: calc(22 * var(--u)); color: var(--t-text-2); }
+
+/* the screens P&C adds while it is switched on keep their own em layout, at the old board's size */
+.tvb-legacy { flex: 1; min-height: 0; display: flex; flex-direction: column; font-size: calc(19.2 * var(--u)); margin-top: calc(-6 * var(--u)); }
+
+/* Teams: a quiet team (nobody on it sold yet) */
+.tvb-team.none .tvb-trank { background: var(--t-track); }
+.tvb-tsellers { display: flex; flex-direction: column; min-width: 0; padding-left: calc(36 * var(--u)); }

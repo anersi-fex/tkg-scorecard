@@ -1,0 +1,47 @@
+/* Settings: three columns on a wide computer (the demo), two on a laptop, one on a phone. */
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; min-width: 0; }
+.col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+@media (min-width: 1100px) {
+  .grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .col:nth-child(3) { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+}
+@media (min-width: 1332px) {
+  .grid { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) minmax(0, 0.9fr); }
+  .col:nth-child(3) { grid-column: auto; display: flex; align-items: stretch; }
+}
+@media (max-width: 759px) { .grid, .col { gap: 12px; } }
+
+.formRow { display: flex; gap: 10px; align-items: flex-end; }
+.formRow > :first-child { flex: 1; min-width: 0; }
+.foot { display: flex; justify-content: flex-end; margin-top: 4px; }
+
+/* radio rows (TV screens, Sale sound) */
+.radios { display: flex; flex-direction: column; }
+.radio { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 56px; padding: 10px 0; border-top: 1px solid var(--t-line); text-align: left; }
+.radio:first-child { border-top: 0; }
+.dot { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--t-line-2); }
+.dot.on { border-color: var(--t-accent); }
+.dot.on::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--t-accent); }
+.rTitle { display: block; font-size: 14.5px; font-weight: 500; }
+.rSub { display: block; font-size: 12.5px; color: var(--t-text-2); }
+.play { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; color: var(--t-text-2); }
+.play:hover { background: var(--t-hover); color: var(--t-text); }
+.play.live { color: var(--t-accent-text); }
+.soundRow { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--t-line); }
+.soundRow:first-child { border-top: 0; }
+.soundRow > .radio { border-top: 0; flex: 1; min-width: 0; }
+
+/* the colorway swatches */
+.swatches { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.swatch { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--t-line); text-align: left; }
+.swatch.on { border-color: var(--t-accent); }
+.chipSq { width: 30px; height: 30px; border-radius: 9px; flex: none; }
+
+/* the owner's locked rows for an admin */
+.locked { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--t-line); }
+.locked:first-child { border-top: 0; }
+.lockIco { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--t-raised); color: var(--t-text-2); flex: none; }
+.ownerRow { padding: 12px 0; border-top: 1px solid var(--t-line); font-size: 13.5px; color: var(--t-text-2); }
+.ownerRow:first-child { border-top: 0; padding-top: 0; }
+.ownerRow b { display: block; color: var(--t-text); font-weight: 500; font-size: 14.5px; }
+.textarea { min-height: 0; font-variant-numeric: tabular-nums; }

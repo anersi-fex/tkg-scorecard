@@ -1,10 +1,9 @@
 import "server-only";
 import { db } from "./supabase";
-import { DataError, Said, deleteSale, getAgent, getSale, getSettings, updateSale } from "./data";
+import { DataError, Said, getAgent, getSale, getSettings } from "./data";
 import { personForSession, setRole } from "./people";
-import { revokeInvitesMadeBy, revokePersonInvites } from "./invites";
-import { isDateKey } from "./month";
-import { isSaleKind, type SaleKind } from "./types";
+import { revokeInvitesMadeBy, revokeOwnTeamLinks, revokePersonInvites } from "./invites";
+import { applyApprovedFix, applyApprovedRemove, parseBoardPatch } from "./policies";
 import { APPROVAL_KINDS, isOwner, type ApprovalKind, type Viewer } from "./viewer";
 
 /**
@@ -31,17 +30,13 @@ export interface Approval {
   decided_at: string | null;
 }
 
-/** The new values of a sale an admin wants to change in a past month. */
-export interface SalePatch {
-  agent_id: string;
-  premium_cents: number;
-  policies: number;
-  product: string | null;
-  carrier: string | null;
-  kind: SaleKind;
-  note: string | null;
-  sold_on: string;
-}
+/**
+ * The new values of a sale an admin wants to change in a past month: its board fields only (who
+ * sold it, the premium, the day, the carrier, the product; and on an older sale the policy count,
+ * the kind and the note), never a client's value. policies.ts BoardPatch; a row filed before 0006
+ * holds every one of them, a newer one only what changes.
+ */
+export type { BoardPatch as SalePatch } from "./policies";
 
 const COLUMNS = "id, kind, payload, summary, requested_by, requested_at, status, decided_at, agents!requested_by(name)";
 type Row = Omit<Approval, "requested_by_name" | "kind"> & { kind: string; agents: { name: string } | { name: string }[] | null };
@@ -125,19 +120,8 @@ export async function countPendingApprovals(): Promise<number> {
   }
 }
 
-function salePatch(raw: unknown): SalePatch | null {
-  if (!raw || typeof raw !== "object") return null;
-  const p = raw as Record<string, unknown>;
-  const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
-  if (!isUuid(p.agent_id) || !isSaleKind(p.kind) || typeof p.sold_on !== "string" || !isDateKey(p.sold_on)) return null;
-  const cents = Number(p.premium_cents);
-  const policies = Number(p.policies);
-  if (!Number.isInteger(cents) || cents <= 0 || cents > 1_000_000_000 || !Number.isInteger(policies) || policies < 1 || policies > 50) return null;
-  return { agent_id: p.agent_id, premium_cents: cents, policies, product: text(p.product, 40), carrier: text(p.carrier, 40), kind: p.kind, note: text(p.note, 200), sold_on: p.sold_on };
-}
-
 /** Runs an approved change, checked again now. Returns what happened, in plain words. */
-async function carryOut(a: Approval): Promise<string> {
+async function carryOut(a: Approval, viewer: Viewer): Promise<string> {
   if (a.kind === "make_admin" || a.kind === "remove_admin") {
     const id = a.payload.agent_id;
     const person = isUuid(id) ? await personForSession(id) : null;
@@ -153,24 +137,25 @@ async function carryOut(a: Approval): Promise<string> {
     }
     if (person.role !== "admin") return `${person.name} is not an admin anymore already.`;
     // The one-time links they made as an admin stop with the level. First, so a try that fails
-    // halfway leaves the level as it was and the next try does both.
+    // halfway leaves the level as it was and the next try does both. They land on the level asked
+    // for (a manager, or an agent: every request before 0006 asked for an agent).
     await revokeInvitesMadeBy(person.id);
-    await setRole(person.id, "member");
+    if (a.payload.role !== "manager") await revokeOwnTeamLinks(person.id);
+    await setRole(person.id, a.payload.role === "manager" ? "manager" : "member");
     return `${person.name} is not an admin anymore.`;
   }
   const saleId = a.payload.sale_id;
   const sale = isUuid(saleId) ? await getSale(saleId) : null;
   if (!sale) return "Approved, but that sale is already gone, so nothing changed.";
   if (a.kind === "remove_past_sale") {
-    await deleteSale(sale.id);
-    return "Approved. The sale is removed.";
+    return (await applyApprovedRemove(sale.id, viewer)) ? "Approved. The sale is removed." : "Approved, but that sale is already gone, so nothing changed.";
   }
-  const patch = salePatch(a.payload.patch);
+  const patch = parseBoardPatch(a.payload.patch);
   if (!patch) return "Approved, but the new numbers could not be read, so nothing changed.";
   // Checked again now, like the fix was when it was asked for: Settings may have changed while it waited.
   if (patch.kind === "pc" && !(await getSettings()).pcEnabled) return "Approved, but that kind of sale is turned off, so nothing changed.";
-  if (!(await getAgent(patch.agent_id))) return "Approved, but that person is gone, so nothing changed.";
-  const found = await updateSale(sale.id, patch);
+  if (patch.agent_id && !(await getAgent(patch.agent_id))) return "Approved, but that person is gone, so nothing changed.";
+  const found = await applyApprovedFix(sale.id, patch, viewer);
   return found ? "Approved. The sale is fixed." : "Approved, but that sale is already gone, so nothing changed.";
 }
 
@@ -194,7 +179,7 @@ export async function decideApproval(id: string, approve: boolean, viewer: Viewe
   if (!row) return { ok: false, error: "That one was already answered." };
   if (!approve) return { ok: true, message: "Declined. Nothing changed." };
   try {
-    return { ok: true, message: await carryOut(row) };
+    return { ok: true, message: await carryOut(row, viewer) };
   } catch (err) {
     await db().from("approvals").update({ status: "pending", decided_by: null, decided_at: null }).eq("id", id).eq("status", "approved").eq("decided_at", decided_at);
     throw err;

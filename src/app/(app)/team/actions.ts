@@ -17,7 +17,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  */
 export async function addPersonToTeam(form: FormData): Promise<ActionResult> {
   try {
-    const viewer = await requireViewer("manager");
+    const viewer = await requireViewer("admin");
     const name = cleanName(form.get("name"));
     if (!name) return { ok: false, error: "Type the person's first and last name." };
     const rawUpline = String(form.get("upline_id") ?? "").trim();

@@ -2,7 +2,8 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui";
+import { Icon } from "@/components/ui/icon";
+import { btn } from "@/components/ui/kit";
 import { toast } from "@/components/toaster";
 import { APPROVALS_CHANGED } from "@/components/nav-bar";
 import { decideApproval } from "../people-actions";
@@ -24,13 +25,14 @@ export function ApprovalButtons({ id }: { id: string }) {
       }
     });
   return (
-    <div className="mt-2.5 flex gap-2">
-      <Button type="button" className="h-11 flex-1 rounded-xl" disabled={pending} onClick={() => decide(true)}>
-        {pending ? "One moment..." : "Approve"}
-      </Button>
-      <Button type="button" variant="secondary" className="h-11 flex-1 rounded-xl" disabled={pending} onClick={() => decide(false)}>
+    <div className="mt-4 flex flex-wrap gap-2">
+      <button type="button" className={btn("primary")} disabled={pending} onClick={() => decide(true)}>
+        <Icon name="check" size={17} />
+        <span>{pending ? "One moment..." : "Approve"}</span>
+      </button>
+      <button type="button" className={btn("secondary")} disabled={pending} onClick={() => decide(false)}>
         Decline
-      </Button>
+      </button>
     </div>
   );
 }
