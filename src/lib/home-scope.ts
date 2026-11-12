@@ -385,3 +385,21 @@ export function pickHomeScope({
   if (pickAnyTeam && typeof askedTeam === "string" && leaders.includes(askedTeam)) return { id, leaderId: askedTeam };
   return { id, leaderId: own ?? (pickAnyTeam ? (leaders[0] ?? null) : null) };
 }
+
+/** The day with the most premium among `sales` (the earliest on a tie), or null. */
+export function bestDayOf(sales: HomeSale[]): { date: string; cents: number } | null {
+  const byDay = new Map<string, number>();
+  for (const s of sales) byDay.set(s.soldOn, (byDay.get(s.soldOn) ?? 0) + s.premiumCents);
+  let best: { date: string; cents: number } | null = null;
+  for (const [date, cents] of byDay) if (cents > 0 && (!best || cents > best.cents || (cents === best.cents && date < best.date))) best = { date, cents };
+  return best;
+}
+
+/** "Nov 1 – 12" (through today in a running month), "Oct 1 – 31" for a finished one. */
+export function rangeLabel(month: string, today: string): string {
+  const [y, m] = month.split("-").map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const end = today.slice(0, 7) === month ? Number(today.slice(8)) : today < `${month}-01` ? 1 : last;
+  const short = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+  return end === 1 ? `${short} 1` : `${short} 1 – ${end}`;
+}

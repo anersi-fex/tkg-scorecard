@@ -194,3 +194,12 @@ test("the scope from the address: an admin may pick any team, a person their own
   assert.deepEqual(pickHomeScope({ asked: "team", askedTeam: "cy", scopes, pickAnyTeam: true, leaders: ["ana", "cy"] }), { id: "team", leaderId: "cy" });
   assert.deepEqual(pickHomeScope({ asked: "team", askedTeam: null, scopes: [{ id: "agency" }], pickAnyTeam: false, leaders: [] }), { id: "agency", leaderId: null });
 });
+
+test("the best day and the range label", async () => {
+  const { bestDayOf, rangeLabel } = await import("../src/lib/home-scope");
+  assert.deepEqual(bestDayOf([sale("ana", 5, "2026-11-03"), sale("bo", 5, "2026-11-02"), sale("ana", 3, "2026-11-04"), sale("bo", 2, "2026-11-04")]), { date: "2026-11-02", cents: 500 });
+  assert.equal(bestDayOf([]), null);
+  assert.equal(rangeLabel("2026-11", "2026-11-12"), "Nov 1 – 12");
+  assert.equal(rangeLabel("2026-10", "2026-11-12"), "Oct 1 – 31");
+  assert.equal(rangeLabel("2026-11", "2026-11-01"), "Nov 1");
+});

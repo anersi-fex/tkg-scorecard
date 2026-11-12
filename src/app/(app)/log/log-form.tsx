@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransiti
 import { useRouter } from "next/navigation";
 import { cn } from "@/components/ui";
 import { Icon } from "@/components/ui/icon";
-import { Field, Initials, Panel } from "@/components/ui/kit";
+import { Field, Initials, PageHead, Panel } from "@/components/ui/kit";
 import { toast } from "@/components/toaster";
 import { parseDollars } from "@/lib/money";
 import { STEPS, STEP_FIELDS, blankForm, errorLine, monthlyText, summaryLine, validatePolicyForm, valuesOf, yearlyText, type FormKey, type PolicyForm } from "@/lib/policy-validate";
@@ -200,6 +200,8 @@ export function LogForm({
   const alertText = nErrors ? errorLine(nErrors) : step === 3 ? alert : null;
 
   return (
+    <>
+    <PageHead title="Log a sale" sub={step === 3 ? "Check it over, then log it. It's on the board the moment you do." : undefined} />
     <div className="log-grid">
       <div className="col log-main">
         <section className="card log-card" data-step={step}>
@@ -261,6 +263,7 @@ export function LogForm({
       </div>
       <SideColumn f={f} step={step} sellerId={f.agentId} sellerName={seller?.name ?? ""} self={!!me && f.agentId === me} today={today} month={month} board={board} onStep={goStep} />
     </div>
+    </>
   );
 }
 
