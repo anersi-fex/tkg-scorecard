@@ -1796,14 +1796,15 @@ try {
   await pinned.goto(`${APP}/board?theme=light`, { waitUntil: "commit" });
   check((await pinned.getAttribute("html", "data-theme")) === "dark", "?theme=light in the address changes nothing");
   await pinned.close();
-  // The leaderboard screen: the office group on top with its own places, then everyone else
+  // The leaderboard screen: one list with everyone ranked together; the TV says nothing about the
+  // office (owner, 2026-11-12, after go-live: "remove 'in the office metric' from the TV board")
   const tvGroups = await t.evaluate(() =>
     [...document.querySelectorAll("main section[data-group]")].map((s) => ({ name: s.getAttribute("data-group"), top: s.getBoundingClientRect().top, title: s.querySelector("h2")?.innerText.replace(/\s+/g, " ") ?? "", rows: [...s.querySelectorAll("li[data-person]")].map((li) => ({ id: li.getAttribute("data-person"), place: li.getAttribute("data-place") })) })),
   );
-  const tvOffice = tvGroups.find((g) => g.name === "office");
-  const tvOthers = tvGroups.find((g) => g.name === "others");
-  check(tvGroups.length === 2 && tvOffice.top < tvOthers.top && tvOffice.title.startsWith("In the office") && tvOthers.title.startsWith("Everyone else") && tvOffice.rows.length === OFFICE.length && tvOthers.rows.length === OTHERS.length, `the TV's leaderboard has the office group on top (${tvOffice?.title}; ${tvOthers?.title})`);
-  check(tvOffice.rows.find((r) => r.place === "1")?.id === ID[topOf(OFFICE)] && tvOthers.rows.find((r) => r.place === "1")?.id === ID[topOf(OTHERS)], "each group has places of its own on the TV");
+  const tvAll = tvGroups[0];
+  check(tvGroups.length === 1 && tvAll.title.startsWith("Leaderboard") && tvAll.rows.length === OFFICE.length + OTHERS.length, `the TV's leaderboard is one list with everyone, no office group (${tvAll?.title}; ${tvAll?.rows.length} rows)`);
+  check(tvAll.rows.find((r) => r.place === "1")?.id === ID[topOf([...OFFICE, ...OTHERS])] && tvAll.rows.every((r, i) => Number(r.place) === i + 1), `the TV ranks everyone together, one place each (${tvAll.rows.map((r) => r.place).join(" ")})`);
+  check(!/In the office|Everyone else/.test(await t.evaluate(() => document.querySelector("main")?.innerText ?? "")), "the TV says nothing about the office");
   check(await fits(t, "section[data-group], li[data-person]"), "every row of the leaderboard fits the TV at 1920x1080");
 
   // The feed's stamp: the TV asks "anything new?" and gets nothing back until something changed
@@ -1856,7 +1857,7 @@ try {
   }
   await t.waitForSelector("[role=status][data-sound]", { state: "detached", timeout: 30000 });
   const tvMain = (await t.innerText("main")).toLowerCase(); // innerText: what the screen shows, in the eyebrows' capitals
-  check((await t.getAttribute("main", "data-screen")) === "life" && tvMain.includes("in the office") && tvMain.includes("production") && tvMain.includes("latest sales") && tvMain.includes("on pace for"), `the TV opens on the leaderboard, with production, what it is on pace for and the latest sales${tick ? "" : " (before the month's first business day)"}`);
+  check((await t.getAttribute("main", "data-screen")) === "life" && !tvMain.includes("in the office") && tvMain.includes("leaderboard") && tvMain.includes("production") && tvMain.includes("latest sales") && tvMain.includes("on pace for"), `the TV opens on the leaderboard, with production, what it is on pace for and the latest sales${tick ? "" : " (before the month's first business day)"}`);
   check(!PC_WORDS.test(tvMain) && !tvMain.includes("life production") && !tvMain.includes("life leaderboard"), "the TV's leaderboard says nothing about P&C, an agency total or \"life\"");
   // Settings > TV screens: keep the TV on one screen
   await go(o, "/settings", `${tvScreens} [role=radio]`);
@@ -2211,7 +2212,7 @@ try {
       await pp.screenshot({ path: `${OUT}/24b-phone-home-full-office.png`, fullPage: true });
       await ph.close();
     }
-    // The TV at that size: the office group in three columns, a page at a time, the second page taking its turn
+    // The TV at that size: everyone in one list in three columns, a page at a time, the next page taking its turn (no office group on the TV)
     const tv3 = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
     await tv3.addCookies(await owner.cookies());
     const t3 = await tv3.newPage();
@@ -2221,18 +2222,19 @@ try {
       t3.evaluate(() => {
         const s = document.querySelector("main section[data-group=office]");
         const rows = [...s.querySelectorAll("li[data-person]")];
-        return { pages: s.getAttribute("data-pages"), title: s.querySelector("h2")?.parentElement?.innerText.replace(/\s+/g, " ") ?? "", rows: rows.length, columns: new Set(rows.map((li) => Math.round(li.getBoundingClientRect().left))).size, firstPlace: rows[0]?.getAttribute("data-place"), dots: s.querySelector("[aria-label^='Page ']")?.getAttribute("aria-label") ?? "", others: document.querySelectorAll("main section[data-group=others] li[data-person]").length, otherPages: Number(document.querySelector("main section[data-group=others]")?.getAttribute("data-pages") ?? 0) };
+        return { places: rows.map((li) => Number(li.getAttribute("data-place"))), pages: s.getAttribute("data-pages"), title: s.querySelector("h2")?.parentElement?.innerText.replace(/\s+/g, " ") ?? "", rows: rows.length, columns: new Set(rows.map((li) => Math.round(li.getBoundingClientRect().left))).size, firstPlace: rows[0]?.getAttribute("data-place"), dots: s.querySelector("[aria-label^='Page ']")?.getAttribute("aria-label") ?? "", others: document.querySelectorAll("main section[data-group=others] li[data-person]").length, otherPages: Number(document.querySelector("main section[data-group=others]")?.getAttribute("data-pages") ?? 0) };
       });
-    await settles(t3, () => document.querySelector("main section[data-group=office] [aria-label^='Page ']")?.getAttribute("aria-label") === "Page 1 of 2", 5000);
+    await settles(t3, () => /^Page 1 of /.test(document.querySelector("main section[data-group=office] [aria-label^='Page ']")?.getAttribute("aria-label") ?? ""), 5000);
     const page1 = await officeOf();
-    check(page1.pages === "2" && page1.rows >= 24 && page1.rows < IN_OFFICE && page1.rows % 3 === 0 && page1.columns === 3 && page1.title.startsWith(`In the office ${IN_OFFICE} people · ${officeSellers} sold`) && page1.dots === "Page 1 of 2" && page1.firstPlace === "1" && page1.others >= 1 && page1.others * page1.otherPages >= OUTSIDE, `the TV shows the office group a page at a time in three columns (${page1.title}; ${page1.rows} rows, ${page1.columns} columns, ${page1.dots}; everyone else ${page1.others} a page over ${page1.otherPages} pages)`);
-    check(await fits(t3, "section[data-group], li[data-person]"), `a full page of the office group (${page1.rows} rows) and everyone else fit the TV at 1920x1080`);
+    const tvPages = Number(page1.pages);
+    check(tvPages >= 2 && page1.rows >= 24 && page1.rows < ALL && page1.rows % 3 === 0 && page1.columns === 3 && page1.title.startsWith(`Leaderboard ${ALL} people`) && page1.dots === `Page 1 of ${tvPages}` && page1.firstPlace === "1" && page1.places.every((p, i) => p === i + 1) && page1.others === 0 && page1.rows * tvPages >= ALL, `the TV shows everyone in one list, a page at a time in three columns (${page1.title}; ${page1.rows} rows, ${page1.columns} columns, ${page1.dots})`);
+    check(await fits(t3, "section[data-group], li[data-person]"), `a full page of the leaderboard (${page1.rows} rows) fits the TV at 1920x1080`);
     const cut = await t3.evaluate(() => [...document.querySelectorAll("main li[data-person] p")].filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent).slice(0, 5));
     check(cut.length === 0, `no name or amount on the TV's leaderboard is cut off${cut.length ? ` (${cut.join(", ")})` : ""}`);
     await t3.screenshot({ path: `${OUT}/25-board-full-office.png` });
-    check(await settles(t3, () => document.querySelector("main section[data-group=office] [aria-label^='Page ']")?.getAttribute("aria-label") === "Page 2 of 2", 14000), "the second page of the office group takes its turn after eight seconds");
+    check(await settles(t3, () => /^Page 2 of /.test(document.querySelector("main section[data-group=office] [aria-label^='Page ']")?.getAttribute("aria-label") ?? ""), 14000), "the second page of the leaderboard takes its turn after eight seconds");
     const page2 = await officeOf();
-    check(page2.rows === IN_OFFICE - page1.rows && (await fits(t3, "section[data-group], li[data-person]")), `and holds the rest (${page2.rows} rows)`);
+    check(page2.rows === Math.min(page1.rows, ALL - page1.rows) && (await fits(t3, "section[data-group], li[data-person]")), `and holds the next people (${page2.rows} rows)`);
     // The other screens at that size
     await go(o, "/settings", `${tvScreens} [role=radio]`);
     const keep3 = async (label, screen) => {

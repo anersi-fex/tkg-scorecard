@@ -13,10 +13,10 @@ import { ArrowsKey } from "./production-screen";
  * The leaderboard screen in the calmer CRM look (the approved demo's TV, 2026-11-12): everyone on
  * the board in up to three columns (the place, places gained or lost since yesterday, a medal for
  * the top three, the name over "N policies", the amount, a thin bar against the leader), and the
- * right side with Production, the goal line and "On pace for". With people marked in the office,
- * "In the office" stays on top with places of its own, over "Everyone else" in smaller rows (owner,
- * 2026-11-12: "their numbers should be showing at the top"). Nothing scrolls and no row is cut:
- * each block measures its own room and pages through its people when they do not fit.
+ * right side with Production, the goal line and "On pace for". One list on the TV, everyone ranked
+ * together: the office mark splits Home's leaderboard only (owner, 2026-11-12, after the CRM went
+ * live: "remove 'in the office metric' from the TV board"). Nothing scrolls and no row is cut: the
+ * block measures its own room and pages through its people when they do not fit.
  */
 type Ranked = AgentLine & { place: number };
 
@@ -28,7 +28,9 @@ const MAX_ROWS = 12;
 const COLS = 3;
 
 export function LifeScreen({ snap, flash, onPages }: { snap: MonthSnapshot; tones?: Record<string, string>; flash: string[]; onPages?: (pages: number) => void }) {
-  const { split, office, others } = boardGroups(snap.agents);
+  // The TV ignores the office mark (owner, 2026-11-12): one "Leaderboard" with everyone.
+  // groupRank is the snapshot's place inside the office group or everyone else, so it goes too: one ranking.
+  const { split, office, others } = boardGroups(snap.agents.map((a) => ({ ...a, inOffice: false, groupRank: 0 })));
   const everyone = [...office, ...others];
   const max = Math.max(1, ...everyone.map((a) => a.lifeCents));
   // Places since yesterday come from the agency's own ranking (the Scoreboard's), shown in both
