@@ -328,3 +328,47 @@ export function buildScoreboard(input: {
     generatedAt: input.generatedAt ?? new Date().toISOString(),
   };
 }
+
+/** What the export holds: the agents or the teams, by day, by product or by carrier. */
+export type CsvWho = "agents" | "teams";
+export type CsvView = "dates" | "product" | "carrier";
+export const CSV_WHO: CsvWho[] = ["agents", "teams"];
+export const CSV_VIEWS: CsvView[] = ["dates", "product", "carrier"];
+
+/** A text cell: quoted, and never a formula (a leading = + - @ gets an apostrophe in front). */
+function csvText(value: string): string {
+  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return `"${safe.replace(/"/g, '""')}"`;
+}
+
+/** Plain dollars with two decimals ("1234.50"). */
+function csvMoney(cents: number): string {
+  const sign = cents < 0 ? "-" : "";
+  const abs = Math.abs(Math.round(cents));
+  return `${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+}
+
+/**
+ * The leaderboard as a CSV file: a header row, then one row per agent (or team) in rank order,
+ * with the columns the screen shows (a column per day, per product or per carrier, then the total).
+ */
+export function scoreboardCsv(sb: Scoreboard, who: CsvWho, view: CsvView): string {
+  const keys = view === "dates" ? sb.range.days : view === "product" ? sb.products : sb.carriers;
+  const heads = view === "dates" ? keys.map(shortDay) : keys;
+  const pick = (r: { byDay: Record<string, number>; byProduct: Record<string, number>; byCarrier: Record<string, number> }) => (view === "dates" ? r.byDay : view === "product" ? r.byProduct : r.byCarrier);
+  const lines: string[] = [];
+  if (who === "teams") {
+    lines.push(["Rank", "Team", "People", "Agents who sold", "Policies", ...heads, "Total"].map(csvText).join(","));
+    for (const t of sb.teams) {
+      const by = pick(t);
+      lines.push([String(t.rank), csvText(`${t.name}'s team`), String(t.members), String(t.activeAgents), String(t.policies), ...keys.map((k) => csvMoney(by[k] ?? 0)), csvMoney(t.totalCents)].join(","));
+    }
+  } else {
+    lines.push(["Rank", "Name", "Upline", "In office", "Policies", ...heads, "Total"].map(csvText).join(","));
+    for (const r of sb.rows) {
+      const by = pick(r);
+      lines.push([String(r.rank), csvText(r.name), csvText(r.uplineName ?? ""), csvText(r.inOffice ? "Yes" : "No"), String(r.policies), ...keys.map((k) => csvMoney(by[k] ?? 0)), csvMoney(r.totalCents)].join(","));
+    }
+  }
+  return lines.join("\r\n") + "\r\n";
+}
