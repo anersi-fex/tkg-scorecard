@@ -75,7 +75,11 @@ export async function loadScoreboard(opts: { month?: string; leaderId?: string |
   const today = opts.today ?? todayInDetroit();
   const month = opts.month && isMonthKey(opts.month) ? opts.month : monthKeyOf(today);
   const { from, to, salesFrom } = scoreboardRange(month, today);
-  const [agents, settings, sales] = await Promise.all([listAgents({ includeInactive: true }), getSettings(), lifeSalesBetween(salesFrom, to)]);
+  // "Moved most this week" is always the last 14 days up to today, so a past month reads those too.
+  const weekFrom = addDays(today, -13);
+  const readFrom = weekFrom < salesFrom ? weekFrom : salesFrom;
+  const readTo = today > to ? today : to;
+  const [agents, settings, sales] = await Promise.all([listAgents({ includeInactive: true }), getSettings(), lifeSalesBetween(readFrom, readTo)]);
   return buildScoreboard({ agents, sales, from, to, today, leaderId: opts.leaderId ?? null, agencyName: settings.agencyName });
 }
 

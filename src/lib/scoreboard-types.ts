@@ -46,11 +46,13 @@ export interface ScoreBucket {
   count: number;
 }
 
-/** "Where agents stand": the agents who sold, in five ranges, and the middle agent. */
+/** "Where agents stand": the agents who sold, in up to six ranges, and the middle agent. */
 export interface ScoreStand {
   agents: number;
   medianCents: number;
   buckets: ScoreBucket[];
+  /** Fewer than five sellers: "Too few agents on the board to compare" (AgentSpace's words). */
+  tooFew: boolean;
 }
 
 /** "Moved most this week": the last 7 days against the 7 days before. */

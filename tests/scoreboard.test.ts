@@ -79,8 +79,9 @@ test("Nov 1 – 11 as the owner's screenshots show it: the three top numbers", (
   assert.equal(sb.range.days.length, 11);
   assert.equal(sb.range.days[0], "2026-11-01");
   assert.equal(sb.range.days[10], "2026-11-11");
-  assert.equal(sb.compare.label, "Oct 1 – 11");
-  assert.deepEqual([sb.compare.from, sb.compare.to], ["2026-10-01", "2026-10-11"]);
+  // AgentSpace compares November so far with ALL of October ("$98.7K, up $22.4K vs Oct").
+  assert.equal(sb.compare.label, "Oct");
+  assert.deepEqual([sb.compare.from, sb.compare.to], ["2026-10-01", "2026-10-31"]);
   assert.equal(sb.kpis.productionCents, 91_632 * 100);
   assert.equal(sb.kpis.policies, 93);
   assert.equal(sb.kpis.activeAgents, 25);
@@ -106,10 +107,10 @@ test("where agents stand: the middle agent at $2,544 and the ranges 9 / 9 / 3 / 
   ]);
 });
 
-test("the ranges' step is the smallest nice one whose four steps reach the 90th percentile", () => {
+test("the ranges' step is the smallest nice one whose five steps reach the 90th percentile; empty ranges before the open one fold into it", () => {
   const labels = (dollars: number[]) => standOf(dollars.map((d) => d * 100)).buckets.map((b) => b.label);
   assert.deepEqual(labels([100, 300, 900, 1_900]), ["Under $500", "$500–$1K", "$1K–$1.5K", "$1.5K–$2K", "$2K+"]);
-  assert.deepEqual(labels([9_000, 9_500]), ["Under $2.5K", "$2.5K–$5K", "$5K–$7.5K", "$7.5K–$10K", "$10K+"]);
+  assert.deepEqual(labels([9_000, 9_500]), ["Under $2K", "$2K–$4K", "$4K–$6K", "$6K–$8K", "$8K+"]);
   assert.deepEqual(labels([150_000, 390_000]), ["Under $100K", "$100K–$200K", "$200K–$300K", "$300K–$400K", "$400K+"]);
   assert.deepEqual(labels([3_000_000]), ["Under $1M", "$1M–$2M", "$2M–$3M", "$3M–$4M", "$4M+"]);
   // An even count: the lower of the two middle agents, a real person's number.
@@ -117,8 +118,23 @@ test("the ranges' step is the smallest nice one whose four steps reach the 90th 
   assert.equal(standOf([700]).medianCents, 700);
   // A total right on an edge belongs to the range that starts there.
   assert.deepEqual(standOf([2_000 * 100, 7_999 * 100, 8_000 * 100]).buckets.map((b) => b.count), [0, 1, 0, 1, 1]);
-  // Nobody sold: five empty ranges, no middle.
-  assert.deepEqual(standOf([]), { agents: 0, medianCents: 0, buckets: ["Under $2K", "$2K–$4K", "$4K–$6K", "$6K–$8K", "$8K+"].map((label) => ({ label, count: 0 })) });
+  // AgentSpace's October 2026: six ranges, none empty.
+  const october = [12_861, 8_261, 7_926, 7_776, 7_186, 5_064, 4_805, 4_025, 3_228, 3_176, 2_364, 1_800, 1_611, 1_504, 1_255, 1_078, 947, 817, 621];
+  const oct = standOf(october.map((d) => d * 100));
+  assert.deepEqual(oct.buckets, [
+    { label: "Under $2K", count: 8 },
+    { label: "$2K–$4K", count: 3 },
+    { label: "$4K–$6K", count: 3 },
+    { label: "$6K–$8K", count: 3 },
+    { label: "$8K–$10K", count: 1 },
+    { label: "$10K+", count: 1 },
+  ]);
+  assert.equal(oct.medianCents, 3_176 * 100);
+  assert.equal(oct.tooFew, false);
+  // Fewer than five sellers is too few to compare (AgentSpace's September: two agents).
+  assert.equal(standOf([1_370 * 100, 698 * 100]).tooFew, true);
+  // Nobody sold: no middle, and the empty ranges fold away.
+  assert.deepEqual(standOf([]), { agents: 0, medianCents: 0, buckets: ["Under $2K", "$2K–$4K", "$4K–$6K", "$6K–$8K", "$8K+"].map((label) => ({ label, count: 0 })), tooFew: true });
 });
 
 test("the leaderboard: ranks, totals, policies and the places gained or lost since yesterday", () => {
@@ -200,24 +216,24 @@ test("moved most reaches into the month before, and leaves out anyone who did no
   assert.deepEqual(sb.movers.down.map((m) => [m.name, m.nowCents, m.wasCents, m.deltaCents]), [["Jonah Garrick", 100_000, 300_000, -200_000]]);
 });
 
-test("the comparison: the same day numbers of the month before", () => {
+test("the comparison: the whole month before, as AgentSpace counts it", () => {
   const october = salesOf("2026-10").filter((s) => s.sold_on <= "2026-10-11");
   const sb = nov11({ sales: [...october, ...salesOf()] });
   assert.equal(sb.kpis.prevProductionCents, sb.kpis.productionCents);
   assert.equal(sb.kpis.prevPolicies, 93);
   assert.equal(sb.kpis.prevActiveAgents, 25);
-  // A sale on Oct 12 is past the compared days.
+  // A sale on Oct 12 counts too: November so far is set against the whole of October.
   const later = nov11({ sales: [sale("Ira Hollis", "2026-10-12", 9_999), ...salesOf()] });
-  assert.equal(later.kpis.prevProductionCents, 0);
+  assert.equal(later.kpis.prevProductionCents, 9_999 * 100);
   // October's sales never land in November's rows.
   assert.equal(sb.rows[0].totalCents, 15_414 * 100);
 });
 
-test("a 31-day month compares with the 30 days before it; March with February", () => {
-  assert.deepEqual(compareRange("2026-10-01", "2026-10-31"), { from: "2026-09-01", to: "2026-09-30", label: "Sep 1 – 30" });
-  assert.deepEqual(compareRange("2026-03-01", "2026-03-31"), { from: "2026-02-01", to: "2026-02-28", label: "Feb 1 – 28" });
-  assert.deepEqual(compareRange("2028-03-01", "2028-03-30"), { from: "2028-02-01", to: "2028-02-29", label: "Feb 1 – 29" });
-  assert.deepEqual(compareRange("2026-01-01", "2026-01-09"), { from: "2025-12-01", to: "2025-12-09", label: "Dec 1 – 9" });
+test("a month compares with the whole month before it (AgentSpace's \"vs Sep\"); March with February", () => {
+  assert.deepEqual(compareRange("2026-10-01", "2026-10-31"), { from: "2026-09-01", to: "2026-09-30", label: "Sep" });
+  assert.deepEqual(compareRange("2026-03-01", "2026-03-31"), { from: "2026-02-01", to: "2026-02-28", label: "Feb" });
+  assert.deepEqual(compareRange("2028-03-01", "2028-03-30"), { from: "2028-02-01", to: "2028-02-29", label: "Feb" });
+  assert.deepEqual(compareRange("2026-01-01", "2026-01-09"), { from: "2025-12-01", to: "2025-12-31", label: "Dec" });
   assert.equal(rangeLabel("2026-11-01", "2026-11-01"), "Nov 1");
   assert.equal(rangeLabel("2026-11-01", "2026-11-30"), "Nov 1 – 30");
   const sb = buildScoreboard({
@@ -230,16 +246,18 @@ test("a 31-day month compares with the 30 days before it; March with February", 
   });
   assert.equal(sb.range.label, "Oct 1 – 31");
   assert.equal(sb.range.days.length, 31);
-  assert.equal(sb.compare.label, "Sep 1 – 30");
+  assert.equal(sb.compare.label, "Sep");
   assert.deepEqual([sb.kpis.productionCents, sb.kpis.prevProductionCents], [90_000, 70_000]);
 });
 
-test("a month that is over: no arrows move, and the week is the month's last one", () => {
+test("a month that is over: no arrows move, and Moved most is still this week, as AgentSpace shows it", () => {
   const sb = buildScoreboard({ agents, sales: [...salesOf("2026-10")], from: "2026-10-01", to: "2026-10-31", today: "2026-11-12", agencyName: "A" });
   assert.equal(sb.rows.length, 25);
   assert.ok(sb.rows.every((r) => r.rankChange === 0));
   assert.ok(sb.teams.every((t) => t.rankChange === 0));
-  assert.equal(sb.movers.label, "Oct 25 – 31 vs Oct 18 – 24");
+  assert.equal(sb.movers.label, "Last 7 days vs the 7 days before");
+  // Today is Nov 12: Nov 6 – 12 against Oct 30 – Nov 5, and October's sales here are all before Oct 12.
+  assert.deepEqual([sb.movers.up, sb.movers.down], [[], []]);
 });
 
 test("the first day of a month: everyone reads no change, the range is one day", () => {
@@ -253,8 +271,8 @@ test("the first day of a month: everyone reads no change, the range is one day",
   });
   assert.equal(sb.range.label, "Nov 1");
   assert.deepEqual(sb.range.days, ["2026-11-01"]);
-  assert.equal(sb.compare.label, "Oct 1");
-  assert.equal(sb.kpis.prevProductionCents, 40_000);
+  assert.equal(sb.compare.label, "Oct");
+  assert.equal(sb.kpis.prevProductionCents, 240_000);
   assert.deepEqual(sb.rows.map((r) => [r.name, r.rank, r.rankChange]), [["Jonah Garrick", 1, 0], ["Mila Serrano", 2, 0]]);
   assert.ok(sb.teams.every((t) => t.rankChange === 0));
   // Oct 26 – Nov 1 against Oct 19 – 25.
@@ -268,7 +286,7 @@ test("an empty month", () => {
   assert.deepEqual(sb.kpis.dailyActiveAgents, Array(11).fill(0));
   assert.deepEqual([sb.rows, sb.teams, sb.movers.up, sb.movers.down, sb.products, sb.carriers], [[], [], [], [], [], []]);
   assert.equal(sb.stand.agents, 0);
-  assert.equal(sb.stand.buckets.length, 5);
+  assert.equal(sb.stand.tooFew, true);
   // Nobody on the list at all.
   const none = buildScoreboard({ agents: [], sales: [], from: "2026-11-01", to: "2026-11-11", today: "2026-11-11", agencyName: "A" });
   assert.equal(none.rows.length, 0);

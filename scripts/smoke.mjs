@@ -1673,7 +1673,7 @@ try {
   check((await o.textContent("[data-scoreboard] h1 + p")).trim() === `${AGENCY} · ${sb.range.label}` && sb.range.label.startsWith(shortDay(`${monthKey}-01`)), `the Scoreboard names the agency and the range (${sb.range.label})`);
   const stand = await o.evaluate(() => ({ text: document.querySelector("[data-section=stand]")?.innerText ?? "", bars: document.querySelector("[data-section=stand] [role=img]")?.getAttribute("aria-label") ?? "" }));
   const barCounts = stand.bars.split(", ").map((s) => Number(s.split(": ").pop()));
-  check(stand.text.includes(`${ledger.size} agents on the board`) && barCounts.length === 5 && barCounts.reduce((s, n) => s + n, 0) === ledger.size && stand.bars === sb.stand.buckets.map((b) => `${b.label}: ${b.count}`).join(", "), `"Where agents stand" counts every agent who sold in its five ranges (${stand.bars})`);
+  check(stand.text.includes(`${ledger.size} agents on the board`) && barCounts.length >= 5 && barCounts.length <= 6 && barCounts.reduce((s, n) => s + n, 0) === ledger.size && stand.bars === sb.stand.buckets.map((b) => `${b.label}: ${b.count}`).join(", "), `"Where agents stand" counts every agent who sold in its five or six ranges, as AgentSpace draws them (${stand.bars})`);
   check(stand.text.includes(`The middle agent is at ${dollars(sb.stand.medianCents)}.`) && [...ledger.values()].some((e) => e.cents === sb.stand.medianCents) && stand.text.includes("Each bar counts the agents whose production falls in that range"), "the middle agent is a real person's total");
   const movers = await o.evaluate(() => ({ title: document.querySelector("[data-section=movers] h2")?.textContent ?? "", sub: document.querySelector("[data-section=movers] h2 + p")?.textContent ?? "", up: [...document.querySelectorAll("[data-movers=up] li")].map((li) => li.innerText.replace(/\s+/g, " ")), down: document.querySelector("[data-movers=down]")?.innerText ?? "" }));
   const best = topOf([...ledger.keys()]);
@@ -1713,8 +1713,9 @@ try {
   await hydrated(o, "[data-scoreboard] select");
   await Promise.all([o.waitForURL((u) => u.searchParams.get("month") === lastMonth), o.getByLabel("Month").selectOption(lastMonth)]);
   await o.waitForSelector("text=Final places for the month");
-  const past = await o.evaluate(() => document.querySelector("[data-scoreboard]")?.innerText ?? "");
-  check(past.includes("Moved most in the last week") && past.includes("$778") && past.includes(IVY) && !past.includes(THEO), "the month control opens last month's Scoreboard with that month's own sale");
+  // "Moved most this week" is this week on every month, as AgentSpace shows it; the leaderboard is the month's own.
+  const past = await o.evaluate(() => ({ all: document.querySelector("[data-scoreboard]")?.innerText ?? "", board: document.querySelector("[data-section=leaderboard]")?.innerText ?? "", movers: document.querySelector("[data-section=movers]")?.innerText ?? "" }));
+  check(past.movers.includes("Moved most this week") && past.movers.includes("Last 7 days vs the 7 days before") && past.all.includes("$778") && past.board.includes(IVY) && !past.board.includes(THEO), "the month control opens last month's Scoreboard with that month's own sale (and this week's movers)");
   // Export CSV: the file's rows are the table's rows
   await o.goto(`${APP}/scoreboard`);
   await o.waitForSelector("[data-scoreboard=agency]");
