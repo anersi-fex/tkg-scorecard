@@ -22,7 +22,7 @@ Vercel builds the `main` branch, and right now `main` holds only a one-line READ
 4. Do the same with `0002_carrier.sql` (the carrier a sale was written with; added 2026-10-27). Done already on the live project if Log a sale shows the carrier chips.
 5. Do the same with `0003_pc.sql` (P&C next to life, added 2026-11-04: a sale's kind and who is P&C licensed). Then, on the Team page, tap Edit on yourself, Moe and Maira and switch on **P&C licensed**: Log a sale then offers Life or P&C for the three of you.
 6. Do the same with `0004_pc_goals.sql` (P&C goals, added 2026-11-04). Then Settings > **P&C goal** takes the team's P&C goal for the month, and Team > Edit takes each P&C licensed person's own.
-7. Do the same with `0005_lineage.sql` (the Lineage Financial update, added 2026-11-12: everyone's own sign-in, uplines and teams, the office group, admins, join links, approvals). Run it before that update is merged: the app that is live keeps working with it in, and running it twice is safe. It makes your row (the one named exactly Anersi Koka) the owner and Jack Gariglio's an admin, the first time only. NOT applied on the live project yet (2026-11-12). Claude can run this one for you if you say yes; then there is nothing to paste.
+7. Do the same with `0005_lineage.sql` (the Lineage Financial update, added 2026-11-12: everyone's own sign-in, uplines and teams, the office group, admins, join links, approvals). Run it before that update is merged: the app that is live keeps working with it in, and running it twice is safe. It makes your row (the one named exactly Anersi Koka) the owner and Jack Gariglio's an admin, the first time only. Done: Claude ran this one for you on 2026-11-12 at your yes, so there is nothing to paste.
 8. Once the Lineage update is live the app is life insurance only: the P&C switches and goals of steps 5 and 6 show only after you turn on Settings > **Other lines of business** > **P&C board** (the last row, yours alone), and Team is called **People**, with a pencil on each person where Edit was.
 
 ### Step 4. Copy two values
@@ -70,7 +70,7 @@ That is release 1. Send Claude a photo of the TV: that is the proof.
 
 ## Getting everyone on (Lineage Financial, added 2026-11-12)
 
-NOT live yet: this part works once the Lineage update is merged and `0005_lineage.sql` (Phase 1, Step 3.7) is in.
+Live since 2026-11-12.
 
 Everyone gets their own sign-in: their cell number and a password they pick. No text message, no email. The two passwords you already have keep working, so the TV and the phones stay signed in.
 
