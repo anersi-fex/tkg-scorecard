@@ -254,7 +254,7 @@ function ColorwayPicker({ current }: { current: ColorwayKey }) {
             <span aria-hidden className="h-9 w-9 shrink-0 rounded-xl" style={{ background: `linear-gradient(135deg, ${c.swatch[0]}, ${c.swatch[1]})` }} />
             <span className="min-w-0">
               <span className={cn("block text-[15px] font-bold", on ? "text-accent-text" : "text-gray-900")}>{c.name}</span>
-              <span className="block truncate text-[12px] font-medium text-gray-500">{c.idea}</span>
+              <span className="block truncate text-[12px] font-medium text-gray-500">{key === "crimson" ? "Deep red to coral." : c.idea}</span>
             </span>
           </button>
         );
