@@ -92,8 +92,8 @@ function TeamRow({ team, top, sellers }: { team: ScoreTeam; top: number; sellers
           <li key={s.agentId} className="flex min-w-0 items-center gap-[0.5em]">
             <Avatar name={s.name} tone={s.tone} size={32} className="!h-[1.9em] !w-[1.9em] !text-[0.72em]" />
             <span className="min-w-0 leading-tight">
-              <span className="block truncate text-[0.95em] font-bold">{shortName(s.name)}</span>
-              <span className="block font-mono text-[0.95em] font-semibold text-gray-600">{formatDollars(s.totalCents)}</span>
+              <span className="block truncate text-[1.15em] font-bold">{shortName(s.name)}</span>
+              <span className="block font-mono text-[1.15em] font-semibold text-gray-600">{formatDollars(s.totalCents)}</span>
             </span>
           </li>
         ))}

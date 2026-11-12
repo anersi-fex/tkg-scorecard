@@ -135,12 +135,12 @@ function MoverList({ title, up = false, list }: { title: string; up?: boolean; l
               <span aria-hidden className={cn("absolute inset-y-0 left-0 rounded-[0.9em]", up ? "bg-green-100" : "bg-red-100")} style={{ width: `${Math.max(6, Math.round((Math.abs(m.deltaCents) / top) * 100))}%` }} />
               <div className="relative flex w-full min-w-0 items-center justify-between gap-[0.8em] px-[0.9em]">
                 <div className="min-w-0">
-                  <p className="truncate text-[1.4em] leading-tight font-extrabold tracking-[-0.02em]">{m.name}</p>
-                  <p className="mt-[0.15em] truncate font-mono text-[1.05em] font-semibold text-gray-600">
+                  <p className="truncate text-[1.2em] leading-tight font-extrabold tracking-[-0.02em]">{m.name}</p>
+                  <p className="mt-[0.15em] truncate font-mono text-[1.15em] tracking-[-0.02em] font-semibold text-gray-600">
                     {formatDollars(m.nowCents)}, was {formatDollars(m.wasCents)}
                   </p>
                 </div>
-                <p className={cn("shrink-0 font-mono text-[1.7em] font-bold tracking-[-0.02em]", up ? "text-up" : "text-red-800")}>
+                <p className={cn("shrink-0 font-mono text-[1.45em] font-bold tracking-[-0.02em]", up ? "text-up" : "text-red-800")}>
                   {m.deltaCents >= 0 ? "+" : "−"}
                   {formatDollars(Math.abs(m.deltaCents))}
                 </p>

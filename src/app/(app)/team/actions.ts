@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireViewer } from "@/lib/auth";
+import { isOwner } from "@/lib/viewer";
 import { addAgent, listAgents, updateAgent } from "@/lib/data";
 import { cleanName, setInOffice, setUpline } from "@/lib/people";
 import type { ActionResult } from "../actions";
@@ -16,7 +17,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  */
 export async function addPersonToTeam(form: FormData): Promise<ActionResult> {
   try {
-    await requireViewer("manager");
+    const viewer = await requireViewer("manager");
     const name = cleanName(form.get("name"));
     if (!name) return { ok: false, error: "Type the person's first and last name." };
     const rawUpline = String(form.get("upline_id") ?? "").trim();
@@ -29,6 +30,8 @@ export async function addPersonToTeam(form: FormData): Promise<ActionResult> {
     if (dup?.active) return { ok: false, error: `${dup.name} is already on the board.` };
     let id: string;
     if (dup) {
+      // Back on the board brings an old sign-in back with it: for someone who was an admin that is the owner's call.
+      if (!isOwner(viewer) && (dup.role === "admin" || dup.role === "owner")) return { ok: false, error: `${dup.name} was an admin. Only the owner can put them back.` };
       await updateAgent(dup.id, { active: true });
       id = dup.id;
     } else {

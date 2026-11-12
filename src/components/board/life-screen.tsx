@@ -21,7 +21,7 @@ type Ranked = AgentLine & { place: number };
 
 /** The smallest row of each block, in the board's em; rows grow from there when there is room. */
 const MAIN_ROW = 2.85;
-const SMALL_ROW = 2.5;
+const SMALL_ROW = 2.7;
 /** The row heights the two blocks share out between them (about what a 16:9 screen has). */
 const ROOM = 38;
 
@@ -39,7 +39,8 @@ export function LifeScreen({ snap, tones, flash, onPages }: { snap: MonthSnapsho
   // The goal line today, the same tick on every bar: how far through its business days the month is.
   const goalLine = current && month.elapsed > 0 && everyone.some((a) => a.goalCents > 0) ? Math.round(month.progress * 100) : null;
   const mainCols = columnsFor(office.length);
-  const smallCols = mainCols + 1;
+  // Never a fourth column: it is the width, not the height, that cuts a name beside a five-figure amount.
+  const smallCols = Math.min(3, mainCols + 1);
   const mainRows = Math.max(1, Math.min(10, Math.ceil(office.length / mainCols)));
   const smallRows = Math.max(1, Math.min(Math.max(3, Math.floor((ROOM - mainRows * MAIN_ROW) / SMALL_ROW)), Math.ceil(others.length / smallCols)));
   // The screen stays until the block with the most pages has shown each of them.
@@ -125,7 +126,7 @@ function Group({
   const shown = pageOf(people, page, per);
   // Fewer people, taller rows: the type grows with the room, up to what the column's width holds.
   const slot = box ? box.h / rows : rowEm;
-  const scale = Math.min(maxScale, Math.max(1, slot / rowEm)) * (small ? 0.84 : 1);
+  const scale = Math.min(maxScale, Math.max(1, slot / rowEm)) * (small ? 0.93 : 1);
   const sold = people.filter((a) => a.lifeCents > 0).length;
   return (
     <section data-group={name} data-pages={pages} className="flex min-h-0 flex-col rounded-[1.4em] bg-surface px-[1em] pt-[0.75em] pb-[0.7em] shadow-card" style={{ flex: `${weight} 1 0%` }}>
@@ -151,7 +152,7 @@ function Group({
       <div ref={ref} className="mt-[0.45em] min-h-0 flex-1">
         <ol key={page} className={cn("grid h-full gap-x-[1.1em]", pages > 1 && "board-page")} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`, gridAutoFlow: "column" }}>
           {shown.map((a) => (
-            <DenseRow key={a.id} line={a} max={max} today={today} goalLine={goalLine} scale={scale} roomy={cols < 3 && !small} tight={small} />
+            <DenseRow key={a.id} line={a} max={max} today={today} goalLine={goalLine} scale={scale} roomy={cols < 3 && !small} />
           ))}
         </ol>
       </div>
@@ -164,13 +165,13 @@ function Group({
  * bar of their own goal (of the leader's premium without one), policies and today's gain in green.
  * Someone with no sale this month still shows, dimmed, after the sellers.
  */
-function DenseRow({ line, max, today, goalLine, scale, roomy, tight }: { line: Ranked; max: number; today: boolean; goalLine: number | null; scale: number; roomy: boolean; tight: boolean }) {
+function DenseRow({ line, max, today, goalLine, scale, roomy }: { line: Ranked; max: number; today: boolean; goalLine: number | null; scale: number; roomy: boolean }) {
   const sold = line.lifeCents > 0;
   const hasGoal = line.goalCents > 0;
   const width = hasGoal ? Math.min(100, line.goalPct) : Math.round((line.lifeCents / max) * 100);
   const done = hasGoal && line.goalPct >= 100;
   const first = sold && line.place === 1;
-  const name = line.name.length > (roomy ? 24 : tight ? 12 : 15) ? shortName(line.name) : line.name;
+  const name = line.name.length > (roomy ? 24 : 15) ? shortName(line.name) : line.name;
   return (
     <li className="flex min-h-0 min-w-0 items-center" data-person={line.id} data-place={line.place}>
       <div className={cn("flex w-full min-w-0 items-center gap-[0.5em] rounded-[0.8em] px-[0.4em] py-[0.2em]", first && "bg-tint/60", !sold && "opacity-50")} style={{ fontSize: `${scale}em` }}>
@@ -184,10 +185,10 @@ function DenseRow({ line, max, today, goalLine, scale, roomy, tight }: { line: R
           <div className="mt-[0.26em] flex items-center gap-[0.5em]">
             <GoalBar width={width} lifeShare={width} goalLine={hasGoal ? goalLine : null} className="h-[0.36em]" tickClassName="-top-[0.22em] h-[0.8em] w-[0.1em]" />
             {roomy && hasGoal && <p className={cn("shrink-0 font-mono text-[0.8em] leading-none font-bold", done ? "text-up" : "text-gray-700")}>{line.goalPct}%</p>}
-            <p className="shrink-0 text-[0.74em] leading-none font-semibold whitespace-nowrap text-gray-500">
+            <p className="shrink-0 text-[0.88em] leading-none font-semibold whitespace-nowrap text-gray-500">
               {line.lifePolicies} {line.lifePolicies === 1 ? "policy" : "policies"}
             </p>
-            {today && line.todayLifeCents > 0 && <p className="shrink-0 font-mono text-[0.78em] leading-none font-bold whitespace-nowrap text-up">+{formatDollars(line.todayLifeCents)}</p>}
+            {today && line.todayLifeCents > 0 && <p className="shrink-0 font-mono text-[0.88em] leading-none font-bold whitespace-nowrap text-up">+{formatDollars(line.todayLifeCents)}</p>}
           </div>
         </div>
       </div>

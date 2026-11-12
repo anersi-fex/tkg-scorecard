@@ -8,7 +8,7 @@ import { formatMoney } from "@/lib/money";
 import { dayLabel, daysLeftLabel } from "@/lib/month";
 import { TEAM_TIME_ZONE } from "@/lib/timezone";
 import { Avatar } from "@/components/avatar";
-import { ScoreMark } from "@/components/brand";
+import { ScoreMark, TkgMark } from "@/components/brand";
 import { cn, formatClock } from "@/components/ui";
 import { burst } from "./confetti";
 import { soundFile, type SoundKey } from "@/lib/sounds";
@@ -172,6 +172,9 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
   const [flash, setFlash] = useState<string[]>([]);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const known = useRef<Set<string>>(new Set(initial.recent.map((r) => r.id)));
+  // When the newest sale the page knows was logged: an older sale that slides into the feed (a
+  // newer one was taken back, or P&C was switched on) is not new, so it gets no celebration.
+  const newest = useRef(initial.recent.reduce((m, r) => Math.max(m, Date.parse(r.createdAt) || 0), 0));
   // Sales waiting for their moment, and the timer of the one on screen.
   const queue = useRef<FeedSale[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -236,8 +239,12 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
       }
       setOffline(0);
       // New sales, oldest first, each gets its moment.
-      const fresh = next.recent.filter((r) => !known.current.has(r.id)).reverse();
-      for (const r of next.recent) known.current.add(r.id);
+      const since = newest.current;
+      const fresh = next.recent.filter((r) => !known.current.has(r.id) && Date.parse(r.createdAt) > since).reverse();
+      for (const r of next.recent) {
+        known.current.add(r.id);
+        newest.current = Math.max(newest.current, Date.parse(r.createdAt) || 0);
+      }
       setSnap(next);
       if (fresh.length) {
         queue.current.push(...fresh);
@@ -285,16 +292,21 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
   const pages = paged.screen === screen ? paged.pages : 1;
   const onPages = useCallback((n: number) => setPaged((old) => (old.screen === screen && old.pages === n ? old : { screen, pages: n })), [screen]);
   const stay = screenMs(screen, pages);
-  // The timer follows only the screen, its time and what comes next (all plain values), so the
-  // poll every 5 s never restarts it.
+  // The timer follows only the screen and its own time (plain values), so the poll every 5 s never
+  // restarts it; what comes next is read when the time is up, so a screen joining or leaving the
+  // rotation meanwhile does not start this screen's time over.
+  const upNext = useRef(next);
+  useEffect(() => {
+    upNext.current = next;
+  }, [next]);
   useEffect(() => {
     if (!cycling) return;
     const id = setTimeout(() => {
-      setRotating(next);
+      setRotating(upNext.current);
       setTurn((t) => t + 1);
     }, stay);
     return () => clearTimeout(id);
-  }, [cycling, next, turn, stay]);
+  }, [cycling, screen, turn, stay]);
   const tones = Object.fromEntries(snap.agents.map((a) => [a.id, a.tone]));
 
   return (
@@ -333,7 +345,7 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
       ) : screen === "pc" ? (
         <PcScreen snap={snap} tones={tones} flash={flash} />
       ) : screen === "total" ? (
-        <MainScreen snap={snap} view="total" tones={tones} flash={flash} />
+        <MainScreen snap={snap} view="total" tones={tones} flash={flash} onPages={onPages} />
       ) : (
         <LifeScreen snap={snap} tones={tones} flash={flash} onPages={onPages} />
       )}
@@ -383,18 +395,31 @@ function ScreenPills({ screen, shown, timed, turn, ms }: { screen: Screen; shown
   );
 }
 
-/** The lockup at the board's size: the mark, "Scorecard", the agency's name under it (all in em, so it scales with the TV). */
+/**
+ * The lockup at the board's size (all in em, so it scales with the TV): the mark, "Scorecard", and
+ * under it "by TKG × <the agency's name>" (owner, 2026-11-12: "you can still put 'by tkg' ... just
+ * needs to also say Lineage Financial"), the same words as ScoreLockup on the phone; "by TKG" alone
+ * without an agency name.
+ */
 function BoardLockup({ agency }: { agency: string }) {
+  const name = agency.trim();
   return (
     <div className="flex min-w-0 items-center gap-[0.7em]">
       <ScoreMark size={64} className="!h-[2.9em] !w-[2.9em] !rounded-[0.8em] [&>svg]:!h-[2.9em] [&>svg]:!w-[2.9em]" />
       <div className="flex min-w-0 flex-col leading-none">
         <span className="text-[1.6em] font-extrabold tracking-[-0.03em] text-gray-900">Scorecard</span>
-        {agency.trim() && (
-          <span data-agency className="mt-[0.3em] max-w-[18em] truncate text-[0.85em] font-bold tracking-[0.01em] text-gray-500">
-            {agency}
-          </span>
-        )}
+        <span data-lockup-by className="mt-[0.2em] flex min-w-0 items-center gap-[0.35em] text-[0.85em] font-semibold text-gray-500">
+          by <TkgMark className="!h-[0.72em] !w-auto text-gray-700" />
+          {name && (
+            <>
+              <span aria-hidden>×</span>
+              {/* Its own line height: a truncated line at leading-none cuts the tail of a "g". */}
+              <span data-agency className="max-w-[18em] min-w-0 truncate leading-[1.3] font-bold tracking-[0.01em] text-gray-700">
+                {name}
+              </span>
+            </>
+          )}
+        </span>
       </div>
     </div>
   );

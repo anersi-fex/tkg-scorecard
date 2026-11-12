@@ -174,6 +174,11 @@ test("the Production table shows the most recent days that fit, and prints them 
   assert.equal(compactDollars(91_632_00), "$91.6K");
   assert.equal(compactDollars(90_100_00), "$90.1K");
   assert.equal(compactDollars(950_00), "$950");
+  // $999.50 and up rounds to a thousand: never "$1000".
+  assert.equal(compactDollars(999_49), "$999");
+  assert.equal(compactDollars(999_50), "$1.0K");
+  assert.equal(compactDollars(999_99), "$1.0K");
+  assert.equal(compactDollars(1_000_00), "$1.0K");
   assert.equal(compactDollars(1_234_567_00), "$1.2M");
   assert.equal(compactDollars(999_960_00), "$1.0M");
   assert.equal(compactDollars(0), "$0");

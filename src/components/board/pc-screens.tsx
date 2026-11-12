@@ -7,8 +7,11 @@ import { Avatar, shortName } from "@/components/avatar";
 import { GoalBar } from "@/components/goal-bar";
 import { KindDot, KindSplit } from "@/components/kind";
 import { cn } from "@/components/ui";
-import { linesSummary, type View } from "@/lib/views";
-import { Crown, RightSide, ViewDot, goalOf } from "./parts";
+import { linesSummary, pageCount, pageOf, type View } from "@/lib/views";
+import { Crown, PageDots, RightSide, ViewDot, goalOf, useBoxEm, usePager, useReportPages } from "./parts";
+
+/** The smallest row of the agency leaderboard, in the board's em: ten people a page on a 16:9 screen. */
+const LEADER_ROW = 4.1;
 
 /**
  * The two screens that exist only while P&C is switched on (Settings, owner only): the agency
@@ -17,7 +20,7 @@ import { Crown, RightSide, ViewDot, goalOf } from "./parts";
  */
 
 /** The life screen and the agency total: the same board, measured in life alone or with P&C added. */
-export function MainScreen({ snap, view, tones, flash }: { snap: MonthSnapshot; view: "life" | "total"; tones: Record<string, string>; flash: string[] }) {
+export function MainScreen({ snap, view, tones, flash, onPages }: { snap: MonthSnapshot; view: "life" | "total"; tones: Record<string, string>; flash: string[]; onPages?: (pages: number) => void }) {
   const { team, clock: month } = snap;
   const life = view === "life";
   const amountOf = (a: AgentLine) => (life ? a.lifeCents : a.premiumCents);
@@ -27,6 +30,14 @@ export function MainScreen({ snap, view, tones, flash }: { snap: MonthSnapshot; 
   const goalLine = month.position === "current" && month.elapsed > 0 && people.some((a) => goalOf(a, view).goal > 0) ? Math.round(month.progress * 100) : null;
   const split = !life && team.pcCents > 0;
   const current = month.position === "current";
+  // Nothing scrolls and no row is cut: up to ten people a page, the next page every few seconds.
+  const [ref, box] = useBoxEm();
+  const fit = box ? Math.max(1, Math.min(10, Math.floor(box.h / LEADER_ROW + 0.02))) : 10;
+  const pages = pageCount(people.length, fit);
+  const page = usePager(pages);
+  useReportPages(pages, onPages);
+  const shown = pageOf(people, page, fit);
+  const rows = Math.max(1, Math.min(fit, people.length));
   return (
     <div className="mt-[0.9em] grid min-h-0 flex-1 grid-cols-12 gap-[1em]">
       {/* Leaderboard */}
@@ -54,16 +65,19 @@ export function MainScreen({ snap, view, tones, flash }: { snap: MonthSnapshot; 
               </>
             )}
             {life ? "annual premium · policies" : "life + P&C"}
+            <PageDots pages={pages} page={page} className="ml-[0.6em]" />
           </p>
         </div>
         {people.length === 0 ? (
           <p className="flex flex-1 items-center justify-center text-[1.2em] font-semibold text-gray-500">Add your team in Scorecard on your phone.</p>
         ) : (
-          <ol className="mt-[0.6em] flex min-h-0 flex-1 flex-col gap-[0.45em]">
-            {people.map((a) => (
-              <LeaderRow key={a.id} line={a} view={view} max={max} count={people.length} today={current} goalLine={goalLine} />
-            ))}
-          </ol>
+          <div ref={ref} className="mt-[0.6em] min-h-0 flex-1">
+            <ol key={page} className={cn("grid h-full gap-[0.45em]", pages > 1 && "board-page")} style={{ gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}>
+              {shown.map((a) => (
+                <LeaderRow key={a.id} line={a} view={view} max={max} count={rows} today={current} goalLine={goalLine} />
+              ))}
+            </ol>
+          </div>
         )}
       </section>
       <RightSide snap={snap} view={view} tones={tones} flash={flash} />

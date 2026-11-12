@@ -164,7 +164,7 @@ export function NavBar({ role, agency, name, level, approvals = 0 }: NavBarProps
       ref={ref}
       className={cn("sticky top-0 z-30 border-b bg-ink transition-colors has-[[aria-expanded=true]]:z-50", scrolled ? "border-line" : "border-transparent")}
     >
-      <div className="mx-auto flex h-[60px] max-w-5xl items-center gap-3 pr-[11px] pl-4 sm:gap-6">
+      <div className="mx-auto flex h-[60px] max-w-5xl items-center gap-3 pr-[11px] pl-4 sm:gap-2 md:gap-6">
         {/* On a narrow window the agency's name gives way before a link is cut: the lockup shrinks first, down to the icon and "Scorecard". */}
         <Link href="/" aria-label="Scorecard, home" className="-my-1 flex min-h-11 min-w-[8.25rem] shrink-[9999] items-center rounded-xl">
           <ScoreLockup size={32} agency={agency} />
@@ -428,12 +428,15 @@ function useKeyboardUp(): boolean {
       window.clearTimeout(timer);
       timer = window.setTimeout(compute, 60);
     };
-    document.addEventListener("focusin", compute);
+    // Hide at once, show late: a tap on a button moves the focus off the text field in the middle of the tap, and a
+    // bar that came back that instant would slide under the finger and take the tap meant for the row.
+    const onFocusIn = () => (takesTyping(document.activeElement) ? compute() : later());
+    document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", later);
     vv?.addEventListener("resize", compute);
     return () => {
       window.clearTimeout(timer);
-      document.removeEventListener("focusin", compute);
+      document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", later);
       vv?.removeEventListener("resize", compute);
     };

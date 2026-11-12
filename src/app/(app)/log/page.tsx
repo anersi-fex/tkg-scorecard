@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { pageViewer } from "@/lib/auth";
+import { logout } from "@/app/login/actions";
 import { isManager } from "@/lib/viewer";
 import { dbConfigured } from "@/lib/supabase";
 import { getSettings, listAgents } from "@/lib/data";
@@ -42,9 +43,12 @@ export default async function LogPage({ searchParams }: PageProps<"/log">) {
         // The owner turned logging off for the shared password (Settings > Sign-ins): it only looks now.
         <Notice tone="amber">
           The team password only looks now. To log a sale, sign in with your own cell number and password.{" "}
-          <Link href="/login" className="font-semibold underline">
-            Go to sign in
-          </Link>
+          {/* A link to /login would bounce: this phone is signed in (with the team password), so it signs out first. */}
+          <form action={logout} className="inline">
+            <button type="submit" className="font-semibold underline">
+              Sign out and sign in with your own number
+            </button>
+          </form>
           . No sign-in yet? Ask an admin for the join link.
         </Notice>
       ) : viewer.level === "member" && !agents.some((a) => a.id === viewer.agentId) ? (

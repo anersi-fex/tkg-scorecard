@@ -94,11 +94,11 @@ function Row({ row, days, columns, lead }: { row: ScoreRow; days: string[]; colu
         <PlaceMedal place={row.rank} className="relative w-[1.2em] shrink-0 text-[1.05em]" />
         <span className="relative min-w-0 truncate text-[1.08em] font-extrabold tracking-[-0.02em]">{row.name}</span>
       </div>
-      <p className="text-center font-mono text-[1.05em] font-bold">{row.policies}</p>
+      <p className="text-center font-mono text-[1.15em] font-bold">{row.policies}</p>
       {days.map((d) => {
         const cents = row.byDay[d] ?? 0;
         return (
-          <p key={d} className={cn("text-right font-mono text-[0.98em] whitespace-nowrap", cents > 0 ? "font-semibold text-gray-800" : "text-gray-400")}>
+          <p key={d} className={cn("text-right font-mono text-[1.15em] tracking-[-0.02em] whitespace-nowrap", cents > 0 ? "font-semibold text-gray-800" : "text-gray-400")}>
             {cents > 0 ? formatDollars(cents) : "—"}
           </p>
         );

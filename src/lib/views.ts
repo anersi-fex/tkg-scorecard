@@ -148,7 +148,7 @@ export function compactDollars(cents: number): string {
   const dollars = Math.abs(cents) / 100;
   const sign = cents < 0 ? "−" : "";
   if (dollars >= 999_950) return `${sign}$${(dollars / 1_000_000).toFixed(1)}M`;
-  if (dollars >= 1000) return `${sign}$${(dollars / 1000).toFixed(1)}K`;
+  if (Math.round(dollars) >= 1000) return `${sign}$${(dollars / 1000).toFixed(1)}K`;
   return `${sign}$${Math.round(dollars)}`;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
 import type { Level } from "@/lib/viewer";
 import type { AgentRole } from "@/lib/types";
 import { Avatar, firstName } from "@/components/avatar";
@@ -122,6 +122,8 @@ export function TeamEditor({
   });
   const [editing, setEditing] = useState<string | null>(null);
   const editingPerson = editing ? byId.get(editing) : undefined;
+  // "New this week" shows the newest few: in launch week everyone is new, and the directory must not sit screens below them.
+  const [allNew, setAllNew] = useState(false);
 
   const officeCount = active.filter((p) => p.inOffice).length;
   const signedIn = active.filter((p) => p.hasLogin).length;
@@ -143,7 +145,9 @@ export function TeamEditor({
     });
 
   const row = (p: PersonRow, depth: number, opts: { flat?: boolean } = {}): ReactNode => {
-    const open = !opts.flat && p.leader && openTeams.has(p.id);
+    // A team opens only when it has someone to show: with "In the office" picked, a team that is all outside the office has nobody.
+    const team = !opts.flat && p.leader && (kids.get(p.id) ?? []).some(shows);
+    const open = team && openTeams.has(p.id);
     const children = open ? (kids.get(p.id) ?? []).filter(shows) : [];
     const parent = p.parentId ? byId.get(p.parentId) : undefined;
     const body = (
@@ -184,7 +188,7 @@ export function TeamEditor({
     return (
       <li key={p.id} data-person={p.id} className="relative not-first:before:pointer-events-none not-first:before:absolute not-first:before:top-0 not-first:before:right-0 not-first:before:left-4 not-first:before:h-px not-first:before:bg-line">
         <div className="flex items-center gap-1 pr-2" style={{ paddingLeft: 16 + depth * 16 }}>
-          {p.leader && !opts.flat ? (
+          {team ? (
             <button type="button" onClick={() => toggle(p.id)} aria-expanded={open} aria-label={`${p.name}'s team, ${p.teamSize} people`} className="flex min-h-[56px] min-w-0 flex-1 items-center gap-2.5 py-2 text-left">
               {body}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={cn("shrink-0 text-gray-400 transition-transform", open && "rotate-90")}>
@@ -195,13 +199,13 @@ export function TeamEditor({
             <div className={cn("flex min-h-[56px] min-w-0 flex-1 items-center gap-2.5 py-2", !manager && "pr-2")}>{body}</div>
           )}
           {manager ? (
-            <button type="button" onClick={() => setEditing(p.id)} aria-label={`Edit ${p.name}`} className="flex h-11 w-9 shrink-0 items-center justify-center rounded-full text-accent-text hover:bg-tint">
+            <button type="button" onClick={() => setEditing(p.id)} aria-label={`Edit ${p.name}`} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-accent-text hover:bg-tint">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4" />
               </svg>
             </button>
           ) : (
-            p.leader && !opts.flat && <span className="w-2" />
+            team && <span className="w-2" />
           )}
         </div>
         {children.length > 0 && <ul className="border-t border-line bg-surface-2/60">{children.map((c) => row(c, depth + 1))}</ul>}
@@ -221,7 +225,7 @@ export function TeamEditor({
           ) : (
             <>
               <ListCard className="mt-2">
-                {newPeople.map((p) => (
+                {(allNew ? newPeople : newPeople.slice(0, 5)).map((p) => (
                   <li key={p.id} className="relative flex items-center gap-2.5 px-4 py-2 not-first:before:absolute not-first:before:top-0 not-first:before:right-0 not-first:before:left-4 not-first:before:h-px not-first:before:bg-line">
                     <Avatar name={p.name} tone={p.tone} size={32} />
                     <span className="min-w-0 flex-1">
@@ -237,7 +241,14 @@ export function TeamEditor({
                   </li>
                 ))}
               </ListCard>
-              <p className="mt-1.5 px-1 text-[12.5px] font-medium text-gray-500">{signedIn} of {active.length} have their own sign-in.</p>
+              <div className="mt-1 flex min-h-11 items-center justify-between gap-3 px-1">
+                <p className="min-w-0 text-[12.5px] font-medium text-gray-500">{signedIn} of {active.length} have their own sign-in.</p>
+                {newPeople.length > 5 && (
+                  <button type="button" data-new-all aria-expanded={allNew} onClick={() => setAllNew((v) => !v)} className="min-h-11 shrink-0 rounded-full px-3 text-[13.5px] font-bold text-accent-text hover:bg-tint">
+                    {allNew ? "Show the newest 5" : `Show all ${newPeople.length}`}
+                  </button>
+                )}
+              </div>
             </>
           )}
         </section>
@@ -269,7 +280,7 @@ export function TeamEditor({
                 role="radio"
                 aria-checked={filter === key}
                 onClick={() => setFilter(key)}
-                className={cn("min-h-9 rounded-full px-2.5 text-[12.5px] font-bold whitespace-nowrap transition", filter === key ? "bg-segment text-gray-900 shadow-card" : "text-gray-600")}
+                className={cn("min-h-11 rounded-full px-2.5 text-[12.5px] font-bold whitespace-nowrap transition", filter === key ? "bg-segment text-gray-900 shadow-card" : "text-gray-600")}
               >
                 {label}
               </button>
@@ -314,7 +325,8 @@ export function TeamEditor({
               <li key={p.id} className="relative flex items-center gap-3 px-4 py-2.5 not-first:before:absolute not-first:before:top-0 not-first:before:right-0 not-first:before:left-4 not-first:before:h-px not-first:before:bg-line">
                 <Avatar name={p.name} tone={p.tone} size={36} />
                 <p className="min-w-0 flex-1 truncate text-[15px] font-bold text-gray-700">{p.name}</p>
-                <BackButton id={p.id} />
+                {/* Back on the board brings an old sign-in back with it: for someone who was an admin that is the owner's call. */}
+                {owner || p.role === "member" ? <BackButton id={p.id} /> : <span className="shrink-0 text-[12.5px] font-medium text-gray-500" data-owner-only>Anersi puts an admin back</span>}
               </li>
             ))}
           </ListCard>
@@ -343,6 +355,9 @@ export function TeamEditor({
 
 /** A sheet from the bottom of a phone (centered on a computer); a tap outside or Escape closes it. */
 function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
+  // A tap outside closes on its click, not on the press: closing on the press takes the sheet away
+  // before the tap's click arrives, and that click then lands on whatever row was behind the sheet.
+  const pressedOutside = useRef(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -358,7 +373,13 @@ function Sheet({ label, onClose, children }: { label: string; onClose: () => voi
       aria-modal="true"
       aria-label={label}
       onPointerDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        pressedOutside.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        // Both the press and the lift were outside the sheet (a drag that started inside it does not count).
+        const outside = pressedOutside.current && e.target === e.currentTarget;
+        pressedOutside.current = false;
+        if (outside) onClose();
       }}
     >
       <div className="max-h-[calc(100dvh-24px)] w-full max-w-md overflow-y-auto overscroll-contain rounded-[26px] bg-surface p-4 shadow-float">{children}</div>
@@ -655,6 +676,8 @@ function PersonEditor({
     setInOffice(person.inOffice);
   }
   const [signIn, setSignIn] = useState<string | null>(null);
+  // Making someone an admin turns off the sign-in link made for them as a member (the server does it): the dead link leaves the screen.
+  const [linkOff, setLinkOff] = useState(false);
   // What the server said about the admin change (an admin's request waits for the owner): kept on the row.
   const [roleNote, setRoleNote] = useState<string | null>(null);
   const first = firstName(person.name);
@@ -801,6 +824,11 @@ function PersonEditor({
           <p className="text-[12.5px] font-medium text-gray-500">
             {person.hasLogin ? `For a forgotten password: ${first} opens the link and picks a new one.` : `${first} opens the link, types their cell number and picks a password.`} The link works once, for 7 days.
           </p>
+          {linkOff && !signIn && (
+            <p className="mt-1.5 text-[12.5px] font-bold text-accent-text" data-link-off>
+              Making {first} an admin turned off the link you made. Make a new one and send that.
+            </p>
+          )}
           {signIn ? (
             <div className="mt-2">
               <LinkBox url={signIn} label={`The one-time link for ${person.name}`} shareText={person.hasLogin ? `${first}, here is your link to set a new Scorecard password. It works once.` : `${first}, here is your link to set up your Scorecard sign-in. It works once.`} />
@@ -816,8 +844,10 @@ function PersonEditor({
                 start(async () => {
                   try {
                     const r = person.hasLogin ? await resetPersonSignIn(person.id) : await createPersonInvite(person.id);
-                    if (r.ok) setSignIn(r.url);
-                    else toast(r.error, false);
+                    if (r.ok) {
+                      setSignIn(r.url);
+                      setLinkOff(false);
+                    } else toast(r.error, false);
                   } catch {
                     toast("Couldn't reach the server. Try again.", false);
                   }
@@ -849,7 +879,13 @@ function PersonEditor({
               start(async () => {
                 try {
                   const r = await setPersonRole(person.id, makeAdmin ? "admin" : "member");
-                  toast(r.ok ? (r.message ?? "Saved.") : r.error, r.ok);
+                  // The owner's "Make admin" turned off a link that is on screen: it goes, and the words say why.
+                  const killedLink = r.ok && owner && makeAdmin && signIn !== null;
+                  if (killedLink) {
+                    setSignIn(null);
+                    setLinkOff(true);
+                  }
+                  toast(r.ok ? `${r.message ?? "Saved."}${killedLink ? " That turned off the sign-in link you made. Make a new one." : ""}` : r.error, r.ok);
                   // An admin's request changes nothing yet: the server's words stay on the row.
                   if (r.ok && !owner) setRoleNote(r.message ?? "Sent to Anersi for a quick OK.");
                 } catch {
