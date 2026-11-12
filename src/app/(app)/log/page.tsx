@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { pageViewer } from "@/lib/auth";
 import { logout } from "@/app/login/actions";
-import { isManager } from "@/lib/viewer";
+import { isAdmin } from "@/lib/viewer";
 import { dbConfigured } from "@/lib/supabase";
 import { getSettings, listAgents } from "@/lib/data";
 import { teamTones } from "@/components/avatar";
@@ -31,7 +31,7 @@ export default async function LogPage({ searchParams }: PageProps<"/log">) {
       {agents.length === 0 ? (
         <Notice tone="amber">
           Nobody is on the team yet.{" "}
-          {isManager(viewer) ? (
+          {isAdmin(viewer) ? (
             <Link href="/team" className="font-semibold underline">
               Add your people first.
             </Link>

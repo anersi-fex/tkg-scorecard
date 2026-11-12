@@ -17,8 +17,8 @@ export interface Viewer {
 }
 
 export const isOwner = (v: Pick<Viewer, "level">): boolean => v.level === "owner";
-/** Owner or admin: the day-to-day controls (goals, people, any sale of this month, the board's settings). */
-export const isManager = (v: Pick<Viewer, "level">): boolean => v.level === "owner" || v.level === "admin";
+/** Owner or admin: the day-to-day controls (goals, people, any sale of this month, the board's settings). The need "admin" in pageViewer/requireViewer. */
+export const isAdmin = (v: Pick<Viewer, "level">): boolean => v.level === "owner" || v.level === "admin";
 
 /** What needs the owner's yes when an admin asks for it. */
 export type ApprovalKind = "make_admin" | "remove_admin" | "edit_past_sale" | "remove_past_sale";

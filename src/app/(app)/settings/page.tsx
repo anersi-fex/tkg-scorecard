@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: "Settings" };
  * the team password cannot open this page.
  */
 export default async function SettingsPage() {
-  const viewer = await pageViewer("manager");
+  const viewer = await pageViewer("admin");
   const owner = isOwner(viewer);
   if (!dbConfigured()) return <PageTitle>Settings</PageTitle>;
   const month = monthKeyOf(todayInDetroit());

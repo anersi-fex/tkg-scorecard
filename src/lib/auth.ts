@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { timingSafeEqual, createHash } from "crypto";
 import { createPersonToken, readSessionToken, SESSION_COOKIE, SESSION_TTL_SECONDS, passwordFor, type Role } from "./session";
 import { ownerPerson, personForSession } from "./people";
-import { isManager, isOwner, type Viewer } from "./viewer";
+import { isAdmin, isOwner, type Viewer } from "./viewer";
 import { db } from "./supabase";
 import { Said } from "./data";
 
@@ -21,7 +21,7 @@ export const OWNER_NAME = "Anersi Koka";
 /** The Shortcut token must be at least this long (the route refuses shorter ones; Settings says so). */
 export const LOG_TOKEN_MIN = 12;
 
-export type Need = "any" | "manager" | "owner";
+export type Need = "any" | "admin" | "owner";
 
 async function readViewer(): Promise<Viewer | null> {
   let claim: Awaited<ReturnType<typeof readSessionToken>> = null;
@@ -59,7 +59,7 @@ async function readViewer(): Promise<Viewer | null> {
 export const currentViewer: () => Promise<Viewer | null> = cache(readViewer);
 
 function allowed(viewer: Viewer, need: Need): boolean {
-  return need === "any" || (need === "manager" ? isManager(viewer) : isOwner(viewer));
+  return need === "any" || (need === "admin" ? isAdmin(viewer) : isOwner(viewer));
 }
 
 /** Pages and layouts: to /login without a session, home without the level; the viewer for what to show. */
@@ -81,7 +81,7 @@ export async function requireViewer(need: Need = "any"): Promise<Viewer> {
 
 // The two-role view, for files that have not moved to the viewer yet: the owner and an admin
 // read as "owner", a member and the team password as "team".
-const roleOf = (viewer: Viewer): Role => (isManager(viewer) ? "owner" : "team");
+const roleOf = (viewer: Viewer): Role => (isAdmin(viewer) ? "owner" : "team");
 
 export async function currentRole(): Promise<Role | null> {
   const viewer = await currentViewer();
@@ -89,11 +89,11 @@ export async function currentRole(): Promise<Role | null> {
 }
 
 export async function requirePage(need: Role | "any" = "any"): Promise<Role> {
-  return roleOf(await pageViewer(need === "owner" ? "manager" : "any"));
+  return roleOf(await pageViewer(need === "owner" ? "admin" : "any"));
 }
 
 export async function requireRole(need: Role | "any" = "any"): Promise<Role> {
-  return roleOf(await requireViewer(need === "owner" ? "manager" : "any"));
+  return roleOf(await requireViewer(need === "owner" ? "admin" : "any"));
 }
 
 const cookieFlags = () => ({ httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/", maxAge: SESSION_TTL_SECONDS });

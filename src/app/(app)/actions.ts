@@ -7,7 +7,7 @@ import { addAgent, deleteSale, getAgent, getSale, insertSale, lineFor, listAgent
 import { requestApproval } from "@/lib/approvals";
 import { bumpSession, sameName } from "@/lib/people";
 import { revokeInvitesMadeBy, revokePersonInvites } from "@/lib/invites";
-import { isManager, isOwner } from "@/lib/viewer";
+import { isAdmin, isOwner } from "@/lib/viewer";
 import { isDateKey, isMonthKey, todayInDetroit, addDays, dayLabel } from "@/lib/month";
 import { formatDollars, formatMoney, parseDollars } from "@/lib/money";
 import { DEFAULT_CARRIERS, DEFAULT_PC_CARRIERS, DEFAULT_PRODUCTS, isBoardTheme, isTvScreens, type PcCarrier } from "@/lib/types";
@@ -122,7 +122,7 @@ export async function logSale(form: FormData): Promise<ActionResult> {
       note: input.note,
       sold_on: soldOn,
       // The kind of session (the database knows owner, team and shortcut), and the person when the session names one.
-      logged_by: isManager(viewer) ? "owner" : "team",
+      logged_by: isAdmin(viewer) ? "owner" : "team",
       logged_by_agent: viewer.agentId,
     });
     await refresh();
@@ -146,7 +146,7 @@ export async function removeSale(id: string): Promise<ActionResult> {
     if (viewer.level === "team" && !(await getSettings()).teamPasswordLogs) return { ok: false, error: TEAM_VIEW_ONLY };
     const sale = await getSale(id);
     if (!sale) return { ok: false, error: "That sale is already gone." };
-    if (!isManager(viewer)) {
+    if (!isAdmin(viewer)) {
       if (viewer.level === "member" && sale.agent_id !== viewer.agentId) return { ok: false, error: "You can take back your own sales only. Ask an admin about this one." };
       if (Date.now() - new Date(sale.created_at).getTime() > UNDO_WINDOW_MS) return { ok: false, error: "A sale can be taken back for 15 minutes. After that, ask an admin." };
     } else if (!isOwner(viewer) && inPastMonth(sale.sold_on)) {
@@ -185,7 +185,7 @@ const EditInput = z.object({
  */
 export async function editSale(id: string, form: FormData): Promise<ActionResult> {
   try {
-    const viewer = await requireViewer("manager");
+    const viewer = await requireViewer("admin");
     if (!Id.safeParse(id).success) return { ok: false, error: "That sale isn't here." };
     const parsed = EditInput.safeParse(Object.fromEntries(form));
     if (!parsed.success) return { ok: false, error: "Check the amount, the person and the date." };
@@ -252,7 +252,7 @@ const Name = z.string().trim().min(1).max(60);
 
 export async function addPerson(form: FormData): Promise<ActionResult> {
   try {
-    const viewer = await requireViewer("manager");
+    const viewer = await requireViewer("admin");
     const name = Name.safeParse(form.get("name"));
     if (!name.success) return { ok: false, error: "Type the person's name." };
     const existing = await listAgents({ includeInactive: true });
@@ -277,7 +277,7 @@ export async function addPerson(form: FormData): Promise<ActionResult> {
 
 export async function renamePerson(id: string, form: FormData): Promise<ActionResult> {
   try {
-    const viewer = await requireViewer("manager");
+    const viewer = await requireViewer("admin");
     const name = Name.safeParse(form.get("name"));
     if (!name.success || !Id.safeParse(id).success) return { ok: false, error: "Type the person's name." };
     const person = await getAgent(id);
@@ -298,7 +298,7 @@ export async function renamePerson(id: string, form: FormData): Promise<ActionRe
 /** Off the board (their sales stay in the history); the same action brings them back. */
 export async function setPersonActive(id: string, active: boolean): Promise<ActionResult> {
   try {
-    const viewer = await requireViewer("manager");
+    const viewer = await requireViewer("admin");
     if (!Id.safeParse(id).success) return { ok: false, error: "That person isn't here." };
     const person = await getAgent(id);
     if (!person) return { ok: false, error: "That person isn't here." };
@@ -342,7 +342,7 @@ const Month = z.string().refine(isMonthKey, "month");
 /** The team's goal for a month, in dollars ("150000" or "150,000"); 0 clears it. */
 export async function saveTeamGoal(month: string, form: FormData): Promise<ActionResult> {
   try {
-    await requireViewer("manager");
+    await requireViewer("admin");
     if (!Month.safeParse(month).success) return { ok: false, error: "That month isn't right." };
     const raw = String(form.get("goal") ?? "").trim();
     const cents = raw === "" ? 0 : parseDollars(raw);
@@ -357,7 +357,7 @@ export async function saveTeamGoal(month: string, form: FormData): Promise<Actio
 
 export async function savePersonGoal(month: string, agentId: string, form: FormData): Promise<ActionResult> {
   try {
-    await requireViewer("manager");
+    await requireViewer("admin");
     if (!Month.safeParse(month).success || !Id.safeParse(agentId).success) return { ok: false, error: "That person or month isn't right." };
     const raw = String(form.get("goal") ?? "").trim();
     const cents = raw === "" ? 0 : parseDollars(raw);
@@ -405,7 +405,7 @@ export async function savePersonPcGoal(month: string, agentId: string, form: For
 /** The colorway on every screen and the TV (Settings > Colorway). */
 export async function saveColorway(key: string): Promise<ActionResult> {
   try {
-    await requireViewer("manager");
+    await requireViewer("admin");
     if (!isColorwayKey(key)) return { ok: false, error: "That colorway isn't one of the choices." };
     const current = await getSettings();
     await saveSettings({ ...current, colorway: key });
@@ -433,7 +433,7 @@ export async function savePcColor(key: string): Promise<ActionResult> {
 /** Settings > TV look: dark or light on the TV, which follows it on its next poll. */
 export async function saveBoardTheme(theme: string): Promise<ActionResult> {
   try {
-    await requireViewer("manager");
+    await requireViewer("admin");
     if (!isBoardTheme(theme)) return { ok: false, error: "The TV look is Dark or Light." };
     const current = await getSettings();
     await saveSettings({ ...current, boardTheme: theme });
@@ -447,7 +447,7 @@ export async function saveBoardTheme(theme: string): Promise<ActionResult> {
 /** Settings > TV screens: rotate the three screens, or keep the TV on one; the TV follows on its next poll. */
 export async function saveTvScreens(choice: string): Promise<ActionResult> {
   try {
-    await requireViewer("manager");
+    await requireViewer("admin");
     if (!isTvScreens(choice)) return { ok: false, error: "That isn't one of the TV screens." };
     const current = await getSettings();
     if ((choice === "pc" || choice === "total") && !current.pcEnabled) return { ok: false, error: "That isn't one of the TV screens." };
@@ -462,7 +462,7 @@ export async function saveTvScreens(choice: string): Promise<ActionResult> {
 /** Settings > Sale sound: what the TV plays when a sale lands; the TV follows it on its next poll. */
 export async function saveSaleSound(key: string): Promise<ActionResult> {
   try {
-    await requireViewer("manager");
+    await requireViewer("admin");
     if (!isSoundKey(key)) return { ok: false, error: "That sound isn't one of the choices." };
     const current = await getSettings();
     await saveSettings({ ...current, sound: key });
@@ -476,7 +476,7 @@ export async function saveSaleSound(key: string): Promise<ActionResult> {
 /** The board message and the product and carrier chips (the owner or an admin). */
 export async function saveBoardSettings(form: FormData): Promise<ActionResult> {
   try {
-    const viewer = await requireViewer("manager");
+    const viewer = await requireViewer("admin");
     const current = await getSettings();
     const msg = String(form.get("message") ?? "")
       .replace(/[\r\n\t]+/g, " ")

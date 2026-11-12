@@ -42,7 +42,7 @@ async function refresh(): Promise<void> {
 /** Whose team a person is on (null: nobody above them). The owner or an admin. */
 export async function setPersonUpline(id: string, uplineId: string | null): Promise<ActionResult> {
   try {
-    await requireViewer("manager");
+    await requireViewer("admin");
     if (!Id.safeParse(id).success || (uplineId !== null && !Id.safeParse(uplineId).success)) return { ok: false, error: "That person isn't here." };
     await setUpline(id, uplineId);
     await refresh();
@@ -55,7 +55,7 @@ export async function setPersonUpline(id: string, uplineId: string | null): Prom
 /** In the office or not (the office group leads every board). The owner or an admin; a person sets their own on their profile. */
 export async function setPersonInOffice(id: string, on: boolean): Promise<ActionResult> {
   try {
-    await requireViewer("manager");
+    await requireViewer("admin");
     if (!Id.safeParse(id).success) return { ok: false, error: "That person isn't here." };
     if (!(await getAgent(id))) return { ok: false, error: "That person isn't here." };
     await setInOffice(id, on === true);
@@ -72,7 +72,7 @@ export async function setPersonInOffice(id: string, on: boolean): Promise<Action
  */
 export async function setPersonRole(id: string, role: string): Promise<ActionResult> {
   try {
-    const viewer = await requireViewer("manager");
+    const viewer = await requireViewer("admin");
     if (!Id.safeParse(id).success || (role !== "admin" && role !== "member")) return { ok: false, error: "That isn't one of the levels." };
     const person = await getAgent(id);
     if (!person) return { ok: false, error: "That person isn't here." };
@@ -108,7 +108,7 @@ export async function setPersonRole(id: string, role: string): Promise<ActionRes
  */
 export async function getJoinLink(uplineId?: string | null): Promise<LinkResult> {
   try {
-    const viewer = await requireViewer("manager");
+    const viewer = await requireViewer("admin");
     const leader = uplineId ?? null;
     if (leader !== null) {
       if (!Id.safeParse(leader).success) return { ok: false, error: "That person isn't here." };
@@ -124,7 +124,7 @@ export async function getJoinLink(uplineId?: string | null): Promise<LinkResult>
 /** Turns off every join link that is out (the agency's and each leader's) and makes a new agency link. */
 export async function resetJoinLink(): Promise<LinkResult> {
   try {
-    const viewer = await requireViewer("manager");
+    const viewer = await requireViewer("admin");
     await revokeAgencyInvites();
     const url = await joinUrl(await agencyToken(null, viewer.agentId));
     await refresh();
@@ -152,7 +152,7 @@ async function linkTarget(id: string, viewer: Viewer): Promise<{ person: Person;
  */
 export async function createPersonInvite(id: string): Promise<LinkResult> {
   try {
-    const viewer = await requireViewer("manager");
+    const viewer = await requireViewer("admin");
     const target = await linkTarget(id, viewer);
     if (!target.person) return { ok: false, error: target.error };
     const { token } = await createInvite({ kind: "person", agentId: target.person.id, createdBy: viewer.agentId });
@@ -169,7 +169,7 @@ export async function createPersonInvite(id: string): Promise<LinkResult> {
  */
 export async function resetPersonSignIn(id: string): Promise<LinkResult> {
   try {
-    const viewer = await requireViewer("manager");
+    const viewer = await requireViewer("admin");
     const target = await linkTarget(id, viewer);
     if (!target.person) return { ok: false, error: target.error };
     const kind = target.person.has_login && target.person.phone ? "reset" : "person";
@@ -201,7 +201,7 @@ export async function decideApproval(id: string, approve: boolean): Promise<Acti
 /** The agency's name on every screen (form field "agency_name"). The owner or an admin. */
 export async function saveAgencyName(form: FormData): Promise<ActionResult> {
   try {
-    await requireViewer("manager");
+    await requireViewer("admin");
     const name = String(form.get("agency_name") ?? "")
       .replace(/\s+/g, " ")
       .trim();

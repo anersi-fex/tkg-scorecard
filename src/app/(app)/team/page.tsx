@@ -5,7 +5,7 @@ import { getSettings, goalsForMonth, listAgents, salesForMonth } from "@/lib/dat
 import { listPeople } from "@/lib/people";
 import { buildOrg } from "@/lib/org";
 import { formatPhone } from "@/lib/phone";
-import { isManager, isOwner } from "@/lib/viewer";
+import { isAdmin, isOwner } from "@/lib/viewer";
 import type { Agent } from "@/lib/types";
 import { addDays, monthKeyOf, monthLabel, todayInDetroit } from "@/lib/month";
 import { teamTones } from "@/components/avatar";
@@ -25,7 +25,7 @@ export const metadata: Metadata = { title: "People" };
 export default async function PeoplePage() {
   const viewer = await pageViewer();
   if (!dbConfigured()) return <PageTitle>People</PageTitle>;
-  const manager = isManager(viewer);
+  const manager = isAdmin(viewer);
   const today = todayInDetroit();
   const month = monthKeyOf(today);
   const [everyone, allSales, goals, settings, joinLink] = await Promise.all([
