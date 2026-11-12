@@ -72,7 +72,7 @@ export function PageDots({ pages, page, className }: { pages: number; page: numb
 /** A medal with its number: silver for 2, bronze for 3. */
 function Medal({ place }: { place: number }) {
   return (
-    <svg viewBox="0 0 24 24" className="inline-block h-[1.15em] w-[1.15em]" aria-label={place === 2 ? "Second" : "Third"}>
+    <svg viewBox="0 0 24 24" className="inline-block h-[1.3em] w-[1.3em]" aria-label={place === 2 ? "Second" : "Third"}>
       <path d="M7 1.5h4l1 5.2-3.4 1.6zM17 1.5h-4l-1 5.2 3.4 1.6z" className="fill-current opacity-60" />
       <circle cx="12" cy="14.6" r="7.6" className="fill-current" />
       <text x="12" y="18.6" textAnchor="middle" className="fill-surface font-mono font-bold" style={{ fontSize: "11px" }}>
@@ -205,7 +205,7 @@ export function RightSide({ snap, view, tones, flash, className }: { snap: Month
 
 export function Crown() {
   return (
-    <svg viewBox="0 0 24 24" className="inline-block h-[1em] w-[1em] fill-current" aria-label="First">
+    <svg viewBox="0 0 24 24" className="inline-block h-[1.15em] w-[1.15em] fill-current" aria-label="First">
       <path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z" />
     </svg>
   );

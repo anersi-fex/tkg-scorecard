@@ -17,10 +17,10 @@ import { EmptyScreen, PageDots, PlaceMedal, useBoxEm, usePager, useReportPages }
  */
 /** The smallest row and the fixed columns, in the board's em. */
 const ROW = 2.05;
-const NAME_COL = 21;
+const NAME_COL = 20;
 const POLICIES_COL = 5.5;
 const TOTAL_COL = 8;
-const DAY_COL = 5.3;
+const DAY_COL = 5;
 
 export function ProductionScreen({ snap, onPages }: { snap: MonthSnapshot; onPages?: (pages: number) => void }) {
   const sb = snap.scoreboard;
@@ -31,7 +31,7 @@ export function ProductionScreen({ snap, onPages }: { snap: MonthSnapshot; onPag
   const page = usePager(pages);
   useReportPages(pages, onPages);
   if (!sb || all.length === 0) return <EmptyScreen title="Production leaderboard" line={sb ? "The first sale of the month lights this up." : "The numbers are on their way."} />;
-  const days = recentDays(sb.range.days, box ? Math.floor((box.w - NAME_COL - POLICIES_COL - TOTAL_COL) / DAY_COL) : 11);
+  const days = recentDays(sb.range.days, box ? Math.floor((box.w - NAME_COL - POLICIES_COL - TOTAL_COL) / DAY_COL) : 12);
   const columns = `${NAME_COL}em ${POLICIES_COL}em repeat(${days.length}, minmax(0, 1fr)) ${TOTAL_COL}em`;
   const lead = Math.max(1, all[0]?.totalCents ?? 1, ...all.map((r) => r.totalCents));
   const shown = pageOf(all, page, fit);
@@ -48,8 +48,8 @@ export function ProductionScreen({ snap, onPages }: { snap: MonthSnapshot; onPag
           <PageDots pages={pages} page={page} />
         </p>
       </div>
-      <div className="mt-[0.5em] grid shrink-0 items-end border-b border-line pb-[0.3em] text-[0.8em] font-bold tracking-[0.04em] text-gray-500 uppercase" style={{ gridTemplateColumns: columns }}>
-        <p className="pl-[6.6em]">Name</p>
+      <div className="mt-[0.5em] grid shrink-0 items-end border-b border-line pb-[0.3em] font-bold tracking-[0.04em] text-gray-500 uppercase [&>p]:text-[0.8em]" style={{ gridTemplateColumns: columns }}>
+        <p className="pl-[9.4em]">Name</p>
         <p className="text-center">Policies</p>
         {days.map((d) => (
           <p key={d} className={cn("text-right whitespace-nowrap", d === snap.clock.today && "text-accent-text")}>

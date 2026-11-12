@@ -79,11 +79,11 @@ export function CompassGlyph({ size = 26 }: { size?: number }) {
   );
 }
 
-/** The spot to tap: the glyph on a tinted tile with a ring that pulses once a second. */
+/** The spot to tap: the glyph on a tinted tile inside a ring that breathes (it never grows over the words beside it). */
 function TapTile({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <span className={cn("relative inline-flex h-[84px] w-[84px] items-center justify-center rounded-[24px] bg-tint text-accent-text", className)}>
-      <span aria-hidden className="absolute inset-0 rounded-[24px] ring-2 ring-accent motion-safe:animate-ping" style={{ animationDuration: "1.8s" }} />
+      <span aria-hidden className="absolute -inset-[7px] rounded-[30px] ring-2 ring-accent motion-safe:animate-pulse" />
       <span aria-hidden className="absolute inset-0 rounded-[24px] ring-2 ring-accent" />
       <span className="relative">{children}</span>
     </span>
@@ -93,7 +93,7 @@ function TapTile({ children, className }: { children: ReactNode; className?: str
 /** The frame every picture sits in. */
 function Stage({ children, label, stacked = false }: { children: ReactNode; label: string; stacked?: boolean }) {
   return (
-    <div role="img" aria-label={label} className={cn("flex min-h-[132px] items-center justify-center overflow-hidden rounded-2xl bg-ink px-4 py-5", stacked ? "flex-col gap-3.5" : "gap-4")}>
+    <div role="img" aria-label={label} className={cn("flex min-h-[132px] items-center justify-center overflow-hidden rounded-2xl bg-ink px-4 py-6", stacked ? "flex-col gap-5" : "gap-4")}>
       {children}
     </div>
   );

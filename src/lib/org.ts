@@ -30,6 +30,11 @@ export interface Org {
   /** The upline's id, or null at the top (or when the stored upline does not exist). */
   uplineOf(id: string): string | null;
   isLeader(id: string): boolean;
+  /**
+   * The leader of the team a person calls theirs ("My team"): themself when they have people
+   * under them, else their nearest upline; null for someone alone at the top (or not on the list).
+   */
+  myTeamLeader(id: string): string | null;
 }
 
 export function buildOrg(agents: Agent[]): Org {
@@ -111,6 +116,11 @@ export function buildOrg(agents: Agent[]): Org {
     isLeader: (id) => {
       leaders();
       return leaderSet!.has(id);
+    },
+    myTeamLeader: (id) => {
+      if (!byId.has(id)) return null;
+      leaders();
+      return leaderSet!.has(id) ? id : (upline.get(id) ?? null);
     },
   };
 }

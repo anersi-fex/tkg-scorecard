@@ -150,6 +150,13 @@ export function InstallGuide({ welcome, firstName, address }: { welcome: boolean
         />
       )}
 
+      {welcome && kind !== "installed" && !added && (
+        <p className="mt-3 text-center">
+          <Link href="/" className="inline-flex min-h-11 items-center px-3 text-[15px] font-semibold text-accent-text">
+            Skip for now
+          </Link>
+        </p>
+      )}
       {device && kind !== "installed" && !added && (
         <div className="mt-5 rounded-2xl border border-line px-3.5 py-3">
           <p className="text-[13px] font-bold text-gray-700">Not your phone?</p>
@@ -175,13 +182,6 @@ export function InstallGuide({ welcome, firstName, address }: { welcome: boolean
         </div>
       )}
 
-      {welcome && kind !== "installed" && !added && (
-        <p className="mt-4 text-center">
-          <Link href="/" className="inline-flex min-h-11 items-center px-3 text-[15px] font-semibold text-accent-text">
-            Skip for now
-          </Link>
-        </p>
-      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { timingSafeEqual, createHash } from "crypto";
 import { createPersonToken, readSessionToken, SESSION_COOKIE, SESSION_TTL_SECONDS, passwordFor, type Role } from "./session";
@@ -136,14 +136,28 @@ const MAX_PER_IP = 10;
 const MAX_GLOBAL = 500;
 const failures = new Map<string, { count: number; resetAt: number }>();
 
-export async function loginThrottled(ip: string): Promise<boolean> {
+/** The address a request came from, for the throttle (never logged; "unknown" when the host does not say). */
+export async function clientAddress(): Promise<string> {
+  const h = await headers();
+  return (h.get("x-forwarded-for")?.split(",")[0] || h.get("x-real-ip") || "unknown").trim().slice(0, 64);
+}
+
+/**
+ * The key a join link's wrong tries are counted under: beside the sign-in count, never in it, so
+ * a bad link opened in the office cannot lock the office's sign-ins (and the other way round).
+ */
+export const joinKey = (ip: string): string => `join:${ip}`.slice(0, 64);
+/** A whole office joins from one address on the first day, so the join count allows more wrong tries. */
+export const JOIN_MAX_PER_IP = 30;
+
+export async function loginThrottled(ip: string, max: number = MAX_PER_IP): Promise<boolean> {
   const entry = failures.get(ip);
-  if (entry && entry.resetAt >= Date.now() && entry.count >= MAX_PER_IP) return true;
+  if (entry && entry.resetAt >= Date.now() && entry.count >= max) return true;
   try {
     const since = new Date(Date.now() - WINDOW_MS).toISOString();
     const recent = () => db().from("login_attempts").select("id", { count: "exact", head: true }).gte("at", since);
     const mine = await recent().eq("ip", ip.slice(0, 64));
-    if (!mine.error && mine.count != null && mine.count >= MAX_PER_IP) return true;
+    if (!mine.error && mine.count != null && mine.count >= max) return true;
     const all = await recent();
     if (all.error || all.count == null) return false;
     return all.count >= MAX_GLOBAL;

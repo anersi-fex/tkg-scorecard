@@ -55,6 +55,15 @@ test("the uplines, nearest first, and names", () => {
   assert.equal(org.nameOf("nobody"), null);
 });
 
+test("my team: a leader's own, or the team of the person right above", () => {
+  const org = buildOrg(people);
+  assert.equal(org.myTeamLeader("ann"), "ann"); // leads a team
+  assert.equal(org.myTeamLeader("eve"), "cy"); // nobody under Eve: the team she is on
+  assert.equal(org.myTeamLeader("bob"), "top"); // his only person is off the board
+  assert.equal(org.myTeamLeader("solo"), null); // alone at the top
+  assert.equal(org.myTeamLeader("nobody"), null);
+});
+
 test("a move that would make a loop is refused", () => {
   const org = buildOrg(people);
   assert.equal(org.wouldCycle("ann", "ann"), true); // their own upline

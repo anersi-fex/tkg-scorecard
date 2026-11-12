@@ -43,7 +43,7 @@ export function TeamsScreen({ snap, onPages }: { snap: MonthSnapshot; onPages?: 
           <PageDots pages={pages} page={page} />
         </p>
       </div>
-      <div className="mt-[0.5em] grid shrink-0 items-end gap-x-[1.2em] border-b border-line pb-[0.3em] text-[0.8em] font-bold tracking-[0.04em] text-gray-500 uppercase" style={{ gridTemplateColumns: COLUMNS }}>
+      <div className="mt-[0.5em] grid shrink-0 items-end gap-x-[1.2em] border-b border-line pb-[0.3em] font-bold tracking-[0.04em] text-gray-500 uppercase [&>p]:text-[0.8em]" style={{ gridTemplateColumns: COLUMNS }}>
         <p />
         <p>Team</p>
         <p>People</p>

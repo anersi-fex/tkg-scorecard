@@ -42,6 +42,13 @@ async function loginIds(): Promise<Set<string>> {
   return new Set((data ?? []).map((r) => String(r.id)));
 }
 
+/** Has anyone made their own sign-in yet? (The sign-in screen opens on "Your sign-in" once someone has.) */
+export async function anyoneHasSignIn(): Promise<boolean> {
+  const { data, error } = await db().from("agents").select("id").not("pass_hash", "is", null).eq("active", true).limit(1);
+  if (error) fail("people.logins", error);
+  return (data?.length ?? 0) > 0;
+}
+
 /** Everyone, with the phone number: pass the phone on only to a manager's screen. */
 export async function listPeople(opts: { includeInactive?: boolean } = {}): Promise<Person[]> {
   let q = db().from("agents").select(PERSON_COLUMNS).order("sort").order("name");

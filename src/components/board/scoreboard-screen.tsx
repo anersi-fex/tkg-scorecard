@@ -89,7 +89,7 @@ function Stand({ sb }: { sb: Scoreboard }) {
         {stand.buckets.map((b) => (
           <div key={b.label} className="flex min-h-0 flex-col items-center justify-end">
             <p className="font-mono text-[1.7em] leading-none font-bold">{b.count}</p>
-            <div className={cn("mt-[0.35em] w-full rounded-t-[0.7em]", b.count > 0 ? "bg-gray-300" : "bg-track")} style={{ height: b.count > 0 ? `${Math.max(4, (b.count / top) * 78)}%` : "0.3em" }} />
+            <div className={cn("mt-[0.35em] w-full rounded-t-[0.7em]", b.count > 0 ? "bg-gray-400" : "bg-track")} style={{ height: b.count > 0 ? `${Math.max(4, (b.count / top) * 78)}%` : "0.3em" }} />
             <p className="mt-[0.5em] text-[1.05em] leading-none font-bold whitespace-nowrap text-gray-600">{b.label}</p>
           </div>
         ))}
@@ -131,16 +131,16 @@ function MoverList({ title, up = false, list }: { title: string; up?: boolean; l
       ) : (
         <ul className="mt-[0.6em] flex min-h-0 flex-1 flex-col gap-[0.6em]">
           {list.map((m) => (
-            <li key={m.agentId} className="relative flex min-h-0 flex-1 items-center overflow-hidden rounded-[0.9em] bg-surface-2" style={{ maxHeight: "5.4em" }}>
+            <li key={m.agentId} className="relative flex min-h-0 flex-1 items-center overflow-hidden rounded-[0.9em] bg-surface-2" style={{ maxHeight: "6.6em" }}>
               <span aria-hidden className={cn("absolute inset-y-0 left-0 rounded-[0.9em]", up ? "bg-green-100" : "bg-red-100")} style={{ width: `${Math.max(6, Math.round((Math.abs(m.deltaCents) / top) * 100))}%` }} />
               <div className="relative flex w-full min-w-0 items-center justify-between gap-[0.8em] px-[0.9em]">
                 <div className="min-w-0">
-                  <p className="truncate text-[1.25em] leading-tight font-extrabold tracking-[-0.02em]">{m.name}</p>
-                  <p className="mt-[0.1em] truncate font-mono text-[0.95em] font-semibold text-gray-600">
+                  <p className="truncate text-[1.4em] leading-tight font-extrabold tracking-[-0.02em]">{m.name}</p>
+                  <p className="mt-[0.15em] truncate font-mono text-[1.05em] font-semibold text-gray-600">
                     {formatDollars(m.nowCents)}, was {formatDollars(m.wasCents)}
                   </p>
                 </div>
-                <p className={cn("shrink-0 font-mono text-[1.45em] font-bold tracking-[-0.02em]", up ? "text-up" : "text-red-800")}>
+                <p className={cn("shrink-0 font-mono text-[1.7em] font-bold tracking-[-0.02em]", up ? "text-up" : "text-red-800")}>
                   {m.deltaCents >= 0 ? "+" : "−"}
                   {formatDollars(Math.abs(m.deltaCents))}
                 </p>

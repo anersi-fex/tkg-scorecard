@@ -193,7 +193,8 @@ export function buildScoreboard(input: {
         add(t.byCarrier, carrier, s.premium_cents);
         add(productTotals, product, s.premium_cents);
         add(carrierTotals, carrier, s.premium_cents);
-        dailyCents[dayIndex.get(d)!] += s.premium_cents;
+        const i = dayIndex.get(d);
+        if (i != null) dailyCents[i] += s.premium_cents;
       }
       if (d <= yesterday) {
         t.yCents += s.premium_cents;
@@ -257,7 +258,10 @@ export function buildScoreboard(input: {
     prevProductionCents += t.prevCents;
     prevPolicies += t.prevPolicies;
     if (t.prevSold) prevActiveAgents++;
-    for (const d in t.byDay) if (t.byDay[d] > 0) dailyActiveAgents[dayIndex.get(d)!]++;
+    for (const d in t.byDay) {
+      const i = dayIndex.get(d);
+      if (i != null && t.byDay[d] > 0) dailyActiveAgents[i]++;
+    }
   }
 
   // Moved most: the biggest gains and the biggest drops, three each; someone who did not move is in neither.
