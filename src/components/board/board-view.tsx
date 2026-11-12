@@ -30,6 +30,8 @@ import { TeamsScreen } from "./teams-screen";
  * full screen. The cursor hides after a few seconds still.
  */
 const POLL_MS = 5000;
+/** Every this many polls the TV reads the whole feed; in between it asks only whether anything changed. */
+const FULL_EVERY = 12;
 const CELEBRATE_MS = 9000;
 /** A long sound fades out this long before the celebration leaves, so it is never cut mid-note. */
 const SOUND_FADE_MS = 700;
@@ -179,6 +181,8 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
   const queue = useRef<FeedSale[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reloading = useRef(false);
+  const stamp = useRef<string | null>(null);
+  const polls = useRef(0);
   const clock = useClock();
   useWakeLock();
   useIdleCursor();
@@ -224,13 +228,22 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/board", { cache: "no-store" });
+      // Most polls only ask "anything new?" (the stamp the last full answer carried); a new or
+      // removed sale and a Settings change answer in full at once, everything else once a minute.
+      const held = polls.current % FULL_EVERY === 0 ? null : stamp.current;
+      polls.current += 1;
+      const res = await fetch(held ? `/api/board?stamp=${encodeURIComponent(held)}` : "/api/board", { cache: "no-store" });
       if (res.status === 401) {
         router.push("/login?next=/board");
         return;
       }
+      if (res.status === 204) {
+        setOffline(0);
+        return;
+      }
       if (!res.ok) throw new Error(String(res.status));
-      const next = (await res.json()) as MonthSnapshot;
+      const next = (await res.json()) as MonthSnapshot & { stamp?: string | null };
+      stamp.current = next.stamp ?? null;
       // A new deploy is live: the TV was opened once and left, so it reloads itself (once) to run it.
       if (next.build && initial.build && next.build !== initial.build && !reloading.current) {
         reloading.current = true;

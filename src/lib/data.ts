@@ -42,8 +42,10 @@ function toSale(r: SaleRow): SaleWithAgent {
   };
 }
 
-// sales points at agents twice since 0005 (agent_id: who sold it; logged_by_agent: who typed it),
-// so the join names its column: a bare agents(name) is refused as ambiguous.
+// The join names its column (agent_id: who sold it). 0005 adds logged_by_agent (who typed it) as
+// a plain column, not a foreign key, so the version of the app that is live while the migration
+// runs keeps reading sales through its bare agents(name) join; naming the column here keeps this
+// read right even if that second link is ever made a real one.
 const SALE_COLUMNS = "id, agent_id, premium_cents, policies, product, carrier, kind, client, note, sold_on, logged_by, logged_by_agent, created_at, agents!agent_id(name)";
 // pass_hash and phone are never selected here: only src/lib/people.ts reads them, for sign-in.
 const AGENT_COLUMNS = "id, name, active, sort, pc_licensed, upline_id, in_office, role, joined_at";

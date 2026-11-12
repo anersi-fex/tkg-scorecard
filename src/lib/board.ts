@@ -1,6 +1,7 @@
 import "server-only";
 import { goalsForMonth, listAgents, recentSales, salesForMonth, getSettings } from "./data";
-import { monthKeyOf, todayInDetroit } from "./month";
+import { datesOfMonth, monthKeyOf, todayInDetroit } from "./month";
+import { db } from "./supabase";
 import { buildScoreboard } from "./scoreboard";
 import { salesBeforeMonth } from "./scoreboard-load";
 import type { ScoreSale, Scoreboard } from "./scoreboard-types";
@@ -28,6 +29,26 @@ function salesBeforeKept(month: string): Promise<ScoreSale[]> {
     if (beforeKept === kept) beforeKept = null;
   });
   return kept.rows;
+}
+
+/**
+ * A cheap answer to "did anything the TV shows change?": the newest sale's time, how many of the
+ * month's sales stand, and when Settings last changed. Three tiny reads instead of the whole
+ * month: with 30 to 70 people a full read every 5 seconds would spend the database's monthly
+ * traffic allowance. The TV sends back the stamp it holds; while it still matches, the feed
+ * answers 204 and reads nothing more. A new or removed sale and a Settings change move the stamp
+ * at once; a fixed sale, a goal or a person reaches the TV at its next full read (once a minute).
+ */
+export async function boardStamp(today: string): Promise<string> {
+  const dates = datesOfMonth(monthKeyOf(today));
+  const [newest, standing, settings] = await Promise.all([
+    db().from("sales").select("created_at").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    db().from("sales").select("id", { count: "exact", head: true }).is("deleted_at", null).gte("sold_on", dates[0]).lte("sold_on", dates[dates.length - 1]),
+    db().from("settings").select("updated_at").eq("key", "app").maybeSingle(),
+  ]);
+  if (newest.error || standing.error || settings.error) throw new Error("board.stamp");
+  // The deploy rides along, so a new build always gets a full answer (the TV then reloads itself).
+  return [process.env.VERCEL_GIT_COMMIT_SHA ?? "", today, String(newest.data?.created_at ?? ""), String(standing.count ?? 0), String(settings.data?.updated_at ?? "")].join("|");
 }
 
 /**

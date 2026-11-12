@@ -59,7 +59,7 @@ export default async function WrapPage({ searchParams }: PageProps<"/wrap">) {
   let pcOn = false;
   let agency = DEFAULT_AGENCY_NAME;
   try {
-    const snap = await loadMonthSnapshot(monthKeyOf(day), { today });
+    const snap = await loadMonthSnapshot(monthKeyOf(day), { today, scoreboard: false });
     pcOn = snap.pcEnabled === true;
     agency = snap.agencyName || DEFAULT_AGENCY_NAME;
     wrap = buildWrap(snap, day, view);

@@ -82,7 +82,11 @@ create table if not exists approvals (
 create index if not exists approvals_status_idx on approvals (status, requested_at desc);
 
 -- Who logged a sale, when the session names a person (logged_by keeps the kind of session).
-alter table sales add column if not exists logged_by_agent uuid references agents(id) on delete set null;
+-- On purpose NOT a foreign key: a second link from sales to agents would make the app version
+-- that is live while this runs fail every sales read (its "agents(name)" join becomes ambiguous
+-- to the API), so the board would be down between this paste and the deploy. People are never
+-- deleted, so nothing is lost by leaving the link out.
+alter table sales add column if not exists logged_by_agent uuid;
 create index if not exists sales_agent_sold_idx on sales (agent_id, sold_on) where deleted_at is null;
 
 -- The login throttle also counts per account ("acct:<id>" in the same column).

@@ -75,7 +75,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   // are on. The shared team password names nobody, so it has no filter to offer.
   let myTeam: { leaderName: string; ids: Set<string> } | null = null;
   try {
-    const [snapshot, everyone, viewer] = await Promise.all([loadMonthSnapshot(month, { today }), listAgents({ includeInactive: true }), currentViewer()]);
+    const [snapshot, everyone, viewer] = await Promise.all([loadMonthSnapshot(month, { today, scoreboard: false }), listAgents({ includeInactive: true }), currentViewer()]);
     s = snapshot;
     const me = viewer?.agentId && everyone.some((a) => a.id === viewer.agentId) ? viewer.agentId : null;
     if (me) {
