@@ -10,9 +10,12 @@ import { PageHead } from "@/components/ui/kit";
 import { appBase } from "@/lib/app-url";
 import { LOG_TOKEN_MIN } from "@/lib/auth";
 import { DEFAULT_PC_COLOR } from "@/lib/pc-colors";
+import { syncStatus } from "@/lib/agentspace";
 import { SettingsForms } from "./settings-forms";
 
 export const metadata: Metadata = { title: "Settings" };
+/** Sync now runs a sync inside this page's actions. */
+export const maxDuration = 60;
 
 /**
  * Settings by level (owner, 2026-11-12): the owner and the admins run the goals, the board, the
@@ -32,7 +35,7 @@ export default async function SettingsPage() {
   const today = todayInDetroit();
   const month = monthKeyOf(today);
   const next = addMonths(month, 1);
-  const [settings, goals, nextGoals, snap] = await Promise.all([getSettings(), goalsForMonth(month), goalsForMonth(next), loadMonthSnapshot(month, { today, scoreboard: false }).catch(() => null)]);
+  const [settings, goals, nextGoals, snap, sync] = await Promise.all([getSettings(), goalsForMonth(month), goalsForMonth(next), loadMonthSnapshot(month, { today, scoreboard: false }).catch(() => null), syncStatus()]);
   const progress = snap && snap.team.goalCents > 0 ? { pct: Math.min(999, snap.team.goalPct), projected: formatDollars(snap.team.pace.projectedCents) } : null;
   const token = owner ? (process.env.LOG_TOKEN ?? "") : "";
   return (
@@ -52,6 +55,7 @@ export default async function SettingsPage() {
         base={owner ? await appBase() : ""}
         owner={owner}
         progress={progress}
+        agentspace={sync}
       />
     </div>
   );

@@ -114,6 +114,30 @@ Everyone lands on it right after joining; later it is under their initials > **P
 - **Team password**: the TV, and a phone that has not joined yet. It can still log sales, as before. Once people have their own sign-ins: **Settings** > **Sign-ins** > switch off **The shared team password can log sales**. Then the team password only looks (the TV keeps working) and people log with their own sign-in.
 - After the CRM update (step 3, item 9): the team password only shows the boards (Home, Scoreboard, People's names, the TV) and the switch above is gone. Log a sale and Policies ask for a person's own sign-in.
 
+## Connect AgentSpace (added 2026-11-16)
+Your agents also use AgentSpace. Once this is connected, a deal logged there (by mistake or by habit) shows up here on its own within a few minutes, and its status and premium stay in step. Nothing is ever written to AgentSpace: Scorecard only reads. The 157 deals already copied are recognized and linked, not counted twice. Deals that AgentSpace itself does not count as production (the ones that only came from carrier reports) are left out, like on its own Scoreboard.
+
+### Step 1. Database update (one paste)
+1. Supabase > your project > **SQL Editor** > **New query**.
+2. Open `supabase/migrations/0007_agentspace.sql` on GitHub, tap **Copy raw file**, paste it, tap **Run**. It says "Success". It is safe to run twice. (Or tell Claude yes and it does this paste for you.)
+
+### Step 2. Make an AgentSpace key (an agency key)
+1. In AgentSpace, sign in as the agency admin and open the page where API keys are made (look for **API**, **Developer** or **Integrations** in its settings).
+2. Make a **new key for the agency**, not a personal key. A personal key stops working the day that person loses admin access in AgentSpace; an agency key does not.
+3. Copy it right away: AgentSpace shows a key **only once**. Do not send it to anyone or paste it in a chat.
+
+### Step 3. Give the key to Scorecard (Vercel)
+1. vercel.com > the **tkg-scorecard** project > **Settings** > **Environment Variables**.
+2. **Key**: `AGENTSPACE_API_KEY`. **Value**: paste the key. Leave all environments ticked. **Save**.
+3. **Deployments** > the top one > the three dots > **Redeploy**. (A new variable only reaches the app after a redeploy.)
+
+### Step 4. Check it
+1. Scorecard > your initials > **Settings** > the **AgentSpace** card says **Connected**. (It says "Not connected" with the same instruction while the key is missing.)
+2. Tap **Sync now**. The first time it needs about three taps of that button (each run reads for 45 seconds at most), or about ten minutes on its own: it links the policies that are already here to their deals, adds the ones posted since, and says "Every agent-day matches AgentSpace" when it is done.
+3. After that it runs by itself about every 4 minutes whenever the TV or anyone has Scorecard open. Anyone new it finds in AgentSpace is added to People with no upline: set theirs there.
+
+If the card says AgentSpace did not accept the key, make a new agency key (Step 2) and replace `AGENTSPACE_API_KEY` in Vercel (Step 3). To switch the sync off, delete the variable and redeploy.
+
 ## Phase 2: desk tags and a Shortcut (optional, after release 1 works)
 
 ### Option A, no Shortcut: a tag that opens Log a sale
@@ -136,7 +160,7 @@ Everyone lands on it right after joining; later it is under their initials > **P
 ## Reference: all settings
 - Required: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OWNER_PASSWORD`.
 - Recommended: `TEAM_PASSWORD` (without it only the owner can sign in), `APP_URL`.
-- Optional: `LOG_TOKEN` (Shortcut endpoint), `SESSION_SECRET` (32+ characters; otherwise made from the Supabase key).
+- Optional: `LOG_TOKEN` (Shortcut endpoint), `SESSION_SECRET` (32+ characters; otherwise made from the Supabase key), `AGENTSPACE_API_KEY` (an agency key: turns the AgentSpace sync on; see Connect AgentSpace), `CRON_SECRET` (only if something outside Scorecard should start a sync: it may call `/api/agentspace/sync` with `Authorization: Bearer <that value>`; nothing needs to).
 - Changing a password signs out every device that used it. The owner password also opens Settings and can fix or remove any sale; the team password can log sales and take one back within 15 minutes.
 - Ten wrong passwords in 15 minutes lock that one phone or computer out for 15 minutes; everyone else is unaffected.
 - Once the Lineage update (built 2026-11-12) is live: each person also has their own sign-in (cell number and password, made through a join link; see Getting everyone on). Four levels: you (the owner password, or your own sign-in), admins (goals, people, this month's sales, the board; two things wait for your yes under Approvals), members (their own sales and profile), and the team password (the TV and phones that have not joined yet; whether it can still log sales is your switch under Settings > Sign-ins). After the CRM update (Phase 1 Step 3, item 9): five, with **Manager** between admin and agent (their own sales and their team's: logging for a teammate, a teammate's status and notes, confirming who joins their team), members are called **Agent**, and the team password only shows the boards. A person's own password is theirs to change under their initials > Your profile; Sign out everywhere is there too.

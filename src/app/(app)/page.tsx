@@ -41,8 +41,11 @@ import { AroundCard, BoardCard, ChartCard, ComingCard, EmptyMe, MiniCards, Pipel
 import { TeamPicker } from "@/components/home/team-picker";
 import { PcView, TotalView } from "@/components/home/pc-views";
 import { SaleRowMenu, type UndoRight } from "./sale-row-menu";
+import { maybeSync } from "@/lib/agentspace-trigger";
 
 export const metadata: Metadata = { title: "Home" };
+/** The AgentSpace sync may run after Home answers (agentspace-trigger.ts). */
+export const maxDuration = 60;
 
 type Params = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
@@ -70,6 +73,8 @@ const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
  */
 export default async function HomePage({ searchParams }: { searchParams: Promise<Params> }) {
   const viewer = await pageViewer();
+  // Two numbers compared and nothing more until a sync is due (about every 4 minutes); see agentspace-trigger.ts.
+  maybeSync();
   const params = await searchParams;
   const today = todayInDetroit();
   const current = monthKeyOf(today);

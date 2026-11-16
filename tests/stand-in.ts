@@ -137,6 +137,11 @@ class Query {
       const p = this.payload as Row;
       if (this.table === "agents" && p.phone && rows.some((r) => r.phone === p.phone)) return { data: null, error: { code: "23505", message: "duplicate key" } };
       if (this.op === "upsert" && rows.some((r) => r.key === p.key)) return { data: null, error: null };
+      // The unique constraints the migrations make: settings.key, and one policy per AgentSpace deal (0007).
+      if (this.op === "insert" && this.table === "settings" && rows.some((r) => r.key === p.key)) return { data: null, error: { code: "23505", message: "duplicate key" } };
+      if (this.table === "sales" && p.agentspace_deal_id && rows.some((r) => r.agentspace_deal_id === p.agentspace_deal_id)) return { data: null, error: { code: "23505", message: "duplicate key" } };
+      // Postgres cannot store a NUL character in text.
+      if (this.table === "sales" && typeof p.notes === "string" && p.notes.includes("\u0000")) return { data: null, error: { code: "22021", message: "invalid byte sequence" } };
       const row: Row =
         this.table === "login_attempts"
           ? { id: ids.next++, at: new Date().toISOString(), ...p }
@@ -150,6 +155,7 @@ class Query {
     } else if (this.op === "update") {
       const p = this.payload as Row;
       if (this.table === "agents" && p.phone && rows.some((r) => r.phone === p.phone && !hit(r))) return { data: null, error: { code: "23505", message: "duplicate key" } };
+      if (this.table === "sales" && p.agentspace_deal_id && rows.some((r) => r.agentspace_deal_id === p.agentspace_deal_id && !hit(r))) return { data: null, error: { code: "23505", message: "duplicate key" } };
       out = rows.filter(hit);
       for (const r of out) Object.assign(r, p);
     } else if (this.op === "delete") {
