@@ -95,17 +95,21 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
   let props: Omit<JoinFormProps, "token">;
   try {
     if (invite.kind === "agency") {
-      // Names only (never a number): the list a new person picks their upline from.
-      const board = await listPeople();
-      const people = board.map((a) => ({ id: a.id, name: a.name }));
-      const leader = invite.upline_id && people.some((p) => p.id === invite.upline_id) ? invite.upline_id : null;
-      // The people already on the board who have no sign-in yet and whose row a typed name may
-      // claim (agents with no team and no policies: people.ts claimableNames; a manager, a leader,
-      // an admin or the owner gets their own link from an admin). "Matt" on the board and
-      // "Matthew" typed would make a second row, so the card offers the board's own spelling to
-      // tap. Names and nothing else: no id, no number, nobody's numbers.
-      const unclaimed = await claimableNames();
-      props = { kind: "agency", people, unclaimed, leaderId: leader, needsPhone: true, inOffice: false };
+      // The names already on the board with no sign-in yet whose row a typed name may claim, names
+      // only (people.ts claimableNames): "Matt" on the board and "Matthew" typed would make a
+      // second row, so the card offers the board's own spelling to tap. On a leader's team link
+      // that leader's own people are in the list too (the link comes from the person above them).
+      const unclaimed = await claimableNames(invite.upline_id);
+      if (invite.upline_id) {
+        // A team link: the upline is fixed (the leader's), nothing to search for.
+        const leader = await getPerson(invite.upline_id);
+        if (!leader || !leader.active) return bad;
+        props = { kind: "agency", people: [], unclaimed, leaderId: leader.id, leaderName: leader.name, needsPhone: true, inOffice: false };
+      } else {
+        // Names only (never a number): the list a new person picks their upline from.
+        const board = await listPeople();
+        props = { kind: "agency", people: board.map((a) => ({ id: a.id, name: a.name })), unclaimed, leaderId: null, needsPhone: true, inOffice: false };
+      }
     } else {
       const person = invite.agent_id ? await getPerson(invite.agent_id) : null;
       if (!person || !person.active) return bad;
@@ -116,7 +120,8 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
     return <Closed agency={agency} title="Scorecard isn't answering." line="Try this link again in a minute." />;
   }
 
-  const title = props.kind === "agency" ? `Join ${agency} on Scorecard` : props.kind === "person" ? `Hi ${props.firstName}, set up your sign-in` : "Set a new password";
+  const teamOf = props.kind === "agency" && props.leaderName ? firstOf(props.leaderName) : null;
+  const title = teamOf ? `Join ${teamOf}'s team` : props.kind === "agency" ? `Join ${agency} on Scorecard` : props.kind === "person" ? `Hi ${props.firstName}, set up your sign-in` : "Set a new password";
   const line =
     props.kind === "agency"
       ? "It takes a minute. Your cell number and a password are how you sign in from now on."

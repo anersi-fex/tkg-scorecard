@@ -263,34 +263,106 @@ test("joiners and levels: who confirms, Not on my team, a manager's own team lin
   // Join links: a manager their own team's only.
   assert.deepEqual(await as(mia, () => people.getJoinLink(null)), { ok: false, error: "You can share your own team's link." });
   assert.deepEqual(await as(mia, () => people.getJoinLink(id(zed))), { ok: false, error: "You can share your own team's link." });
-  assert.equal((await as(ann, () => people.getJoinLink(id(ann)))).ok, false);
+  assert.deepEqual(await as("team", () => people.getJoinLink(id(ann))), { ok: false, error: "This needs your own sign-in." });
+  assert.equal((await as(ann, () => people.getJoinLink(id(ann)))).ok, true, "an agent gets their own team link");
+  assert.deepEqual(await as(ann, () => people.getJoinLink(id(mia))), { ok: false, error: "You can share your own team's link." });
   const mine = await as(mia, () => people.getJoinLink(id(mia)));
   assert.equal(mine.ok, true);
   assert.equal(tables.invites.at(-1)?.upline_id, id(mia));
   assert.equal(tables.invites.at(-1)?.kind, "agency");
-  // Back to an agent: the team link Mia made for her own team stops; one an admin made for her stays.
+  // Back to an agent: her team link keeps working (every person has one); an admin's stays too.
   const adminMade: Row = { ...tables.invites.at(-1)!, id: randomUUID(), token_hash: "x", token: null, created_by: id(admin) };
   tables.invites.push(adminMade);
   assert.equal((await as(admin, () => people.setPersonRole(id(mia), "member"))).ok, true);
-  assert.ok(tables.invites.find((i) => i.upline_id === id(mia) && i.created_by === id(mia))?.revoked_at, "her own link is off");
+  assert.equal(tables.invites.find((i) => i.upline_id === id(mia) && i.created_by === id(mia))?.revoked_at ?? null, null, "her own link stays");
   assert.equal(adminMade.revoked_at ?? null, null, "an admin's link for her team stays");
 });
 
-test("a team link made by a manager who is an agent now places joiners waiting, not confirmed", async () => {
+test("a team link from an agent places joiners under them, confirmed at once; an admin's link for a team too", async () => {
   reset();
   const peopleLib = req("../src/lib/people") as typeof import("../src/lib/people");
   const invites = req("../src/lib/invites") as typeof import("../src/lib/invites");
-  const miaLink = await invites.createInvite({ kind: "agency", uplineId: id(mia), createdBy: id(mia) });
-  const adminLink = await invites.createInvite({ kind: "agency", uplineId: id(mia), createdBy: id(admin) });
-  mia.role = "member"; // demoted by a path that left the link on
-  const late = await peopleLib.joinWithInvite({ token: miaLink.token, name: "Lou Late", phone: "248 555 0141", password: "a long password", uplineId: id(mia), inOffice: false });
+  const annLink = await invites.createInvite({ kind: "agency", uplineId: id(ann), createdBy: id(ann) });
+  const adminLink = await invites.createInvite({ kind: "agency", uplineId: id(ann), createdBy: id(admin) });
+  const join = (token: string, name: string, phone: string, uplineId: string | null = null) => peopleLib.joinWithInvite({ token, name, phone, password: "a long password", uplineId, inOffice: false });
+  const late = await join(annLink.token, "Lou Late", "248 555 0141", id(ann));
   assert.ok(late.ok);
   const lou = tables.agents.find((a) => a.id === late.agentId)!;
-  assert.equal(lou.upline_id, id(mia));
-  assert.equal(lou.upline_confirmed, false, "she can't hand out a team link as an agent");
-  const viaAdmin = await peopleLib.joinWithInvite({ token: adminLink.token, name: "Vi Admin", phone: "248 555 0142", password: "a long password", uplineId: id(mia), inOffice: false });
+  assert.equal(lou.upline_id, id(ann));
+  assert.equal(lou.upline_confirmed, true, "an agent's own team link places people at once");
+  assert.equal(lou.role, "member");
+  const viaAdmin = await join(adminLink.token, "Vi Admin", "248 555 0142");
   assert.ok(viaAdmin.ok);
   assert.equal(tables.agents.find((a) => a.id === viaAdmin.agentId)!.upline_confirmed, true, "an admin's link for her team is confirmed");
+  // An admin's link stops being confirmed once that person is not an admin anymore.
+  admin.role = "member";
+  const stale = await join(adminLink.token, "Stu Stale", "248 555 0143");
+  assert.ok(stale.ok);
+  assert.equal(tables.agents.find((a) => a.id === stale.agentId)!.upline_confirmed, false);
+});
+
+test("a team link stops with its leader: off the board, or the admin who made it", async () => {
+  reset();
+  const peopleLib = req("../src/lib/people") as typeof import("../src/lib/people");
+  const invites = req("../src/lib/invites") as typeof import("../src/lib/invites");
+  const actions = req("../src/app/(app)/actions") as typeof import("../src/app/(app)/actions");
+  const annLink = await invites.createInvite({ kind: "agency", uplineId: id(ann), createdBy: id(ann) });
+  const adminLinkForBen = await invites.createInvite({ kind: "agency", uplineId: id(ben), createdBy: id(admin) });
+  const main = await invites.createInvite({ kind: "agency", createdBy: id(admin) });
+  assert.ok(await invites.readInvite(annLink.token));
+  assert.ok(await invites.readInvite(adminLinkForBen.token));
+  // The admin who made a team's link is taken off the board: that link is dead, the agency's own link is not.
+  admin.active = false;
+  assert.equal(await invites.readInvite(adminLinkForBen.token), null, "made by someone off the board");
+  assert.ok(await invites.readInvite(main.token), "the agency link has no leader and stays");
+  admin.active = true;
+  assert.ok(await invites.readInvite(adminLinkForBen.token));
+  // Ann is taken off the board: her link is dead for the join page and for the join itself.
+  assert.deepEqual(await as("owner", () => actions.setPersonActive(id(ann), false)), { ok: true, message: "Off the board. Their sales stay in the history." });
+  assert.equal(await invites.readInvite(annLink.token), null);
+  const r = await peopleLib.joinWithInvite({ token: annLink.token, name: "Nia New", phone: "248 555 0151", password: "a long password", uplineId: null, inOffice: false });
+  assert.equal(r.ok, false);
+  assert.equal(tables.agents.some((a) => a.name === "Nia New"), false);
+  // Back on the board: her own link does not come back (a new one is made).
+  assert.deepEqual(await as("owner", () => actions.setPersonActive(id(ann), true)), { ok: true, message: "Back on the board." });
+  assert.equal(await invites.readInvite(annLink.token), null, "the old link stays off");
+});
+
+test("an admin who is made an agent again takes the team links they made for other teams with them, not their own", async () => {
+  reset();
+  const invites = req("../src/lib/invites") as typeof import("../src/lib/invites");
+  const forBen = await invites.createInvite({ kind: "agency", uplineId: id(ben), createdBy: id(admin) });
+  const own = await invites.createInvite({ kind: "agency", uplineId: id(admin), createdBy: id(admin) });
+  const main = await invites.createInvite({ kind: "agency", createdBy: id(admin) });
+  assert.ok(await invites.readInvite(forBen.token));
+  assert.deepEqual(await as("owner", () => people.setPersonRole(id(admin), "member")), { ok: true, message: `${admin.name} is not an admin anymore.` });
+  assert.equal(await invites.readInvite(forBen.token), null, "a link made for Ben's team stops with the admin's level");
+  assert.ok(await invites.readInvite(own.token), "their own team link stays");
+  assert.ok(await invites.readInvite(main.token), "the agency link stays");
+});
+
+test("Make a new link: only the person's own team link is turned off", async () => {
+  reset();
+  const invites = req("../src/lib/invites") as typeof import("../src/lib/invites");
+  const a1 = (await as(ann, () => people.getJoinLink(id(ann)))) as { ok: true; url: string };
+  const b1 = (await as(ben, () => people.getJoinLink(id(ben)))) as { ok: true; url: string };
+  const main = await invites.createInvite({ kind: "agency", createdBy: id(admin) });
+  const tokenOf = (url: string) => url.split("/").pop()!;
+  assert.equal(tokenOf(((await as(ann, () => people.getJoinLink(id(ann)))) as { url: string }).url), tokenOf(a1.url), "the same link every time");
+  // Ben cannot renew Ann's; Ann renews her own.
+  assert.equal((await as(ben, () => people.resetTeamLink(id(ann)))).ok, false);
+  assert.equal((await as("team", () => people.resetTeamLink(id(ann)))).ok, false);
+  const a2 = await as(ann, () => people.resetTeamLink(id(ann)));
+  assert.ok(a2.ok);
+  assert.notEqual(tokenOf((a2 as { url: string }).url), tokenOf(a1.url));
+  assert.equal(await invites.readInvite(tokenOf(a1.url)), null, "Ann's old link is off");
+  assert.ok(await invites.readInvite(tokenOf((a2 as { url: string }).url)), "the new one works");
+  assert.ok(await invites.readInvite(tokenOf(b1.url)), "Ben's link is untouched");
+  assert.ok(await invites.readInvite(main.token), "the agency link is untouched");
+  // The agency's own "Make a new link" leaves the team links standing.
+  assert.equal((await as(admin, () => people.resetJoinLink())).ok, true);
+  assert.equal(await invites.readInvite(main.token), null);
+  assert.ok(await invites.readInvite(tokenOf(b1.url)), "Ben's link survives the agency's new link");
 });
 
 test("joining: a picked upline waits to be confirmed; a leader's own link is confirmed at once; a claimed row keeps its own", async () => {
@@ -311,10 +383,11 @@ test("joining: a picked upline waits to be confirmed; a leader's own link is con
   assert.ok(viaLink.ok);
   assert.equal(row(viaLink.agentId).upline_confirmed, true, "the leader's own link: confirmed");
 
+  // A team link ignores any other upline the form names: the leader's team, confirmed.
   const elsewhere = await join(miaLink.token, "Kim Elsewhere", "248 555 0133", id(admin));
   assert.ok(elsewhere.ok);
-  assert.equal(row(elsewhere.agentId).upline_id, id(admin));
-  assert.equal(row(elsewhere.agentId).upline_confirmed, false, "someone other than the link's leader waits");
+  assert.equal(row(elsewhere.agentId).upline_id, id(mia));
+  assert.equal(row(elsewhere.agentId).upline_confirmed, true, "a team link always lands on its leader");
 
   const alone = await join(agency.token, "Al Alone", "248 555 0134", null);
   assert.ok(alone.ok);
@@ -353,4 +426,64 @@ test("joining: a picked upline waits to be confirmed; a leader's own link is con
   assert.equal(refused.ok, false);
   assert.equal(peopleLib.claimableRole("manager"), false);
   assert.equal(peopleLib.claimableRole("admin"), false);
+});
+
+test("claiming by name on a team link: a row keeps its team; the leader's own legs (leaders too) are claimable only on that leader's link; never an admin's", async () => {
+  reset();
+  const peopleLib = req("../src/lib/people") as typeof import("../src/lib/people");
+  const invites = req("../src/lib/invites") as typeof import("../src/lib/invites");
+  const join = (token: string, name: string, phone: string, uplineId: string | null = null) => peopleLib.joinWithInvite({ token, name, phone, password: "a long password", uplineId, inOffice: false });
+  const row = (agentId: string) => tables.agents.find((a) => a.id === agentId)!;
+  // The top person, two legs (one leads a team of their own), and an unplaced seller.
+  const top = person("Tess Topleg", { upline_id: id(admin) });
+  const legLeader = person("Lena Legleader", { pass_hash: null, upline_id: id(top) });
+  const underLena = person("Uma Underlena", { pass_hash: null, upline_id: id(legLeader) });
+  const leg = person("Leo Leg", { pass_hash: null, upline_id: id(top) });
+  const stray = person("Sid Stray", { pass_hash: null });
+  const elsewhere = person("Eve Elsewhere", { pass_hash: null, upline_id: id(ann) });
+  tables.agents.push(top, legLeader, underLena, leg, stray, elsewhere);
+  const topLink = await invites.createInvite({ kind: "agency", uplineId: id(top), createdBy: id(top) });
+  const annLink = await invites.createInvite({ kind: "agency", uplineId: id(ann), createdBy: id(ann) });
+
+  // The card's names: on Tess's link her own leader leg is in the list; on Ann's she is not.
+  assert.ok((await peopleLib.claimableNames(id(top))).includes("Lena Legleader"));
+  assert.ok(!(await peopleLib.claimableNames(id(ann))).includes("Lena Legleader"));
+  assert.ok(!(await peopleLib.claimableNames(null)).includes("Lena Legleader"));
+  assert.ok((await peopleLib.claimableNames(id(top))).includes("Leo Leg"));
+
+  // On someone else's link a leader is not claimable by name.
+  assert.equal((await join(annLink.token, "Lena Legleader", "248 555 0161")).ok, false);
+  assert.equal(legLeader.pass_hash, null);
+  // On her own upline's link she is: she keeps her upline and her team, confirmed.
+  const claimedLeader = await join(topLink.token, "lena legleader", "248 555 0162");
+  assert.ok(claimedLeader.ok);
+  assert.equal(claimedLeader.agentId, id(legLeader));
+  assert.equal(legLeader.upline_id, id(top));
+  assert.equal(underLena.upline_id, id(legLeader));
+  assert.equal(tables.agents.filter((a) => a.name === "Lena Legleader").length, 1, "no second row");
+  // Someone from another team using Tess's link keeps their own upline; nobody is moved.
+  const kept = await join(topLink.token, "Eve Elsewhere", "248 555 0163", id(top));
+  assert.ok(kept.ok);
+  assert.equal(row(kept.agentId).upline_id, id(ann), "claiming never moves a person to another team");
+  // A row with no upline is placed under the link's leader, confirmed.
+  const placed = await join(topLink.token, "Sid Stray", "248 555 0164");
+  assert.ok(placed.ok);
+  assert.equal(stray.upline_id, id(top));
+  assert.equal(stray.upline_confirmed, true);
+  // A second leg of the same leader: claimable, upline kept.
+  assert.ok((await join(topLink.token, "Leo Leg", "248 555 0165")).ok);
+  assert.equal(leg.upline_id, id(top));
+  // An admin's or the owner's row is never claimed by a name, on any link.
+  const ada = person("Ada Adminrow", { role: "admin", pass_hash: null, upline_id: id(top) });
+  tables.agents.push(ada);
+  assert.equal((await join(topLink.token, "Ada Adminrow", "248 555 0166")).ok, false);
+  assert.equal(ada.pass_hash, null);
+  const owner = tables.agents.find((a) => a.role === "owner")!;
+  owner.pass_hash = null;
+  assert.equal((await join(topLink.token, "Olive Owner", "248 555 0167")).ok, false);
+  // A new person lands on the team, whatever upline the form names, and is an agent.
+  const fresh = await join(topLink.token, "Newt Newcomer", "248 555 0168", id(admin));
+  assert.ok(fresh.ok);
+  assert.equal(row(fresh.agentId).upline_id, id(top));
+  assert.equal(row(fresh.agentId).role, "member");
 });

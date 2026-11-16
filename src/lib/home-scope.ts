@@ -403,3 +403,12 @@ export function rangeLabel(month: string, today: string): string {
   const short = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
   return end === 1 ? `${short} 1` : `${short} 1 – ${end}`;
 }
+
+/**
+ * Home's one small "Get started" card (the rollout, 2026-11-16): for a person with no policy yet
+ * and nobody on their team. It goes away on its own as soon as either is true; nothing is saved.
+ * `policies` counts every policy of theirs, `teammates` the people under them on the confirmed tree.
+ */
+export function showGetStarted(p: { policies: number; teammates: number }): boolean {
+  return p.policies === 0 && p.teammates === 0;
+}

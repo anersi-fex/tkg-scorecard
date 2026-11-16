@@ -103,7 +103,17 @@ export async function readInvite(token: unknown): Promise<Invite | null> {
   const { data, error } = await db().from("invites").select(INVITE_COLUMNS).eq("token_hash", hashToken(token)).maybeSingle();
   if (error) fail("invites.read", error);
   const row = data as InviteRow | null;
-  return row && inviteLive(row) ? strip(row) : null;
+  if (!row || !inviteLive(row)) return null;
+  // A team link works only while the leader it puts people under is on the board, and, for a link
+  // somebody made, while that somebody is too: a person taken off the board takes their link with
+  // them, and so does an admin's link for a team (the agency's own link has no leader and stays).
+  if (row.kind === "agency" && row.upline_id) {
+    const ids = [row.upline_id, ...(row.created_by && row.created_by !== row.upline_id ? [row.created_by] : [])];
+    const { data: who, error: whoErr } = await db().from("agents").select("id, active").in("id", ids);
+    if (whoErr) fail("invites.read", whoErr);
+    if (!who || who.length !== ids.length || who.some((a) => a.active !== true)) return null;
+  }
+  return strip(row);
 }
 
 /**
@@ -128,9 +138,18 @@ export async function revokeInvite(id: string): Promise<void> {
   if (error) fail("invites.revoke", error);
 }
 
-/** Turns off every agency link (the main one and each leader's), so a link that got out stops working. */
+/**
+ * Turns off the agency's own link (the one with no leader), so a link that got out stops working.
+ * The team links people hand out stay: each is turned off by its own leader (revokeTeamLinks).
+ */
 export async function revokeAgencyInvites(): Promise<void> {
-  const { error } = await db().from("invites").update({ revoked_at: new Date().toISOString() }).eq("kind", "agency").is("revoked_at", null);
+  const { error } = await db().from("invites").update({ revoked_at: new Date().toISOString() }).eq("kind", "agency").is("upline_id", null).is("revoked_at", null);
+  if (error) fail("invites.revoke", error);
+}
+
+/** Turns off every team link for one leader's team (their own, and one an admin made for them): "Make a new link". No other link is touched. */
+export async function revokeTeamLinks(leaderId: string): Promise<void> {
+  const { error } = await db().from("invites").update({ revoked_at: new Date().toISOString() }).eq("kind", "agency").eq("upline_id", leaderId).is("revoked_at", null);
   if (error) fail("invites.revoke", error);
 }
 
@@ -146,19 +165,27 @@ export async function revokePersonInvites(agentId: string): Promise<void> {
  * outlive the level of whoever holds its address. The people those links were for ask for a new one.
  */
 export async function revokeInvitesMadeBy(agentId: string): Promise<void> {
-  const { error } = await db().from("invites").update({ revoked_at: new Date().toISOString() }).eq("created_by", agentId).in("kind", ["person", "reset"]).is("used_at", null).is("revoked_at", null);
+  const at = new Date().toISOString();
+  const { error } = await db().from("invites").update({ revoked_at: at }).eq("created_by", agentId).in("kind", ["person", "reset"]).is("used_at", null).is("revoked_at", null);
   if (error) fail("invites.revoke", error);
+  // The team links they made for other people's teams (an admin's "A link for one team") stop too:
+  // a leader who was shown such a link as their own would otherwise keep placing people
+  // unconfirmed, with nobody of their level able to confirm them. Their own team's link stays.
+  const made = await db().from("invites").update({ revoked_at: at }).eq("kind", "agency").eq("created_by", agentId).not("upline_id", "is", null).neq("upline_id", agentId).is("revoked_at", null);
+  if (made.error) fail("invites.revoke", made.error);
 }
 
 /**
- * Turns off the team links a person made for their own team (an agency link with upline_id = them,
- * made by them): they stopped being a manager or an admin, or were taken off the board, and only a
- * manager or an admin hands out a team link (contract decision 7). A team link an admin made for
- * them stays.
+ * Turns off the team links that stop with a person who leaves the board: the ones for their team
+ * (an agency link with upline_id = them) and the ones they made for other teams. Links made by an
+ * admin for someone else's team are not theirs to keep alive once the admin is gone.
  */
 export async function revokeOwnTeamLinks(agentId: string): Promise<void> {
-  const { error } = await db().from("invites").update({ revoked_at: new Date().toISOString() }).eq("kind", "agency").eq("upline_id", agentId).eq("created_by", agentId).is("revoked_at", null);
-  if (error) fail("invites.revoke", error);
+  const at = new Date().toISOString();
+  const own = await db().from("invites").update({ revoked_at: at }).eq("kind", "agency").eq("upline_id", agentId).is("revoked_at", null);
+  if (own.error) fail("invites.revoke", own.error);
+  const made = await db().from("invites").update({ revoked_at: at }).eq("kind", "agency").eq("created_by", agentId).not("upline_id", "is", null).is("revoked_at", null);
+  if (made.error) fail("invites.revoke", made.error);
 }
 
 /** The agency link's token (for one leader's team with uplineId), made the first time it is asked for. */

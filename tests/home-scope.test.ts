@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { aroundYou, comingUp, homeBoard, homeTeams, officeGroups, pickHomeScope, pipelineOf, scopeDaily, scopeSummary, teamGoalOf, type HomePerson, type HomeSale } from "../src/lib/home-scope";
+import { aroundYou, comingUp, homeBoard, homeTeams, officeGroups, pickHomeScope, pipelineOf, scopeDaily, scopeSummary, showGetStarted, teamGoalOf, type HomePerson, type HomeSale } from "../src/lib/home-scope";
 import { monthClock } from "../src/lib/month";
 
 const MONTH = "2026-11";
@@ -202,4 +202,11 @@ test("the best day and the range label", async () => {
   assert.equal(rangeLabel("2026-11", "2026-11-12"), "Nov 1 – 12");
   assert.equal(rangeLabel("2026-10", "2026-11-12"), "Oct 1 – 31");
   assert.equal(rangeLabel("2026-11", "2026-11-01"), "Nov 1");
+});
+
+test("the Get started card: only with no policy and nobody on the team", () => {
+  assert.equal(showGetStarted({ policies: 0, teammates: 0 }), true);
+  assert.equal(showGetStarted({ policies: 1, teammates: 0 }), false);
+  assert.equal(showGetStarted({ policies: 0, teammates: 1 }), false);
+  assert.equal(showGetStarted({ policies: 3, teammates: 4 }), false);
 });

@@ -6,11 +6,11 @@ import { z } from "zod";
 import { endSession, requireViewer, startPersonSession } from "@/lib/auth";
 import { getAgent, getSettings, lineFor, listAgents, saveSettings, touchBoard } from "@/lib/data";
 import { bumpSession, checkOwnPassword, cleanName, confirmUpline as confirmPickedUpline, declineUpline as declinePickedUpline, getPerson, sameName, setInOffice, setName, setPersonPassword, setPhone, setRole, setUpline, type Person } from "@/lib/people";
-import { agencyToken, createInvite, joinUrl, revokeAgencyInvites, revokeInvitesMadeBy, revokeOwnTeamLinks, revokePersonInvites } from "@/lib/invites";
+import { agencyToken, createInvite, joinUrl, revokeAgencyInvites, revokeInvitesMadeBy, revokePersonInvites, revokeTeamLinks } from "@/lib/invites";
 import { decideApproval as decide, listApprovals, requestApproval, type Approval } from "@/lib/approvals";
 import { passwordProblem } from "@/lib/passwords";
 import { normalizePhone } from "@/lib/phone";
-import { isAdmin, isOwner, type Viewer } from "@/lib/viewer";
+import { isOwner, type Viewer } from "@/lib/viewer";
 import { canConfirmJoiner, canGetJoinLink, canManageAccess, ruleContext } from "@/lib/rules";
 import type { ActionResult } from "./actions";
 
@@ -103,9 +103,6 @@ export async function setPersonRole(id: string, role: string): Promise<ActionRes
     // The one-time links an admin made for others stop with the level. First, so a try that
     // fails halfway leaves the level as it was and the next try does both.
     if (was === "admin") await revokeInvitesMadeBy(person.id);
-    // An agent hands out no team link: the ones they made for their own team as a manager or an
-    // admin stop (contract decision 7).
-    if (role === "member") await revokeOwnTeamLinks(person.id);
     await setRole(person.id, role);
     // A personal link made while they were an agent must not hand out an admin's sign-in.
     if (role === "admin") await revokePersonInvites(person.id);
@@ -154,13 +151,15 @@ async function answerJoiner(id: string, yes: boolean): Promise<ActionResult> {
 /**
  * The join link to send people (made the first time it is asked for, the same link after that).
  * With a leader's id: a link that puts whoever joins on that leader's team (confirmed at once).
- * The owner or an admin: any; a manager: their own team's only (contract decision 7).
+ * Everyone with their own sign-in gets their own team's (the rollout: the link goes down the tree,
+ * each person sending theirs to the people under them); the owner or an admin gets any, and the
+ * agency link (no id).
  */
 export async function getJoinLink(uplineId?: string | null): Promise<LinkResult> {
   try {
     const viewer = await requireViewer();
     const leader = uplineId ?? null;
-    if (!canGetJoinLink(viewer, leader)) return { ok: false, error: isAdmin(viewer) || viewer.level !== "manager" ? "Only an admin can do that" : "You can share your own team's link." };
+    if (!canGetJoinLink(viewer, leader)) return { ok: false, error: viewer.level === "team" ? "This needs your own sign-in." : "You can share your own team's link." };
     if (leader !== null) {
       if (!Id.safeParse(leader).success) return { ok: false, error: "That person isn't here." };
       const person = await getAgent(leader);
@@ -172,7 +171,28 @@ export async function getJoinLink(uplineId?: string | null): Promise<LinkResult>
   }
 }
 
-/** Turns off every join link that is out (the agency's and each leader's) and makes a new agency link. */
+/**
+ * "Make a new link" for one team: every link for that leader's team stops working (the old ones
+ * are in people's messages) and a new one is made. A person renews their own; an admin any
+ * team's. No other team's link, and not the agency's, is touched.
+ */
+export async function resetTeamLink(leaderId: string): Promise<LinkResult> {
+  try {
+    const viewer = await requireViewer();
+    if (!canGetJoinLink(viewer, leaderId ?? null) || !leaderId) return { ok: false, error: viewer.level === "team" ? "This needs your own sign-in." : "You can renew your own team's link." };
+    if (!Id.safeParse(leaderId).success) return { ok: false, error: "That person isn't here." };
+    const person = await getAgent(leaderId);
+    if (!person || !person.active) return { ok: false, error: "That person isn't on the board." };
+    await revokeTeamLinks(leaderId);
+    const url = await joinUrl(await agencyToken(leaderId, viewer.agentId));
+    await refresh();
+    return { ok: true, url };
+  } catch (err) {
+    return { ok: false, error: message(err) };
+  }
+}
+
+/** Turns off the agency's own join link and makes a new one. The team links people hand out stay (each is renewed by its own leader). */
 export async function resetJoinLink(): Promise<LinkResult> {
   try {
     const viewer = await requireViewer("admin");

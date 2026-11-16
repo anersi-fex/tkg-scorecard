@@ -37,15 +37,16 @@ export default async function PeoplePage() {
       </div>
     );
   const admin = isAdmin(viewer);
-  const manager = viewer.level === "manager" && !!viewer.agentId;
   const today = todayInDetroit();
   const month = monthKeyOf(today);
-  const [everyone, allSales, goals, settings, joinLink, approvals] = await Promise.all([
+  const [everyone, allSales, goals, settings, joinLink, teamLink, approvals] = await Promise.all([
     admin ? listPeople({ includeInactive: true }) : (listAgents({ includeInactive: true }) as Promise<Array<Agent & { phone?: string | null }>>),
     salesForMonth(month),
     goalsForMonth(month),
     getSettings(),
-    admin ? getJoinLink() : manager ? getJoinLink(viewer.agentId) : null,
+    admin ? getJoinLink() : null,
+    // Everyone with their own sign-in gets their own team link (the rollout goes down the tree).
+    viewer.level !== "team" && viewer.agentId ? getJoinLink(viewer.agentId) : null,
     admin ? listApprovals("pending").catch(() => []) : Promise.resolve([]),
   ]);
   // Life only while the P&C board is off: P&C sales and goals are left out before any adding up.
@@ -169,6 +170,8 @@ export default async function PeoplePage() {
         agency={settings.agencyName}
         joinUrl={joinLink?.ok ? joinLink.url : null}
         joinError={joinLink && !joinLink.ok ? joinLink.error : null}
+        teamLinkUrl={teamLink?.ok ? teamLink.url : null}
+        teamLinkError={teamLink && !teamLink.ok ? teamLink.error : null}
       />
     </div>
   );
