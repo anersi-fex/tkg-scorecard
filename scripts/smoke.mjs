@@ -547,6 +547,15 @@ try {
     const r = await owner.request.get(`${APP}/sounds/${f}.mp3`);
     check(r.ok() && /audio\/mpeg/.test(r.headers()["content-type"] ?? ""), `the ${f} sound is served (${r.status()})`);
   }
+  // The AgentSpace sync (2026-11-16): with no AGENTSPACE_API_KEY the card says so, the route refuses a stranger and says only "Not connected" to the owner
+  const asCard = await o.evaluate(() => ({ n: document.querySelectorAll("[data-agentspace]").length, off: !!document.querySelector("[data-agentspace-state=off]"), text: document.querySelector("[data-agentspace]")?.textContent ?? "" }));
+  check(asCard.n === 1 && asCard.off && /Not connected/.test(asCard.text) && /AGENTSPACE_API_KEY/.test(asCard.text) && (await o.locator("[data-agentspace] button").count()) === 0, "Settings has the AgentSpace card: Not connected, with the one instruction, while the key is missing");
+  const asStranger = await browser.newContext({ extraHTTPHeaders: { "x-forwarded-for": `198.51.100.${1 + Math.floor(Math.random() * 250)}` } });
+  const asAnon = await asStranger.request.get(`${APP}/api/agentspace/sync`);
+  await asStranger.close();
+  const asOwner = await owner.request.post(`${APP}/api/agentspace/sync`);
+  const asBody = await asOwner.text();
+  check(asAnon.status() === 401 && asOwner.ok() && /"connected":false/.test(asBody) && !/api[_-]?key|bearer/i.test(asBody), "the AgentSpace sync route refuses a stranger and tells the owner only that it is not connected");
   await o.screenshot({ path: `${OUT}/03-settings.png`, fullPage: true });
 
   // --- The join link (owner, 2026-11-12: "send everyone something, and it automatically makes them sign up") ---
@@ -1161,6 +1170,7 @@ try {
   check(!adminSettings.signIns && !adminSettings.shortcut && !adminSettings.lines && adminSettings.agency && adminSettings.text.includes("Only the admins and Anersi see this screen."), "the admin's Settings has the goals and the board, and no Sign-ins, Shortcut or lines-of-business rows");
   check(adminSettings.lists && adminSettings.switchGone, "the admin's Settings has the carriers and products, rate classes and lead sources, and no team-password switch");
   check(!/OWNER_PASSWORD|TEAM_PASSWORD|LOG_TOKEN/.test(adminSettings.text) && !PC_WORDS.test(adminSettings.text), "the admin's Settings names no password, no token and no P&C");
+  check((await ad.locator("[data-agentspace]").count()) === 1, "the admin's Settings has the AgentSpace card too");
   await ad.screenshot({ path: `${OUT}/20-admin-settings.png`, fullPage: true });
   await ad.goto(`${APP}/approvals`);
   await ad.waitForURL(`${APP}/`);

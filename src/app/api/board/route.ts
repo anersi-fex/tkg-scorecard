@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { currentRole } from "@/lib/auth";
 import { boardStamp, loadMonthSnapshot } from "@/lib/board";
 import { monthKeyOf, todayInDetroit } from "@/lib/month";
+import { maybeSync } from "@/lib/agentspace-trigger";
 
 export const dynamic = "force-dynamic";
+/** The AgentSpace sync may run after the answer (agentspace-trigger.ts), which needs its time. */
+export const maxDuration = 60;
 
 /**
  * The board's live feed: the current month's snapshot, for a signed-in viewer (the TV polls it).
@@ -14,6 +17,8 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: Request) {
   if (!(await currentRole())) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  // Two numbers compared and nothing more until a sync is due (about every 4 minutes); see agentspace-trigger.ts.
+  maybeSync();
   try {
     const today = todayInDetroit();
     // If the stamp cannot be read the feed still answers in full, without one.
