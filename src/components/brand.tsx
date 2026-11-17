@@ -1,43 +1,22 @@
 import { cn } from "@/components/ui";
 
 /**
- * Scorecard brand, a sibling of Sales Coach (Tide): a white podium (three steps, the tallest in
- * the middle, a star over it) on the colorway's gradient squircle; the lockup reads "Scorecard"
- * over "by TKG × <the agency's name>" (Settings; "Lineage Financial" to start). The icons in
- * public/ are drawn from the same geometry by scripts/gen-icons.mjs (keep the two in sync).
+ * Scorecard brand, a sibling of Sales Coach (Tide): three simple bars (a podium: the tallest in the
+ * middle, no star; the two outer bars a little softer, "Depth", owner 2026-11-17) in white on the
+ * colorway's gradient squircle; the lockup reads "Scorecard" over "by TKG × <the agency's name>"
+ * (Settings; "Lineage Financial" to start). The icons in public/ are drawn from the same geometry by
+ * scripts/gen-icons.mjs (keep the two in sync).
  */
-// Podium steps on a 1024 canvas: [x, width, top, bottom] with rounded top corners.
-// Big marks (48px and up) carry the star; small ones drop it and grow the steps.
-const STEPS_BIG: Array<[number, number, number, number]> = [
-  [152, 224, 432, 776],
-  [400, 224, 312, 776],
-  [648, 224, 512, 776],
-];
-const STEPS_SMALL: Array<[number, number, number, number]> = [
+// The three bars on a 1024 canvas: [x, width, top, bottom] with rounded top corners, and how opaque each is.
+const STEPS: Array<[number, number, number, number]> = [
   [136, 240, 384, 808],
   [392, 240, 232, 808],
   [648, 240, 488, 808],
 ];
-const STAR = { cx: 512, cy: 196, outer: 74, inner: 31 };
+const BAR_OPACITY = [0.7, 1, 0.45];
 
 function stepPath([x, w, top, bottom]: [number, number, number, number], r = 44): string {
   return `M${x} ${bottom}V${top + r}Q${x} ${top} ${x + r} ${top}H${x + w - r}Q${x + w} ${top} ${x + w} ${top + r}V${bottom}Z`;
-}
-
-function starPath(): string {
-  const pts: string[] = [];
-  for (let i = 0; i < 10; i++) {
-    const r = i % 2 === 0 ? STAR.outer : STAR.inner;
-    const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    pts.push(`${(STAR.cx + r * Math.cos(a)).toFixed(1)} ${(STAR.cy + r * Math.sin(a)).toFixed(1)}`);
-  }
-  return `M${pts.join("L")}Z`;
-}
-
-/** The whole mark as one path (big or small variant), for the icon script and the SVGs below. */
-export function podiumPath(small: boolean): string {
-  const steps = (small ? STEPS_SMALL : STEPS_BIG).map((s) => stepPath(s)).join("");
-  return small ? steps : steps + starPath();
 }
 
 export function ScoreMark({ size = 32, className }: { size?: number; className?: string }) {
@@ -48,7 +27,11 @@ export function ScoreMark({ size = 32, className }: { size?: number; className?:
       style={{ width: size, height: size, borderRadius: Math.round(size * 0.28) }}
     >
       <svg viewBox="0 0 1024 1024" width={size} height={size}>
-        <path d={podiumPath(size < 48)} fill="currentColor" className="text-on-grad" />
+        <g fill="currentColor" className="text-on-grad">
+          {STEPS.map((step, i) => (
+            <path key={i} d={stepPath(step)} opacity={BAR_OPACITY[i]} />
+          ))}
+        </g>
       </svg>
     </span>
   );
