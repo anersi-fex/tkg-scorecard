@@ -1,0 +1,2 @@
+.linkRow { display: flex; gap: 8px; align-items: center; }
+.linkText { flex: 1; min-width: 0; height: 44px; display: flex; align-items: center; padding: 0 14px; border-radius: var(--r-input); background: var(--t-input); color: var(--t-text-2); font-size: 13.5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

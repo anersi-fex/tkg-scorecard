@@ -157,24 +157,46 @@ async function holdsPolicies(id: string): Promise<boolean> {
   return (data?.length ?? 0) > 0;
 }
 
-type ClaimRow = { id: string; active: boolean; role: AgentRole; upline_id: string | null };
-/** The rows of `rows` a name typed on a join link may claim (see claimableRole). */
-async function nameClaimableIds(rows: ClaimRow[], logins: Set<string>): Promise<Set<string>> {
-  const leads = new Set(rows.filter((r) => r.active && r.upline_id && r.upline_id !== r.id).map((r) => r.upline_id as string));
-  const candidates = rows.filter((r) => r.active && !logins.has(r.id) && claimableRole(r.role) && !leads.has(r.id));
+type ClaimRow = { id: string; active: boolean; role: AgentRole; upline_id: string | null; upline_confirmed?: boolean };
+/**
+ * The rows of `rows` a name typed on a join link may claim (see claimableRole). `everyone` is the
+ * whole board (who has people under them); it defaults to `rows`.
+ *
+ * `vouchedBy` is the leader whose team link this is. That person's own direct people (confirmed, on
+ * their team) may be claimed even when they lead a team of their own or are managers: the link
+ * comes from the one person above them, who already sees everything those rows open, so the rollout
+ * can go down the tree by tapping names. An admin's or the owner's row, and a row that holds a
+ * policy, are never claimed by a typed name.
+ */
+async function nameClaimableIds(rows: ClaimRow[], logins: Set<string>, opts: { vouchedBy?: string | null; everyone?: ClaimRow[] } = {}): Promise<Set<string>> {
+  const leads = new Set((opts.everyone ?? rows).filter((r) => r.active && r.upline_id && r.upline_id !== r.id).map((r) => r.upline_id as string));
+  const vouched = (r: ClaimRow) => !!opts.vouchedBy && r.id !== opts.vouchedBy && r.upline_id === opts.vouchedBy && r.upline_confirmed !== false;
+  const candidates = rows.filter((r) => r.active && !logins.has(r.id) && (claimableRole(r.role) || (r.role === "manager" && vouched(r))) && (!leads.has(r.id) || vouched(r)));
   const held = await Promise.all(candidates.map((r) => holdsPolicies(r.id)));
   return new Set(candidates.filter((_, i) => !held[i]).map((r) => r.id));
 }
 
 /**
- * The names the agency link's card offers to tap ("Already on the board? Tap your name."): the rows
- * a typed name may claim, names only (no id, no number), sorted.
+ * The names the join card offers to tap ("Already on the board? Tap your name."): the rows a typed
+ * name may claim, names only (no id, no number), sorted. On a leader's team link (`leaderId`) that
+ * leader's own people are in the list too.
  */
-export async function claimableNames(): Promise<string[]> {
+export async function claimableNames(leaderId?: string | null): Promise<string[]> {
+  // The join page is opened by about 50 people within minutes and each open costs a database read
+  // per unclaimed name: one answer is kept for 30 seconds per link (the chips are a nudge; the
+  // server's rule is checked again when someone submits, so a stale chip is harmless).
+  const key = leaderId ?? "";
+  const hit = claimableKept.get(key);
+  if (hit && Date.now() - hit.at < CLAIMABLE_KEEP_MS) return hit.names;
   const [people, logins] = await Promise.all([roster(), loginIds()]);
-  const ok = await nameClaimableIds(people, logins);
-  return [...new Set(people.filter((p) => ok.has(p.id)).map((p) => p.name))].sort((x, y) => x.localeCompare(y));
+  const ok = await nameClaimableIds(people, logins, { vouchedBy: leaderId ?? null, everyone: people });
+  const names = [...new Set(people.filter((p) => ok.has(p.id)).map((p) => p.name))].sort((x, y) => x.localeCompare(y));
+  claimableKept.set(key, { at: Date.now(), names });
+  if (claimableKept.size > 200) claimableKept.clear();
+  return names;
 }
+const CLAIMABLE_KEEP_MS = 30_000;
+const claimableKept = new Map<string, { at: number; names: string[] }>();
 
 /** Whose team a person is on (null: the top of the tree). Refuses a loop. An admin setting it confirms it (0006). */
 export async function setUpline(id: string, uplineId: string | null): Promise<void> {
@@ -502,18 +524,18 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
   // (their name), and not as a second row (another spelling of the name, with the number their
   // old row still holds). An admin puts them back.
   if (match ? !match.active : !!holder) return { ok: false, error: OFF_BOARD, counts: true };
-  // The upline they picked, when it is a real person on the board; else the leader this link belongs to.
-  const picked = isUuid(input.uplineId) ? people.find((p) => p.id === input.uplineId && p.active) : undefined;
+  // A leader's team link puts people on that leader's team and nowhere else: what the form posts
+  // as an upline is ignored (a claimed row keeps its own upline, a new row gets the leader). The
+  // agency link lets a person pick; that pick waits to be confirmed.
   const linkLeader = invite.upline_id ? people.find((p) => p.id === invite.upline_id && p.active) : undefined;
+  if (invite.upline_id && !linkLeader) return { ok: false, error: BAD_LINK, counts: true };
+  const picked = !invite.upline_id && isUuid(input.uplineId) ? people.find((p) => p.id === input.uplineId && p.active) : undefined;
   const upline = picked ?? linkLeader ?? null;
-  // Confirmed at once only when the upline is the leader whose link this is (or there is none), and
-  // only while that link still stands for someone who may hand one out (contract decision 7): the
-  // leader is a manager, an admin or the owner today, or an admin (or the owner) made the link. A
-  // manager's own link stops placing people confirmed once they are an agent again.
+  // A team link places people confirmed, the leader having made it for their own team or an admin
+  // for them (a link an admin made stops being confirmed if that person is no longer an admin).
   const creator = invite.created_by ? people.find((p) => p.id === invite.created_by) : undefined;
-  const madeByAdmin = invite.created_by === null || (!!creator && creator.active && (creator.role === "admin" || creator.role === "owner"));
-  const leaderMayLead = !!linkLeader && (linkLeader.role === "manager" || linkLeader.role === "admin" || linkLeader.role === "owner" || madeByAdmin);
-  const confirmed = !upline || (!!linkLeader && leaderMayLead && upline.id === linkLeader.id);
+  const standsFor = !invite.created_by || invite.created_by === linkLeader?.id || (!!creator && creator.active && (creator.role === "admin" || creator.role === "owner"));
+  const confirmed = !upline || (!!linkLeader && standsFor);
   const pass_hash = await hashPassword(input.password);
   const now = new Date().toISOString();
 
@@ -521,7 +543,7 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
     if (logins.has(match.id)) return { ok: false, error: `${match.name} is already on Scorecard. Sign in, or ask an admin for your own link.`, counts: true };
     // A row whose sign-in opens clients (a manager's, a leader's, one holding policies) is not
     // claimed by a typed name: an admin sends that person their own link.
-    if (!(await nameClaimableIds([match], logins)).has(match.id) || people.some((p) => p.active && p.upline_id === match.id && p.id !== match.id)) {
+    if (!(await nameClaimableIds([match], logins, { vouchedBy: linkLeader?.id ?? null, everyone: people })).has(match.id)) {
       return { ok: false, error: `${match.name} is already on the board. Ask an admin for your own sign-in link.`, counts: true };
     }
     if (holder) await releaseParkedPhone(holder.id, typedPhone);
@@ -534,7 +556,7 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
     // Their pick replaces the upline an admin set only when they made one, and never into a loop.
     // A leader's link opens with that leader already picked: that is the link's default, not a
     // pick, so it never moves someone an admin already placed (it fills an empty upline, below).
-    const chose = picked && picked.id !== invite.upline_id ? picked : undefined;
+    const chose = picked;
     // Their own pick waits to be confirmed; a row that keeps its upline keeps its confirmed state.
     if (chose && chose.id !== match.id && !(await wouldLoop(match.id, chose.id))) {
       patch.upline_id = chose.id;
@@ -543,13 +565,14 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
       patch.upline_id = upline.id;
       patch.upline_confirmed = confirmed;
     }
-    const { data, error } = await db().from("agents").update(patch).eq("id", match.id).is("pass_hash", null).eq("role", "member").eq("active", true).select("id");
+    const { data, error } = await db().from("agents").update(patch).eq("id", match.id).is("pass_hash", null).in("role", ["member", "manager"]).eq("active", true).select("id");
     if (error) {
       if ((error as { code?: string }).code === "23505") return { ok: false, error: PHONE_TAKEN, counts: true };
       fail("people.claim", error);
     }
     if (!data?.length) return { ok: false, error: `${match.name} is already on Scorecard. Sign in, or ask an admin for your own link.`, counts: true };
     await consumeInvite(invite);
+    claimableKept.clear(); // this instance's chips drop the person who just signed up
     return { ok: true, agentId: match.id, sessionVersion: next };
   }
 
@@ -566,5 +589,6 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
     fail("people.join", error);
   }
   await consumeInvite(invite);
+  claimableKept.clear();
   return { ok: true, agentId: String(data.id), sessionVersion: Number(data.session_version) };
 }

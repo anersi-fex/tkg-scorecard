@@ -253,19 +253,27 @@ test("joiners: the upline they picked, a manager above that upline, or an admin 
   assert.equal(canConfirmJoiner(v("ann"), jo, ctx), false);
   assert.equal(canConfirmJoiner(v("max"), jo, ctx), false, "another team's manager");
   assert.equal(canConfirmJoiner(TEAM, jo, ctx), false);
-  // An agent picked as someone's upline answers for themself.
+  // An agent who is picked as someone's upline confirms nobody (a team link places people at once;
+  // a pick on the agency link waits for a manager above or an admin).
   const pickedBen = { upline_id: "ben", upline_confirmed: false };
-  assert.equal(canConfirmJoiner(v("ben"), pickedBen, ctx), true);
+  assert.equal(canConfirmJoiner(v("ben"), pickedBen, ctx), false, "an agent confirms nobody");
   assert.equal(canConfirmJoiner(v("ann"), pickedBen, ctx), false);
+  assert.equal(canConfirmJoiner(v("adam"), pickedBen, ctx), true);
   assert.equal(canConfirmJoiner(v("mia"), { upline_id: "mia", upline_confirmed: true }, ctx), false, "nothing waits");
   assert.deepEqual(joinersFor(v("mia"), ctx).map((a) => a.id), ["jo"]);
   assert.deepEqual(joinersFor(v("max"), ctx), []);
 });
 
-test("join links: an admin the agency's or any team's; a manager their own team's; an agent none", () => {
-  assert.deepEqual(joinLinkChoices(v("adam")).map((c) => c.kind), ["agency", "team"]);
-  assert.deepEqual(joinLinkChoices(v("mia")), [{ kind: "team", label: "A link for my team", leaderId: "mia" }]);
-  assert.deepEqual(joinLinkChoices(v("ann")), []);
+test("join links: everyone with a sign-in their own team's; an admin also the agency's and any team's; the team password none", () => {
+  assert.deepEqual(joinLinkChoices(v("adam")).map((c) => c.kind), ["agency", "team", "team"]);
+  assert.deepEqual(joinLinkChoices(v("mia")), [{ kind: "team", label: "My team link", leaderId: "mia" }]);
+  assert.deepEqual(joinLinkChoices(v("ann")), [{ kind: "team", label: "My team link", leaderId: "ann" }]);
+  assert.deepEqual(joinLinkChoices(TEAM), []);
+  assert.equal(canGetJoinLink(v("ann"), "ann"), true, "an agent: their own team");
+  assert.equal(canGetJoinLink(v("ann"), "mia"), false, "never someone else's");
+  assert.equal(canGetJoinLink(v("ann"), null), false, "never the agency link");
+  assert.equal(canGetJoinLink(TEAM, null), false);
+  assert.equal(canGetJoinLink(TEAM, "mia"), false);
   assert.equal(canGetJoinLink(v("mia"), "mia"), true);
   assert.equal(canGetJoinLink(v("mia"), "max"), false);
   assert.equal(canGetJoinLink(v("mia"), null), false, "a manager never gets the agency link");

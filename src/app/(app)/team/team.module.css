@@ -11,6 +11,8 @@
 /* On a phone the joiners come first, then the directory (the demo's order). */
 @container people (max-width: 999px) {
   .side { display: contents; }
+  /* My team link comes first on a phone: it is the thing a new person came to do. */
+  .linkFirst { order: -1; }
   .joinFirst { order: -1; }
 }
 

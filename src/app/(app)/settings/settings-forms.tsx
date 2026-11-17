@@ -13,7 +13,11 @@ import { Field, MoneyInput, Panel, Rail, TextArea, TextInput, btn } from "@/comp
 import { Segmented } from "@/components/ui/segmented";
 import { saveBoardSettings, saveBoardTheme, saveColorway, savePcColor, saveSaleLists, saveSaleSound, saveTeamGoal, saveTeamPcGoal, saveTvScreens } from "../actions";
 import { saveAgencyName, savePcEnabled } from "../people-actions";
+import { syncNow } from "../agentspace-actions";
+import { ERROR_LINE, SLOW_DOWN_LINE, type SyncCard } from "@/lib/agentspace-core";
 import { Switch } from "@/components/switch";
+import { formatDollars } from "@/lib/money";
+import { dayLabel } from "@/lib/month";
 import { toast } from "@/components/toaster";
 import s from "./settings.module.css";
 
@@ -55,6 +59,7 @@ export function SettingsForms({
   teamPasswordSet,
   base,
   owner = false,
+  agentspace,
 }: {
   settings: AppSettings;
   months: MonthGoal[];
@@ -67,6 +72,8 @@ export function SettingsForms({
   base: string;
   /** The owner alone gets Sign-ins, the Shortcut card and the P&C switch (an admin never sees them). */
   owner?: boolean;
+  /** The AgentSpace sync's status (counts, times and names of board people: no key, no deal, no client). */
+  agentspace: SyncCard;
 }) {
   // Life only (owner, 2026-11-12): with the P&C board off, nothing on this screen names P&C
   // except the owner's one switch.
@@ -106,6 +113,9 @@ export function SettingsForms({
               </span>
             </p>
           </div>
+        </Panel>
+        <Panel title="AgentSpace" sub="Deals logged in AgentSpace show up here on their own." data-agentspace>
+          <AgentSpaceCard status={agentspace} />
         </Panel>
         {pcOn && owner && (
           <Panel title="P&C goal" sub="P&C annual premium for the P&C team. The agency total adds both goals up.">
@@ -593,5 +603,111 @@ function GoalForm({ month, pc = false }: { month: MonthGoal; pc?: boolean }) {
         {pending ? "Saving..." : "Save"}
       </button>
     </form>
+  );
+}
+
+/** "2 minutes ago", from two instants (the page's own clock and the time the sync wrote). */
+function ago(iso: string | null, nowMs: number): string | null {
+  const at = iso ? Date.parse(iso) : NaN;
+  if (!Number.isFinite(at)) return null;
+  const min = Math.max(0, Math.round((nowMs - at) / 60_000));
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} ${min === 1 ? "minute" : "minutes"} ago`;
+  const hours = Math.round(min / 60);
+  if (hours < 48) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+  return `${Math.round(hours / 24)} days ago`;
+}
+
+/**
+ * The AgentSpace sync (owner and admins): connected or not, when it last ran, what it found, and a
+ * Sync now button. Only counts, times and the names of people on the board come here: the key, a
+ * deal and a client never do.
+ */
+function AgentSpaceCard({ status }: { status: SyncCard }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  if (!status.connected)
+    return (
+      <div className="stack" data-agentspace-state="off">
+        <p className="small">
+          <b className="strong">Not connected.</b> Add AGENTSPACE_API_KEY in Vercel, then redeploy. The steps are in SETUP.md, Connect AgentSpace.
+        </p>
+      </div>
+    );
+  const c = status.counts;
+  const when = ago(status.lastOkAt, status.nowMs);
+  return (
+    <div className="stack" data-agentspace-state="on">
+      <div className="flex items-center justify-between gap-3">
+        <span>
+          <b className="strong">Connected.</b>{" "}
+          <span className="muted" data-agentspace-last>
+            {status.running ? "Syncing now." : when ? `Last synced ${when}.` : "Not synced yet. It starts on its own within a few minutes."}
+          </span>
+        </span>
+        <button
+          type="button"
+          className={btn("secondary")}
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              try {
+                const r = await syncNow();
+                toast(r.ok ? r.message : r.error, r.ok);
+                router.refresh();
+              } catch {
+                toast("Couldn't reach the server. Try again.", false);
+              }
+            })
+          }
+        >
+          {pending ? "Syncing..." : "Sync now"}
+        </button>
+      </div>
+      {!status.errorClass && c?.stopped === "rate" && (
+        <p className="small muted" data-agentspace-slow>
+          {SLOW_DOWN_LINE}
+        </p>
+      )}
+      {status.errorClass && (
+        <p className="small" role="alert" data-agentspace-error>
+          {ERROR_LINE[status.errorClass]}
+        </p>
+      )}
+      <div className="small muted">
+        <div>
+          Deals linked: <b className="strong">{status.linked}</b>
+          {c && c.cells > 0 ? `. ${c.cells} ${c.cells === 1 ? "agent-day" : "agent-days"} checked against AgentSpace.` : ""}
+        </div>
+        {c && (c.inserted > 0 || c.updated > 0 || c.removed > 0 || c.linked > 0) && (
+          <div>
+            Last run: {[c.inserted ? `${c.inserted} new` : "", c.linked ? `${c.linked} linked` : "", c.updated ? `${c.updated} updated` : "", c.removed ? `${c.removed} taken off` : ""].filter(Boolean).join(", ")}.
+          </div>
+        )}
+      </div>
+      {status.unresolvedTotal === 0 ? (
+        status.lastOkAt && (
+          <p className="small muted" data-agentspace-unresolved="0">
+            Every agent-day matches AgentSpace.
+          </p>
+        )
+      ) : (
+        <div className="small" data-agentspace-unresolved={status.unresolvedTotal}>
+          <b className="strong">{status.unresolvedTotal === 1 ? "1 agent-day does not match yet" : `${status.unresolvedTotal} agent-days do not match yet`}</b>
+          <ul className="muted">
+            {status.unresolved.slice(0, 5).map((u) => (
+              <li key={`${u.agent}|${u.day}`}>
+                {u.agent}, {dayLabel(u.day)}: AgentSpace {formatDollars(u.asCents)}, here {formatDollars(u.scCents)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {status.newAgents.length > 0 && (
+        <p className="small muted" data-agentspace-new>
+          Added from AgentSpace with no upline (set theirs on People): {status.newAgents.map((n) => n.name).join(", ")}.
+        </p>
+      )}
+    </div>
   );
 }

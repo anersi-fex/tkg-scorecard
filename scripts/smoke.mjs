@@ -547,6 +547,15 @@ try {
     const r = await owner.request.get(`${APP}/sounds/${f}.mp3`);
     check(r.ok() && /audio\/mpeg/.test(r.headers()["content-type"] ?? ""), `the ${f} sound is served (${r.status()})`);
   }
+  // The AgentSpace sync (2026-11-16): with no AGENTSPACE_API_KEY the card says so, the route refuses a stranger and says only "Not connected" to the owner
+  const asCard = await o.evaluate(() => ({ n: document.querySelectorAll("[data-agentspace]").length, off: !!document.querySelector("[data-agentspace-state=off]"), text: document.querySelector("[data-agentspace]")?.textContent ?? "" }));
+  check(asCard.n === 1 && asCard.off && /Not connected/.test(asCard.text) && /AGENTSPACE_API_KEY/.test(asCard.text) && (await o.locator("[data-agentspace] button").count()) === 0, "Settings has the AgentSpace card: Not connected, with the one instruction, while the key is missing");
+  const asStranger = await browser.newContext({ extraHTTPHeaders: { "x-forwarded-for": `198.51.100.${1 + Math.floor(Math.random() * 250)}` } });
+  const asAnon = await asStranger.request.get(`${APP}/api/agentspace/sync`);
+  await asStranger.close();
+  const asOwner = await owner.request.post(`${APP}/api/agentspace/sync`);
+  const asBody = await asOwner.text();
+  check(asAnon.status() === 401 && asOwner.ok() && /"connected":false/.test(asBody) && !/api[_-]?key|bearer/i.test(asBody), "the AgentSpace sync route refuses a stranger and tells the owner only that it is not connected");
   await o.screenshot({ path: `${OUT}/03-settings.png`, fullPage: true });
 
   // --- The join link (owner, 2026-11-12: "send everyone something, and it automatically makes them sign up") ---
@@ -770,10 +779,10 @@ try {
   // the first time from one network, next to the TV.) Each form keeps a count of its own, a try is
   // counted before it is looked at, and a number nobody has is typed here, so no account is touched.
   {
-    const PERSONAL_LIMIT = 60;
+    const PERSONAL_LIMIT = 200;
     const SHARED_LIMIT = 10;
     const NO_MATCH = "That phone number and password don't match.";
-    const CLOSED_PERSONAL = "Too many tries from this network. Wait a few minutes, or ask an admin for a new sign-in link.";
+    const CLOSED_PERSONAL = "Lots of people are signing in at once. Wait a minute and try again.";
     const at = (addr) => browser.newContext({ viewport: { width: 1280, height: 900 }, extraHTTPHeaders: { "x-forwarded-for": addr } });
     /** Types a shared password on the team form: true once it signed in, false when the form answered instead. */
     /** True once the page has left /login; false when the form said to wait, or nothing came. */
@@ -781,6 +790,7 @@ try {
       (await Promise.race([
         page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 10000 }).then(() => "in", () => "no"),
         page.waitForSelector("text=Too many tries", { timeout: 10000 }).then(() => "wait", () => "no"),
+        page.waitForSelector("text=Lots of people are signing in at once", { timeout: 10000 }).then(() => "wait", () => "no"),
       ])) === "in";
     const sharedSignsIn = async (page, password) => {
       await go(page, "/login?way=team", "form[data-way=team]");
@@ -805,7 +815,12 @@ try {
     await tvp.goto(`${APP}/board`);
     check(looked === 10 && teamIn && (await appears(tvp, "main[data-screen]")) && tvp.url() === `${APP}/board`, `ten wrong tries on people's own sign-in (${looked} looked at) leave the team password and the TV's sign-in open for that address`);
     await tvSide.close();
-    // The personal form closes at its own limit, 60 for an address: the 61st try is refused whatever was typed
+    // The personal form closes at its own limit, 200 for an address: the 201st try is refused whatever was typed.
+    // Most of the 200 are written to the table the way wrong tries leave them (tests/throttle.test.ts types
+    // every one through the real action); the last three are typed here.
+    const seeded = PERSONAL_LIMIT - looked - 3;
+    sql(`insert into login_attempts (ip, at) select 'signin:${office}', now() from generate_series(1, ${seeded})`);
+    looked += seeded;
     for (let i = looked; i < PERSONAL_LIMIT; i++) if ((await again(desk, wrongPersonal, office)).includes(NO_MATCH)) looked++;
     const past = await again(desk, wrongPersonal, office);
     await k.fill("#phone", PHONE[IVY]);
@@ -1008,7 +1023,8 @@ try {
   const asMember = await replay(dana, goalShot);
   check(asMember.text.includes("Only an admin can do that") && (await feed()).team.goalCents === 15_000_000, `an agent who calls the goal's save action directly is refused and the goal stays (${asMember.status})`);
   await go(d, "/team", "input[aria-label='Find a person']");
-  check((await d.locator("[data-join-card]").count()) === 0 && (await d.locator("button[aria-label^='Edit ']").count()) === 0 && (await d.locator("[data-add-person]").count()) === 0, "an agent sees People without the join link, Edit or Add");
+  check((await d.locator("[data-join-card]").count()) === 0 && (await d.locator("button[aria-label^='Edit ']").count()) === 0 && (await d.locator("[data-add-person]").count()) === 0 && (await d.locator("[data-joiners]").count()) === 0, "an agent sees People without the agency link, Edit, Add or the people waiting to join");
+  check((await d.locator("[data-team-link-card] [data-link-box] code").count()) === 1 && (await d.locator("[data-team-link-card] button:has-text('Make a new link')").count()) === 1, "an agent has a My team link, with Copy and Make a new link");
   check(!(await d.innerText("body")).includes("555"), "an agent's People page shows no phone number");
 
   // A sale dated last month counts on last month's board
@@ -1161,6 +1177,7 @@ try {
   check(!adminSettings.signIns && !adminSettings.shortcut && !adminSettings.lines && adminSettings.agency && adminSettings.text.includes("Only the admins and Anersi see this screen."), "the admin's Settings has the goals and the board, and no Sign-ins, Shortcut or lines-of-business rows");
   check(adminSettings.lists && adminSettings.switchGone, "the admin's Settings has the carriers and products, rate classes and lead sources, and no team-password switch");
   check(!/OWNER_PASSWORD|TEAM_PASSWORD|LOG_TOKEN/.test(adminSettings.text) && !PC_WORDS.test(adminSettings.text), "the admin's Settings names no password, no token and no P&C");
+  check((await ad.locator("[data-agentspace]").count()) === 1, "the admin's Settings has the AgentSpace card too");
   await ad.screenshot({ path: `${OUT}/20-admin-settings.png`, fullPage: true });
   await ad.goto(`${APP}/approvals`);
   await ad.waitForURL(`${APP}/`);
@@ -1340,14 +1357,14 @@ try {
     await o.waitForSelector("[data-team-link] code");
     const teamUrl = ((await o.textContent("[data-team-link] code")) ?? "").trim();
     await go(lk, new URL(teamUrl).pathname, "form[data-join=agency]");
-    check(teamUrl !== freshUrl && (await lk.getAttribute("[data-upline]", "data-upline")) === ID[NORA] && (await lk.textContent("[data-upline]")).includes(NORA), "a link for one team opens the join page with that leader already picked");
+    check(teamUrl !== freshUrl && (await lk.getAttribute("[data-join-team]", "data-join-team")) === ID[NORA] && (await lk.locator("[data-upline-picker], #upline-search").count()) === 0 && (await lk.textContent("h1")) === "Join Nora's team", "a link for one team opens the join page saying whose team it is, with the upline fixed and no picker");
     // A manager has a link of their own team, and no agency link or person editor
     await go(nora.pg, "/team", "input[aria-label='Find a person']");
     const noraUrl = ((await nora.pg.textContent("[data-team-link-card] [data-link-box] code").catch(() => "")) ?? "").trim();
     check(!!noraUrl && (await nora.pg.locator("[data-join-card]").count()) === 0 && (await nora.pg.locator("button[aria-label^='Edit ']").count()) === 0, "a manager's People has the join link for their own team, and no agency link and no person editor");
     if (noraUrl) {
       await go(lk, new URL(noraUrl).pathname, "form[data-join=agency]");
-      check((await lk.getAttribute("[data-upline]", "data-upline")) === ID[NORA], "the manager's link opens the join page with the manager picked");
+      check((await lk.getAttribute("[data-join-team]", "data-join-team")) === ID[NORA], "the manager's link opens the join page on the manager's team");
     }
     await looker.close();
 
@@ -1654,7 +1671,9 @@ try {
   const shortDay = (date) => `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(date.slice(5, 7)) - 1]} ${Number(date.slice(8, 10))}`;
   await o.goto(`${APP}/scoreboard`);
   await o.waitForSelector("[data-scoreboard=agency]");
-  const sb = (await feed()).scoreboard;
+  // The TV's feed keeps the month before's sales for 60 s (board.ts salesBeforeKept): a read made before the
+  // sale dated last month was logged is stale until it ages out, so wait for it (a quick run met it half the time).
+  const sb = (await feedUntil((j) => (j.scoreboard?.kpis?.prevProductionCents ?? 0) > 0, 280)).scoreboard;
   const kpi = (title) =>
     o.evaluate((t) => {
       const el = document.querySelector(`section[data-kpi="${t}"]`);
@@ -2257,6 +2276,195 @@ try {
     const bigPage = await o.evaluate(() => ({ production: document.querySelector("section[data-kpi=Production] p.font-mono")?.textContent?.trim(), agents: document.querySelector("section[data-kpi='Active agents'] p.font-mono")?.textContent?.trim(), rows: document.querySelectorAll("[data-leaderboard=agents] tbody tr[data-agent]").length }));
     check(bigPage.production === shortMoney(totalCents()) && bigPage.agents === String(ledger.size) && bigPage.rows === ledger.size, `the Scoreboard page lists all ${ledger.size} sellers (${bigPage.production})`);
     await saysNoPc(o, "with a full office: the Scoreboard");
+  }
+
+
+  // --- The rollout (2026-11-16): the link goes down the tree. An admin sends their team link; each person
+  // who joins on it sends theirs; nobody confirms anyone by hand; a person off the board takes their link
+  // with them. Invented people on 390 px phones (the join page, People and Home are photographed). ---
+  {
+    const REMY = "Remy Topline";
+    const CORA = "Cora Legone"; // on the board already, no sign-in, her upline copied from the old CRM
+    const DEV = "Dev Underco"; // the same, under Cora
+    const UNA = "Una Unplaced"; // the same, with no upline at all
+    const NELL = "Nell Newleg"; // new, joins on Remy's link
+    const GIL = "Gil Third"; // new, joins on Cora's link
+    const PIA = "Pia Fourth"; // new, joins on Nell's link
+    const QUIN = "Quin Fifth"; // new, joins on Pia's link
+    const SNEAK = "Zed Sneaky"; // new, on Cora's link, with the upline field tampered with
+    const PASS = "rollout-pass-1";
+    const cell = { [REMY]: "248 555 0201", [CORA]: "248 555 0202", [NELL]: "248 555 0203", [GIL]: "248 555 0204", [PIA]: "248 555 0205", [QUIN]: "248 555 0206", [DEV]: "248 555 0207", [UNA]: "248 555 0208", [SNEAK]: "248 555 0209" };
+    const q = (s) => s.replace(/'/g, "''");
+    const idOfSql = (name) => sql(`select id from agents where name = '${q(name)}'`);
+    const upOf = (name) => sql(`select coalesce(u.name,'-') || '|' || a.upline_confirmed || '|' || a.role from agents a left join agents u on u.id = a.upline_id where a.name = '${q(name)}'`);
+    const pathOf = (url) => (url.startsWith("http") ? new URL(url).pathname : url);
+    const phoneCtx = () => browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, extraHTTPHeaders: { "x-forwarded-for": address() } });
+    /** The team link on a person's People page: the address in its card. */
+    const teamLinkOf = async (pg) => {
+      await go(pg, "/team", "[data-team-link-card] [data-link-box] code");
+      return pathOf(((await pg.textContent("[data-team-link-card] [data-link-box] code")) ?? "").trim());
+    };
+    /** Opens a join link on a phone, taps or types a name, joins, and lands on the phone guide. */
+    const joinOn = async (path, name, { tap = false, tamper = null, shot = "" } = {}) => {
+      const ctx = await phoneCtx();
+      const pg = await ctx.newPage();
+      await go(pg, path, "form[data-join=agency]");
+      if (shot) await pg.screenshot({ path: `${OUT}/${shot}`, fullPage: true });
+      if (tap) await pg.click(`[data-claim-name="${name}"]`);
+      else await pg.fill("#name", name);
+      await pg.fill("#phone", cell[name]);
+      await pg.fill("#password", PASS);
+      if (tamper) await pg.evaluate((id) => { document.querySelector("input[name=upline_id]").value = id; }, tamper);
+      await Promise.all([pg.waitForURL((u) => u.pathname === "/install"), pg.click("form[data-join] button[type=submit]")]);
+      return { ctx, pg };
+    };
+
+    // The admin at the top: added by the owner, made an admin, signs in on their own row.
+    await go(o, "/team", "#new-name");
+    await o.waitForFunction(() => document.querySelector("#new-name")?.value === "");
+    await o.fill("#new-name", REMY);
+    await o.click("[data-add-person] button[type=submit]");
+    await o.waitForSelector(`text=${REMY} is on the board.`);
+    {
+      const sheet = await openEditor(o, REMY);
+      o.once("dialog", (dlg) => dlg.accept());
+      await roleRadio(sheet, "Admin").click();
+      await o.waitForSelector(`text=${REMY} is an admin now.`);
+    }
+    // The people the old CRM left on the board: no sign-in, an upline already set.
+    sql(`insert into agents (name, sort, role, active, upline_id, upline_confirmed) select '${CORA}', 9001, 'member', true, id, true from agents where name = '${REMY}'`);
+    sql(`insert into agents (name, sort, role, active, upline_id, upline_confirmed) select '${DEV}', 9002, 'member', true, id, true from agents where name = '${CORA}'`);
+    sql(`insert into agents (name, sort, role, active) values ('${UNA}', 9003, 'member', true)`);
+    PHONE[REMY] = cell[REMY];
+    const remy = await joinWithLink(REMY, PASS);
+    const remyPath = await teamLinkOf(remy.pg);
+    check(/^\/join\/[A-Za-z0-9_-]{43}$/.test(remyPath), "the admin has a My team link on People");
+    check((await remy.pg.locator("[data-team-link-card] button:has-text('Copy')").count()) === 1 && (await remy.pg.locator("[data-team-link-card] button:has-text('Make a new link')").count()) === 1 && (await remy.pg.locator("[data-join-card]").count()) === 1, "with Copy, Make a new link, and the agency link card beside it");
+
+    // The join page for a team link: whose team, no upline search, the claim chips
+    const peek = await phoneCtx();
+    const pk = await peek.newPage();
+    await go(pk, remyPath, "form[data-join=agency]");
+    const peekInfo = await pk.evaluate(() => ({ h1: document.querySelector("h1")?.textContent, team: document.querySelector("[data-join-team]")?.textContent?.replace(/\s+/g, " ") ?? "", picker: !!document.querySelector("[data-upline-picker], #upline-search"), unsure: document.body.innerText.includes("I'm not sure"), chips: [...document.querySelectorAll("[data-claim-name]")].map((b) => b.getAttribute("data-claim-name")), wide: document.documentElement.scrollWidth > window.innerWidth + 1 }));
+    check(peekInfo.h1 === "Join Remy's team" && peekInfo.team.includes("Not your team? Ask Remy for the right link.") && !peekInfo.picker && !peekInfo.unsure, "a team link opens \"Join Remy's team\", with the upline fixed, no picker and the \"Not your team?\" line");
+    check(peekInfo.chips.includes(CORA) && peekInfo.chips.includes(UNA) && !peekInfo.chips.includes(REMY) && !peekInfo.wide, "and the same \"tap your name\" chips (the people on the board are there; the admin is not), no sideways scroll at 390 px");
+    await peek.close();
+    // The agency link keeps its upline search and "I'm not sure"
+    await go(o, "/team", "[data-join-card] [data-link-box] code");
+    const agencyPath = pathOf(((await o.textContent("[data-join-card] [data-link-box] code")) ?? "").trim());
+    {
+      const ctx = await phoneCtx();
+      const ap = await ctx.newPage();
+      await go(ap, agencyPath, "form[data-join=agency]");
+      const info = await ap.evaluate(() => ({ h1: document.querySelector("h1")?.textContent, picker: !!document.querySelector("#upline-search"), unsure: document.body.innerText.includes("I'm not sure"), team: !!document.querySelector("[data-join-team]") }));
+      check(info.h1 === `Join ${AGENCY} on Scorecard` && info.picker && info.unsure && !info.team, "the agency link still asks \"Who is your upline?\" with \"I'm not sure\" as an answer");
+      await ctx.close();
+    }
+
+    // 1. Two people join on the admin's link: one taps her name on the board (and keeps her upline), one is new
+    const cora = await joinOn(remyPath, CORA, { tap: true, shot: "rollout-1-join-page-390.png" });
+    check(upOf(CORA) === `${REMY}|true|member` && sql(`select count(*) from agents where name = '${q(CORA)}'`) === "1" && sql(`select count(*) from agents where upline_id = (select id from agents where name = '${q(CORA)}')`) === "1", "Cora taps her name: that row is hers, she keeps Remy as her upline, and her own person (Dev) is still under her");
+    const nell = await joinOn(remyPath, NELL);
+    check(upOf(NELL) === `${REMY}|true|member`, "Nell joins new: on Remy's team, confirmed with no one tapping Confirm");
+    const una = await joinOn(remyPath, UNA, { tap: true });
+    check(upOf(UNA) === `${REMY}|true|member`, "a person on the board with no upline who taps her name lands on Remy's team");
+    await una.ctx.close();
+
+    // 2. Each of them opens People and copies their own team link
+    const coraPath = await teamLinkOf(cora.pg);
+    const nellPath = await teamLinkOf(nell.pg);
+    check(coraPath !== remyPath && nellPath !== coraPath && (await teamLinkOf(cora.pg)) === coraPath, "Cora and Nell each have a team link of their own, and it stays the same when they come back");
+    const coraPeople = await cora.pg.evaluate(() => ({ card: !!document.querySelector("[data-team-link-card]"), joiners: !!document.querySelector("[data-joiners]"), agency: !!document.querySelector("[data-join-card]"), edit: document.querySelectorAll("button[aria-label^='Edit ']").length, add: !!document.querySelector("[data-add-person]"), phones: /555[-\s.)]*02\d\d/.test(document.body.innerText), wide: document.documentElement.scrollWidth > window.innerWidth + 1 }));
+    check(coraPeople.card && !coraPeople.joiners && !coraPeople.agency && coraPeople.edit === 0 && !coraPeople.add && !coraPeople.phones && !coraPeople.wide, "an agent's People has the team link and nothing a manager gets: no joiners to confirm, no agency link, no editor, no numbers");
+    await cora.pg.locator("[data-team-link-card]").scrollIntoViewIfNeeded();
+    await cora.pg.screenshot({ path: `${OUT}/rollout-2-people-card-390.png` });
+
+    // 3. A third and a fourth person join on those; an old row is claimed under Cora
+    const gil = await joinOn(coraPath, GIL, { shot: "rollout-1b-join-page-cora-390.png" });
+    const pia = await joinOn(nellPath, PIA);
+    const dev = await joinOn(coraPath, DEV, { tap: true });
+    check(upOf(GIL) === `${CORA}|true|member` && upOf(PIA) === `${NELL}|true|member` && upOf(DEV) === `${CORA}|true|member`, "Gil joins under Cora, Pia under Nell, and Dev (on the board already) claims his row under Cora, all confirmed");
+    check(sql(`select count(*) from agents where name in ('${q(CORA)}','${q(NELL)}','${q(GIL)}','${q(PIA)}','${q(DEV)}','${q(UNA)}') and upline_confirmed = false`) === "0", "nobody waits for a yes: the whole chain is confirmed by the links alone");
+    // The upline field posted by a tampered form is ignored: the link decides the team
+    const sneak = await joinOn(coraPath, SNEAK, { tamper: idOfSql(REMY) });
+    check(upOf(SNEAK) === `${CORA}|true|member`, "a join whose upline field was changed still lands on the link's own team");
+    // Nobody joins as the admin through someone's link
+    {
+      const ctx = await phoneCtx();
+      const pg = await ctx.newPage();
+      await go(pg, coraPath, "form[data-join=agency]");
+      await pg.fill("#name", REMY);
+      await pg.fill("#phone", "248 555 0299");
+      await pg.fill("#password", PASS);
+      await pg.click("form[data-join] button[type=submit]");
+      check(await appears(pg, "text=already on Scorecard"), "a team link never claims an admin's row");
+      await ctx.close();
+    }
+    check(sql(`select count(*) from agents where name = '${q(REMY)}' and phone is distinct from '+12485550201'`) === "0", "and the admin's number is untouched");
+    check(sql(`select string_agg(name, ',' order by name) from agents where upline_id = (select id from agents where name = '${q(REMY)}') and name in ('${q(CORA)}','${q(NELL)}','${q(UNA)}')`) === `${CORA},${NELL},${UNA}`, "the org chain: Remy over Cora, Nell and Una; Cora over Gil, Dev and the tampered join; Nell over Pia");
+
+    // 4. The upline sees the downline's policies and Home's team numbers; a sibling does not
+    const sale = await logPolicy(gil.pg, { monthly: "100", carrier: "AmAm", product: "TERM" });
+    check((await openPolicy(cora.pg, sale.id)) === 200 && (await openPolicy(remy.pg, sale.id)) === 200, "Gil's policy opens for Cora (above Gil) and for the admin");
+    check((await openPolicy(nell.pg, sale.id)) === 404 && (await openPolicy(pia.pg, sale.id)) === 404, "and not for Nell (another branch) or Pia");
+    const teamProduction = async (pg) => {
+      await go(pg, "/?scope=team", "[data-production]");
+      return ((await pg.textContent("[data-production]")) ?? "").trim();
+    };
+    const coraTeam = await teamProduction(cora.pg);
+    const nellTeam = await teamProduction(nell.pg);
+    check(coraTeam === "$1,200" && nellTeam !== "$1,200", `Cora's Home team scope adds Gil's sale (${coraTeam}); Nell's does not (${nellTeam})`);
+    const coraList = await policiesFile(cora.ctx);
+    check(coraList.status === 200 && !coraList.text.includes(sale.client.last), "an agent's own Policies file holds none of their downline's clients");
+
+    // 5. The first-steps card on Home: three steps, gone with a policy or a teammate
+    await go(pia.pg, "/", "[data-get-started]");
+    const card = await pia.pg.evaluate(() => {
+      const c = document.querySelector("[data-get-started]");
+      return { steps: c.querySelectorAll("ol > li").length, text: c.innerText.replace(/\s+/g, " "), link: c.querySelector("[data-link-box] code")?.textContent?.trim() ?? "", copy: !!c.querySelector("button")?.textContent?.includes("Copy"), wide: document.documentElement.scrollWidth > window.innerWidth + 1 };
+    });
+    const piaPath = pathOf(card.link);
+    check(card.steps === 3 && card.text.includes("Log a sale") && card.text.includes("See your policies") && card.text.includes("Send your team link") && card.copy && !card.wide, "a person with no policy and nobody on their team sees one card with three steps, the team link and Copy");
+    check(piaPath === (await teamLinkOf(pia.pg)), "the link on Home is the same team link People shows");
+    await go(pia.pg, "/", "[data-get-started]");
+    await pia.pg.screenshot({ path: `${OUT}/rollout-3-home-card-390.png` });
+    await go(gil.pg, "/", "[data-production]");
+    await go(cora.pg, "/", "[data-production]");
+    check((await gil.pg.locator("[data-get-started]").count()) === 0 && (await cora.pg.locator("[data-get-started]").count()) === 0, "Gil (a policy) and Cora (a team) see no card");
+    const quin = await joinOn(piaPath, QUIN);
+    check(upOf(QUIN) === `${PIA}|true|member`, "Quin joins on Pia's link");
+    await go(pia.pg, "/", "[data-production]");
+    check((await pia.pg.locator("[data-get-started]").count()) === 0, "and Pia's card is gone now that she has a teammate");
+    await quin.ctx.close();
+
+    // 6. Make a new link turns off only the person's own link
+    await go(cora.pg, "/team", "[data-team-link-card] [data-link-box] code");
+    cora.pg.once("dialog", (dlg) => dlg.accept());
+    await cora.pg.click("[data-team-link-card] button:has-text('Make a new link')");
+    await cora.pg.waitForSelector("text=New link made. The old one is off.");
+    const coraNew = pathOf(((await cora.pg.textContent("[data-team-link-card] [data-link-box] code")) ?? "").trim());
+    const looker = await newVisitor();
+    const lp = await looker.newPage();
+    const opens = async (path) => {
+      await lp.goto(`${APP}${path}`);
+      return (await lp.locator("form[data-join=agency]").count()) === 1 && (await lp.locator("[data-join=closed]").count()) === 0;
+    };
+    check(coraNew !== coraPath && !(await opens(coraPath)) && (await opens(coraNew)), "Make a new link: Cora's old link is off and the new one opens");
+    check((await opens(remyPath)) && (await opens(nellPath)) && (await opens(agencyPath)), "and nobody else's link (the admin's, Nell's, the agency's) was touched");
+    check((await teamLinkOf(cora.pg)) === coraNew, "the new link is still there to copy after a reload");
+
+    // 7. A person taken off the board takes their link with them
+    {
+      const sheet = await openEditor(o, NELL);
+      o.once("dialog", (dlg) => dlg.accept());
+      await sheet.locator("button:has-text('Take off the board')").click();
+      await o.waitForSelector("text=Off the board. Their sales stay in the history.");
+    }
+    check(!(await opens(nellPath)) && (await lp.locator("[data-join=closed]").count()) === 1, "Nell is taken off the board: her team link says it isn't good anymore");
+    check((await opens(piaPath)) && (await opens(coraNew)), "while the links of people still on the board keep working");
+    await looker.close();
+
+    for (const x of [remy, cora, nell, gil, pia, dev, sneak]) await x.ctx.close();
   }
 
   await priya.close();

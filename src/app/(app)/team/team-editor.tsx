@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import type { Level } from "@/lib/viewer";
 import type { AgentRole } from "@/lib/types";
 import type { RoleChoice } from "@/lib/rules";
@@ -14,7 +14,8 @@ import { CountBadge, EmptyState, Field, Initials, PageHead, Panel, RoleTag, Sear
 import { Segmented } from "@/components/ui/segmented";
 import { formatDollars } from "@/lib/money";
 import { renamePerson, savePersonGoal, savePersonPcGoal, setPersonActive, setPersonPc } from "../actions";
-import { confirmUpline, createPersonInvite, declineUpline, getJoinLink, resetJoinLink, resetPersonSignIn, setPersonInOffice, setPersonRole, setPersonUpline } from "../people-actions";
+import { LinkBox } from "@/components/link-box";
+import { confirmUpline, createPersonInvite, declineUpline, getJoinLink, resetJoinLink, resetPersonSignIn, resetTeamLink, setPersonInOffice, setPersonRole, setPersonUpline } from "../people-actions";
 import { addPersonToTeam } from "./actions";
 import { toast } from "@/components/toaster";
 import s from "./team.module.css";
@@ -81,7 +82,6 @@ export interface TeamSummary {
 
 type Filter = "all" | "office";
 
-const noSubscribe = () => () => {};
 const policiesLabel = (n: number) => `${n} ${n === 1 ? "policy" : "policies"}`;
 const peopleLabel = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
 const digits = (v: string) => v.replace(/\D/g, "");
@@ -115,6 +115,8 @@ export function TeamEditor({
   agency,
   joinUrl,
   joinError,
+  teamLinkUrl,
+  teamLinkError,
   numbers = true,
 }: {
   /** False for the shared team password: names and teams, no numbers. */
@@ -131,9 +133,12 @@ export function TeamEditor({
   /** The owner's P&C board is on; off (the default), nothing here names P&C. */
   pcEnabled?: boolean;
   agency: string;
-  /** An admin's agency link, or a manager's own team link. */
+  /** An admin's agency link. */
   joinUrl: string | null;
   joinError: string | null;
+  /** The viewer's own team link (everyone with their own sign-in). */
+  teamLinkUrl: string | null;
+  teamLinkError: string | null;
 }) {
   const admin = level === "owner" || level === "admin";
   const manager = level === "manager";
@@ -354,8 +359,8 @@ export function TeamEditor({
         <div className={s.main}>{main}</div>
         <div className={s.side}>
           {(admin || manager) && joiners.length > 0 && <Joiners joiners={joiners} admin={admin} />}
+          {viewerId && level !== "team" && <MyTeamLinkCard leaderId={viewerId} url={teamLinkUrl} error={teamLinkError} agency={agency} manager={manager} />}
           {admin && <JoinCard url={joinUrl} error={joinError} agency={agency} people={active} />}
-          {manager && <TeamLinkCard url={joinUrl} error={joinError} agency={agency} />}
           {admin && <NewThisWeek people={active} onOpen={setEditing} />}
           {admin && <AddPerson people={active} />}
           {admin && gone.length > 0 && <OffBoard gone={gone} owner={owner} />}
@@ -473,57 +478,41 @@ function Joiners({ joiners, admin }: { joiners: JoinerRow[]; admin: boolean }) {
   );
 }
 
-/** A link with Copy and, where the phone has it, Share. */
-function LinkBox({ url, shareText, label }: { url: string; shareText: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  const canShare = useSyncExternalStore(
-    noSubscribe,
-    () => typeof navigator !== "undefined" && typeof navigator.share === "function",
-    () => false,
-  );
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      window.prompt("Copy this link", url);
-    }
-  };
+/**
+ * "My team link" (everyone with their own sign-in): one link that lands the people who use it on
+ * the viewer's own team, confirmed at once. It stays the same until "Make a new link", which turns
+ * off only this one.
+ */
+function MyTeamLinkCard({ leaderId, url, error, agency, manager }: { leaderId: string; url: string | null; error: string | null; agency: string; manager: boolean }) {
+  const [pending, start] = useTransition();
+  const [fresh, setFresh] = useState<string | null>(null);
+  const link = fresh ?? url;
   return (
-    <div data-link-box>
-      <div className={s.linkRow}>
-        <code aria-label={label} className={s.linkText}>
-          {url}
-        </code>
-        <button type="button" className={btn("secondary", "sm")} onClick={copy}>
-          <Icon name="copy" size={15} />
-          <span>{copied ? "Copied" : "Copy"}</span>
-        </button>
-      </div>
-      {canShare && (
+    <Panel title="My team link" className={s.linkFirst} data-team-link-card>
+      <p className="small muted mb-3">Send it to the people who work under you. They sign up and land on your team.{manager ? " You confirm the ones who pick you on the agency link here." : ""}</p>
+      {link ? <LinkBox url={link} label="My team link" shareText={`Join Scorecard for ${agency} on my team. Tap the link and set up your own sign-in.`} /> : <p className="small muted">{error ?? "The link isn't ready yet."}</p>}
+      <div className={s.section}>
         <button
           type="button"
-          className={btn("ghost", "sm", "mt-2")}
+          className={btn("secondary", "sm")}
+          disabled={pending}
+          data-team-link-reset
           onClick={() => {
-            // The person closing the share sheet is not an error.
-            navigator.share({ title: "Scorecard", text: shareText, url }).catch(() => {});
+            if (!window.confirm("Make a new link? The old one stops working.")) return;
+            start(async () => {
+              const r = await attempt(() => resetTeamLink(leaderId));
+              if (!r) return;
+              if (r.ok) {
+                setFresh(r.url);
+                toast("New link made. The old one is off.");
+              } else toast(r.error, false);
+            });
           }}
         >
-          <Icon name="send" size={15} />
-          <span>Share</span>
+          <Icon name="refresh" size={15} />
+          <span>Make a new link</span>
         </button>
-      )}
-    </div>
-  );
-}
-
-/** A manager's link: people who sign up with it land on their team, confirmed. */
-function TeamLinkCard({ url, error, agency }: { url: string | null; error: string | null; agency: string }) {
-  return (
-    <Panel title="Join link for your team" data-team-link-card>
-      <p className="small muted mb-3">People who sign up with it land on your team. You confirm the ones who pick you on the agency link here.</p>
-      {url ? <LinkBox url={url} label="The join link for your team" shareText={`Join Scorecard for ${agency} on my team. Tap the link and set up your own sign-in.`} /> : <p className="small muted">{error ?? "The link isn't ready yet."}</p>}
+      </div>
     </Panel>
   );
 }
@@ -552,7 +541,7 @@ function JoinCard({ url, error, agency, people }: { url: string | null; error: s
   return (
     <Panel title="Join links" data-join-card>
       <div className={s.sectionTitle}>Agency join link</div>
-      <p className={cn(s.sectionSub, "mb-3")}>Send this to everyone. They sign up themselves and pick their upline.</p>
+      <p className={cn(s.sectionSub, "mb-3")}>For people who aren&apos;t on a team link yet. They sign up and pick their upline.</p>
       {link ? <LinkBox url={link} label="The join link" shareText={`Join Scorecard for ${agency}. Tap the link and set up your own sign-in.`} /> : <p className="small muted">{error ?? "The join link isn't ready yet."}</p>}
       <div className={s.section}>
         <div className={s.sectionTitle}>A link for one team</div>
@@ -585,13 +574,13 @@ function JoinCard({ url, error, agency, people }: { url: string | null; error: s
         )}
       </div>
       <div className={s.section}>
-        <p className={cn(s.sectionSub, "mb-3")}>A new link turns off every join link that&apos;s out now.</p>
+        <p className={cn(s.sectionSub, "mb-3")}>A new link turns off the agency link that&apos;s out now. Each person&apos;s team link stays.</p>
         <button
           type="button"
           className={btn("secondary", "sm")}
           disabled={pending}
           onClick={() => {
-            if (!window.confirm("Make a new join link? The old one stops working, and so does each team's link.")) return;
+            if (!window.confirm("Make a new agency link? The old one stops working. People's team links stay.")) return;
             start(async () => {
               const r = await attempt(() => resetJoinLink());
               if (!r) return;

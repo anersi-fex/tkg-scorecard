@@ -34,6 +34,7 @@ import {
 } from "./policy-validate";
 import { canLogFor, canSeeClient, earliestSoldOn, editRights, isPastMonth, policyAgentIds, policyScopes, removeRights, ruleContext, type RuleContext, type RulePolicy } from "./rules";
 import { isSaleKind, type LoggedBy, type SaleKind } from "./types";
+import { instantMs, sameSale, type LinkedPolicy, type SyncedPolicy } from "./agentspace-core";
 import { isAdmin, isOwner, type Viewer } from "./viewer";
 
 /**
@@ -187,6 +188,8 @@ export async function listPoliciesFor(viewer: Viewer, scope: PolicyScope, teamLe
   const ids = policyAgentIds(viewer, use, teamLeaderId ?? null, ctx);
   if (ids && ids.size === 0) return [];
   const out: PolicyListRow[] = [];
+  // A sale logged between two page reads shifts the rows, so one can come back on two pages: each counts once.
+  const seen = new Set<string>();
   const today = todayInDetroit();
   for (let page = 0; page < MAX_PAGES; page++) {
     let q = db().from("sales").select(LIST_COLUMNS).is("deleted_at", null);
@@ -201,6 +204,8 @@ export async function listPoliciesFor(viewer: Viewer, scope: PolicyScope, teamLe
     const rows = (data ?? []) as unknown as Row[];
     for (const r of rows) {
       const row = toListRow(r, today);
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
       if (canSeeClient(viewer, row, ctx)) out.push(row);
     }
     if (rows.length < PAGE) break;
@@ -233,7 +238,7 @@ export async function policyHistory(viewer: Viewer, id: string): Promise<PolicyE
   const [{ data, error }, agents] = await Promise.all([db().from("sale_events").select("id, at, by_agent, by_label, what").eq("sale_id", id).order("at", { ascending: false }).order("id", { ascending: false }).limit(500), listAgents({ includeInactive: true })]);
   if (error) fail("policies.history", error);
   const names = new Map(agents.map((a) => [a.id, a.name]));
-  const LABEL: Record<string, string> = { owner: "Owner password", team: "Team password", shortcut: "Shortcut" };
+  const LABEL: Record<string, string> = { owner: "Owner password", team: "Team password", shortcut: "Shortcut", agentspace: "AgentSpace sync" };
   return (data ?? []).map((e) => {
     const by = str(e.by_agent);
     return { id: Number(e.id), at: String(e.at), byAgent: by, byName: (by && names.get(by)) || LABEL[String(e.by_label)] || "Someone", what: String(e.what) };
@@ -252,6 +257,7 @@ export async function pipelineCounts(agentIds: string[] | null, month: string, t
   const days = datesOfMonth(month);
   const from = days[0];
   const to = days[days.length - 1];
+  const seen = new Set<string>();
   for (let page = 0; page < MAX_PAGES; page++) {
     let q = db().from("sales").select("id, status, sold_on, policies, premium_cents, source").is("deleted_at", null).gte("sold_on", from).lte("sold_on", to);
     if (agentIds) q = q.in("agent_id", agentIds);
@@ -260,6 +266,9 @@ export async function pipelineCounts(agentIds: string[] | null, month: string, t
     if (error) fail("policies.pipeline", error);
     const rows = data ?? [];
     for (const r of rows) {
+      const id = String(r.id);
+      if (seen.has(id)) continue;
+      seen.add(id);
       out.total += Number(r.policies) || 1;
       const status = isPolicyStatus(r.status) ? r.status : null;
       if (!status) {
@@ -279,14 +288,15 @@ export async function pipelineCounts(agentIds: string[] | null, month: string, t
 // ---- history lines -------------------------------------------------------------------------------
 
 /** Who made a change, for sale_events: the person, and the kind of session when no person did it. */
-function byOf(viewer: Viewer | null): { by_agent: string | null; by_label: "owner" | "team" | "shortcut" | null } {
+function byOf(viewer: Viewer | "agentspace" | null): { by_agent: string | null; by_label: "owner" | "team" | "shortcut" | "agentspace" | null } {
+  if (viewer === "agentspace") return { by_agent: null, by_label: "agentspace" };
   if (!viewer) return { by_agent: null, by_label: "shortcut" };
   if (viewer.via === "owner-password") return { by_agent: viewer.agentId, by_label: "owner" };
   return { by_agent: viewer.agentId, by_label: viewer.agentId ? null : "team" };
 }
 
 /** Writes history lines (best effort: a change that saved is never reported as failed; the class alone is logged). */
-async function writeEvents(saleId: string, viewer: Viewer | null, lines: string[]): Promise<void> {
+async function writeEvents(saleId: string, viewer: Viewer | "agentspace" | null, lines: string[]): Promise<void> {
   if (!lines.length) return;
   try {
     const by = byOf(viewer);
@@ -846,4 +856,268 @@ export async function removePolicy(viewer: Viewer, id: string): Promise<PolicyRe
 /** The rules' view of a stored sale, for a caller that has only the board's row (the one-screen menus). */
 export function rulePolicyOf(s: { agent_id: string; logged_by_agent?: string | null; created_at: string; sold_on: string; source?: string | null }): RulePolicy {
   return { agentId: s.agent_id, loggedByAgent: s.logged_by_agent ?? null, createdAt: s.created_at, soldOn: s.sold_on, source: isPolicySource(s.source) ? s.source : "scorecard" };
+}
+
+// ---- the AgentSpace sync (src/lib/agentspace.ts) ----------------------------------------------------------------
+//
+// A policy that came from an AgentSpace deal carries the deal's id (0007_agentspace.sql). The sync
+// reads and writes policies only through the functions below, so a client's values stay in this file:
+// what goes back to the sync is ids, cents, days and names of fields, and every history line says
+// what kind of thing changed ("Status from AgentSpace: Submitted → Issued"), never a client's value.
+
+/** Every policy linked to an AgentSpace deal, the removed ones too: ids, the seller, the day and the annual premium only. */
+export async function listLinkedPolicies(): Promise<LinkedPolicy[]> {
+  const out: LinkedPolicy[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { data, error } = await db()
+      .from("sales")
+      .select("id, agentspace_deal_id, agent_id, sold_on, premium_cents, deleted_at")
+      .not("agentspace_deal_id", "is", null)
+      .order("id")
+      .range(page * PAGE, page * PAGE + PAGE - 1);
+    if (error) fail("policies.linked", error);
+    const rows = data ?? [];
+    for (const r of rows) out.push({ saleId: String(r.id), dealId: String(r.agentspace_deal_id), agentId: String(r.agent_id), day: String(r.sold_on), cents: Number(r.premium_cents), deleted: r.deleted_at != null });
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
+/**
+ * The id of the Scorecard policy a found deal is the same sale as (see sameSale): not yet linked,
+ * not removed, a life sale, the same seller, day and annual premium and the same client name. The
+ * oldest one when two fit. Null when none does. Client names are compared here and go nowhere.
+ */
+export async function findLinkableSale(p: SyncedPolicy, agentId: string): Promise<string | null> {
+  const { data, error } = await db()
+    .from("sales")
+    .select("id, client_first, client_last")
+    .eq("agent_id", agentId)
+    .eq("sold_on", p.soldOn)
+    .eq("premium_cents", p.premiumCents)
+    .eq("kind", "life")
+    .is("deleted_at", null)
+    .is("agentspace_deal_id", null)
+    .order("created_at")
+    .order("id");
+  if (error) fail("policies.linkable", error);
+  const deal = { agentId, soldOn: p.soldOn, premiumCents: p.premiumCents, clientFirst: p.clientFirst, clientLast: p.clientLast };
+  for (const r of data ?? []) {
+    if (sameSale({ agentId, soldOn: p.soldOn, premiumCents: p.premiumCents, clientFirst: str(r.client_first), clientLast: str(r.client_last) }, deal)) return String(r.id);
+  }
+  return null;
+}
+
+const isDuplicate = (e: { code?: string } | null) => e?.code === "23505";
+
+/** Links a policy to a deal. False when the deal is already linked (a second run got there first) or the policy is gone or linked. */
+export async function linkSaleToDeal(saleId: string, dealId: string): Promise<boolean> {
+  const { data, error } = await db().from("sales").update({ agentspace_deal_id: dealId }).eq("id", saleId).is("deleted_at", null).is("agentspace_deal_id", null).select("id");
+  if (error) {
+    if (isDuplicate(error as { code?: string })) return false;
+    fail("policies.link", error);
+  }
+  if (!data?.length) return false;
+  await writeEvents(saleId, "agentspace", ["Linked to AgentSpace"]);
+  return true;
+}
+
+/**
+ * Inserts a policy for a deal: a normal life policy, logged by the owner's kind of session with no
+ * person, one policy, the annual premium the board counts. `createdAt` is the instant the board
+ * knows it by (the TV celebrates a sale created after the newest one it has seen). Null when the
+ * deal already has a policy (the unique index refused it).
+ */
+export async function insertSyncedPolicy(p: SyncedPolicy, agentId: string, createdAt: string): Promise<string | null> {
+  const status = p.status ?? "Submitted";
+  const row = {
+    agent_id: agentId,
+    premium_cents: p.premiumCents,
+    policies: 1,
+    product: p.product,
+    carrier: p.carrier,
+    kind: "life" as SaleKind,
+    client: null,
+    note: null,
+    sold_on: p.soldOn,
+    logged_by: "owner" as LoggedBy,
+    logged_by_agent: null,
+    source: "scorecard",
+    created_at: createdAt,
+    updated_at: p.updatedAt ?? createdAt,
+    agentspace_deal_id: p.dealId,
+    status,
+    underwriting: status === "Underwriting",
+    monthly_cents: p.monthlyCents,
+    effective_date: p.effectiveDate,
+    rate_class: p.rateClass,
+    coverage_cents: p.coverageCents,
+    ss_benefit: p.ssBenefit,
+    billing_cycle: p.billingCycle,
+    billing_day: p.billingDay,
+    policy_number: p.policyNumber,
+    application_number: p.applicationNumber,
+    lead_source: p.leadSource,
+    notes: p.notes,
+    client_first: p.clientFirst,
+    client_last: p.clientLast,
+    client_dob: p.clientDob,
+    client_email: p.clientEmail,
+    client_no_email: !p.clientEmail,
+    client_phone: p.clientPhone,
+    client_address: p.clientAddress,
+    beneficiaries: p.beneficiaries,
+  };
+  const { data, error } = await db().from("sales").insert(row).select("id").single();
+  if (error) {
+    if (isDuplicate(error as { code?: string })) return null;
+    fail("policies.sync_insert", error);
+  }
+  const id = String(data.id);
+  await writeEvents(id, "agentspace", ["Copied from AgentSpace"]);
+  return id;
+}
+
+const sameVal = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+const SYNC_COLUMNS = "id, agent_id, premium_cents, monthly_cents, sold_on, carrier, product, status, underwriting, effective_date, rate_class, coverage_cents, ss_benefit, billing_cycle, billing_day, policy_number, application_number, lead_source, notes, client_first, client_last, client_dob, client_email, client_phone, client_address, beneficiaries, updated_at, deleted_at";
+
+/**
+ * Brings a linked policy in step with its deal. The board's fields (who sold it, the annual and
+ * monthly premium, the submitted day, the carrier and the product) always follow AgentSpace, because
+ * the board is meant to add up to what AgentSpace shows. Every other field (status and the policy's
+ * own details, the client, the beneficiaries, the notes) follows it only when AgentSpace changed the
+ * deal after the policy's own last change, so a note or a number someone added here is not wiped by
+ * an old copy. A write sets updated_at to the deal's own (never earlier than the policy's). Returns
+ * the kinds of field that changed (never values), whether a board field was among them, and
+ * `gone` when the policy was removed meanwhile.
+ */
+export async function applyDealToSale(saleId: string, p: SyncedPolicy, agentId: string, names: Map<string, string>): Promise<{ changed: string[]; board: boolean; gone: boolean }> {
+  const { data, error } = await db().from("sales").select(SYNC_COLUMNS).eq("id", saleId).maybeSingle();
+  if (error) fail("policies.sync_read", error);
+  const r = data as Row | null;
+  if (!r || r.deleted_at != null) return { changed: [], board: false, gone: true };
+  const cols: Record<string, unknown> = {};
+  const lines: string[] = [];
+  const kinds: string[] = [];
+  let board = false;
+  const name = (id: string) => names.get(id) ?? "someone";
+  // The board's fields: always AgentSpace's.
+  if (String(r.agent_id) !== agentId) {
+    cols.agent_id = agentId;
+    lines.push(`Seller from AgentSpace: ${name(String(r.agent_id))} → ${name(agentId)}`);
+    kinds.push("seller");
+    board = true;
+  }
+  if (Number(r.premium_cents) !== p.premiumCents) {
+    cols.premium_cents = p.premiumCents;
+    lines.push(`Premium from AgentSpace: ${formatMoney(Number(r.premium_cents))} → ${formatMoney(p.premiumCents)} a year`);
+    kinds.push("premium");
+    board = true;
+  }
+  if (!sameVal(num(r.monthly_cents), p.monthlyCents)) {
+    cols.monthly_cents = p.monthlyCents;
+    if (!kinds.includes("premium")) kinds.push("premium");
+    board = true;
+  }
+  if (String(r.sold_on) !== p.soldOn) {
+    cols.sold_on = p.soldOn;
+    lines.push(`Submitted date from AgentSpace: ${shortDay(String(r.sold_on))} → ${shortDay(p.soldOn)}`);
+    kinds.push("submitted date");
+    board = true;
+  }
+  if (!sameVal(str(r.carrier), p.carrier)) {
+    cols.carrier = p.carrier;
+    lines.push(`Carrier from AgentSpace: ${orNone(str(r.carrier))} → ${orNone(p.carrier)}`);
+    kinds.push("carrier");
+    board = true;
+  }
+  if (!sameVal(str(r.product), p.product)) {
+    cols.product = p.product;
+    lines.push(`Product from AgentSpace: ${orNone(str(r.product))} → ${orNone(p.product)}`);
+    kinds.push("product");
+    board = true;
+  }
+  // Everything else: only when AgentSpace changed the deal after this policy's last change.
+  const newer = instantMs(p.updatedAt) > instantMs(str(r.updated_at));
+  if (newer) {
+    const have = isPolicyStatus(r.status) ? r.status : null;
+    if (p.status && p.status !== have) {
+      cols.status = p.status;
+      cols.underwriting = p.status === "Underwriting";
+      lines.push(`Status from AgentSpace: ${have ?? "No status yet"} → ${p.status}`);
+      kinds.push("status");
+    }
+    const tracked: [string, string, unknown, unknown, string][] = [
+      ["effective_date", "effective date", str(r.effective_date), p.effectiveDate, `Effective date from AgentSpace: ${shortDay(str(r.effective_date))} → ${shortDay(p.effectiveDate)}`],
+      ["rate_class", "rate class", str(r.rate_class), p.rateClass, `Rate class from AgentSpace: ${orNone(str(r.rate_class))} → ${orNone(p.rateClass)}`],
+      ["coverage_cents", "coverage", num(r.coverage_cents), p.coverageCents, "Coverage updated from AgentSpace"],
+      ["ss_benefit", "billing", bool(r.ss_benefit), p.ssBenefit, "Billing updated from AgentSpace"],
+      ["billing_cycle", "billing", str(r.billing_cycle), p.billingCycle, "Billing updated from AgentSpace"],
+      ["billing_day", "billing", str(r.billing_day), p.billingDay, "Billing updated from AgentSpace"],
+      ["lead_source", "lead source", str(r.lead_source), p.leadSource, `Lead source from AgentSpace: ${orNone(str(r.lead_source))} → ${orNone(p.leadSource)}`],
+      ["policy_number", "policy number", str(r.policy_number), p.policyNumber, "Policy number updated from AgentSpace"],
+      ["application_number", "application number", str(r.application_number), p.applicationNumber, "Application number updated from AgentSpace"],
+      ["notes", "notes", str(r.notes), p.notes, "Notes updated from AgentSpace"],
+    ];
+    for (const [col, kind, was, now, line] of tracked) {
+      if (sameVal(was, now)) continue;
+      // A value typed here is never blanked by a deal that has nothing there.
+      if (now == null && was != null && was !== "") continue;
+      cols[col] = now;
+      if (!kinds.includes(kind)) {
+        kinds.push(kind);
+        if (line) lines.push(line);
+      }
+    }
+    const clientNow: Record<string, unknown> = { client_first: p.clientFirst, client_last: p.clientLast, client_dob: p.clientDob, client_email: p.clientEmail, client_phone: p.clientPhone, client_address: p.clientAddress };
+    let clientChanged = false;
+    for (const [col, now] of Object.entries(clientNow)) {
+      if (now == null && str(r[col])) continue;
+      if (!sameVal(str(r[col]), now)) {
+        cols[col] = now;
+        clientChanged = true;
+      }
+    }
+    if (clientChanged) {
+      cols.client_no_email = !(cols.client_email ?? str(r.client_email));
+      kinds.push("client");
+      lines.push("Client details updated from AgentSpace");
+    }
+    if (p.beneficiaries.length && !sameVal(benList(r.beneficiaries), p.beneficiaries)) {
+      cols.beneficiaries = p.beneficiaries;
+      kinds.push("beneficiaries");
+      lines.push("Beneficiaries updated from AgentSpace");
+    }
+  }
+  if (!Object.keys(cols).length) return { changed: [], board: false, gone: false };
+  const at = newer ? instantMs(p.updatedAt) : Math.max(instantMs(p.updatedAt), instantMs(str(r.updated_at)));
+  cols.updated_at = new Date(at || Date.now()).toISOString();
+  const { data: wrote, error: werr } = await db().from("sales").update(cols).eq("id", saleId).is("deleted_at", null).select("id");
+  if (werr) fail("policies.sync_update", werr);
+  if (!wrote?.length) return { changed: [], board: false, gone: true };
+  await writeEvents(saleId, "agentspace", lines);
+  return { changed: kinds, board, gone: false };
+}
+
+/** Takes a linked policy off the board because its deal is gone or no longer counts in AgentSpace (soft: the row stays). False when it was already off. */
+export async function removeSyncedSale(saleId: string, why: "gone" | "not_counted"): Promise<boolean> {
+  if (!(await softDelete(saleId))) return false;
+  await writeEvents(saleId, "agentspace", [why === "gone" ? "Removed: the deal is gone from AgentSpace" : "Removed: AgentSpace no longer counts this deal"]);
+  return true;
+}
+
+/**
+ * Puts a policy the sync took off back on the board (its deal counts again). A policy a person took
+ * off stays off: only a removal the sync itself wrote last is undone. True when it was brought back.
+ */
+export async function reviveSyncedSale(saleId: string): Promise<boolean> {
+  const { data, error } = await db().from("sale_events").select("what, by_label").eq("sale_id", saleId).order("at", { ascending: false }).order("id", { ascending: false }).limit(1);
+  if (error) fail("policies.sync_history", error);
+  const last = data?.[0];
+  if (!last || last.by_label !== "agentspace" || !String(last.what).startsWith("Removed:")) return false;
+  const { data: back, error: uerr } = await db().from("sales").update({ deleted_at: null }).eq("id", saleId).not("deleted_at", "is", null).select("id");
+  if (uerr) fail("policies.sync_revive", uerr);
+  if (!back?.length) return false;
+  await writeEvents(saleId, "agentspace", ["Back on the board: AgentSpace counts this deal again"]);
+  return true;
 }

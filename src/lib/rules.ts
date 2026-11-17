@@ -323,16 +323,18 @@ export function roleChoices(v: RuleViewer, a: Pick<Agent, "id" | "role">): RoleC
 }
 
 /**
- * Who may confirm (or turn down) the upline a joiner picked (decision 6): that upline, a manager
- * above them on the confirmed tree, or an admin.
+ * Who may confirm (or turn down) the upline a joiner picked on the agency link (decision 6): that
+ * upline when they are a manager, a manager above them on the confirmed tree, or an admin. An
+ * agent who hands out a team link (the rollout, 2026-11-16) confirms nobody: the people who come
+ * in on that link are confirmed at once, and a pick on the agency link waits for a manager or an
+ * admin.
  */
 export function canConfirmJoiner(v: RuleViewer, joiner: Pick<Agent, "upline_id" | "upline_confirmed">, ctx: RuleContext): boolean {
   if (v.level === "team" || joiner.upline_confirmed !== false || !joiner.upline_id) return false;
   if (isAdmin(v)) return true;
   const me = personOf(v);
-  if (!me) return false;
-  if (joiner.upline_id === me) return true;
-  return isManagerLevel(v) && ctx.org.uplineChain(joiner.upline_id).includes(me);
+  if (!me || !isManagerLevel(v)) return false;
+  return joiner.upline_id === me || ctx.org.uplineChain(joiner.upline_id).includes(me);
 }
 
 /** The people waiting for this viewer (or anyone who may) to confirm the upline they picked. */
@@ -345,19 +347,24 @@ export interface JoinLinkChoice {
   label: string;
   /** An admin picks the team. */
   pickTeam?: boolean;
-  /** A manager's own team link. */
+  /** A person's own team link. */
   leaderId?: string;
 }
-/** The join links a viewer can hand out: an admin the agency link or any team's; a manager their own team's (decision 7). */
+/**
+ * The join links a viewer can hand out (the rollout, 2026-11-16: every person with their own
+ * sign-in, so the link goes down the tree): their own team's (an agent, a manager, an admin); an
+ * admin also the agency link and any team's. The shared team password: none.
+ */
 export function joinLinkChoices(v: RuleViewer): JoinLinkChoice[] {
-  if (isAdmin(v)) return [{ kind: "agency", label: "Agency join link" }, { kind: "team", label: "A link for one team", pickTeam: true }];
-  if (isManagerLevel(v) && v.agentId) return [{ kind: "team", label: "A link for my team", leaderId: v.agentId }];
-  return [];
+  const mine: JoinLinkChoice[] = personOf(v) ? [{ kind: "team", label: "My team link", leaderId: personOf(v)! }] : [];
+  if (isAdmin(v)) return [{ kind: "agency", label: "Agency join link" }, ...mine, { kind: "team", label: "A link for one team", pickTeam: true }];
+  return mine;
 }
-/** May this viewer get the join link for this leader's team (null: the agency link)? */
+/** May this viewer get (or renew) the join link for this leader's team (null: the agency link)? Their own team's, or an admin any. */
 export function canGetJoinLink(v: RuleViewer, leaderId: string | null): boolean {
   if (isAdmin(v)) return true;
-  return isManagerLevel(v) && !!v.agentId && leaderId === v.agentId;
+  const me = personOf(v);
+  return !!me && leaderId === me;
 }
 
 // ---- settings and navigation ---------------------------------------------------------------------

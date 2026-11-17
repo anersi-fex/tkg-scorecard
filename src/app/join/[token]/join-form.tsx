@@ -18,8 +18,10 @@ export interface JoinFormProps {
    * spells them. Names and nothing else (no id, no number).
    */
   unclaimed?: string[];
-  /** The leader this link belongs to: already picked. */
+  /** The leader whose team link this is: the upline is fixed, nothing to pick. */
   leaderId: string | null;
+  /** That leader's name (shown: "Not your team? Ask <first name> for the right link."). */
+  leaderName?: string;
   needsPhone: boolean;
   inOffice: boolean;
 }
@@ -30,7 +32,7 @@ const FIELD = "text-[15px]";
  * The join card's form. Submits through onSubmit, so a refused try keeps everything that was
  * typed. Nothing is decided here: the server checks the link, the name, the number and the password.
  */
-export function JoinForm({ token, kind, people, unclaimed = [], leaderId, needsPhone, inOffice }: JoinFormProps) {
+export function JoinForm({ token, kind, people, unclaimed = [], leaderId, leaderName, needsPhone, inOffice }: JoinFormProps) {
   const [error, setError] = useState<string | null>(null);
   // The name is kept here so a tap on "Already on the board?" can write the board's spelling into it.
   const [name, setName] = useState("");
@@ -78,7 +80,12 @@ export function JoinForm({ token, kind, people, unclaimed = [], leaderId, needsP
           <Input id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="248 555 0100" className={FIELD} required />
         </div>
       )}
-      {kind === "agency" && (
+      {kind === "agency" && leaderId && leaderName && (
+        <p className="-mt-1 text-[12.5px] leading-snug text-fg-2" data-join-team={leaderId}>
+          You&apos;ll be on {leaderName}&apos;s team. Not your team? Ask {leaderName.trim().split(/\s+/)[0]} for the right link.
+        </p>
+      )}
+      {kind === "agency" && !leaderId && (
         <UplinePicker
           people={people}
           picked={unsure ? null : upline}

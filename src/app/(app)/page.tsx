@@ -9,6 +9,8 @@ import { isView, type View } from "@/lib/views";
 import { formatDollars } from "@/lib/money";
 import { canSeeClient, canUsePolicies, homeScopes, myTeamLeaderId, ruleContext, teamName, type RuleContext } from "@/lib/rules";
 import { listPoliciesFor } from "@/lib/policies";
+import { getJoinLink } from "./people-actions";
+import { GetStartedCard } from "@/components/home/get-started";
 import { queryToParams } from "@/lib/policy-filter";
 import { clientNameOf, type PolicyListRow, type PolicyScope } from "@/lib/policy-types";
 import { isAdmin, type Viewer } from "@/lib/viewer";
@@ -21,6 +23,7 @@ import {
   officeGroups,
   pickHomeScope,
   pipelineOf,
+  showGetStarted,
   rangeLabel,
   scopeDaily,
   scopeSummary,
@@ -38,8 +41,11 @@ import { AroundCard, BoardCard, ChartCard, ComingCard, EmptyMe, MiniCards, Pipel
 import { TeamPicker } from "@/components/home/team-picker";
 import { PcView, TotalView } from "@/components/home/pc-views";
 import { SaleRowMenu, type UndoRight } from "./sale-row-menu";
+import { maybeSync } from "@/lib/agentspace-trigger";
 
 export const metadata: Metadata = { title: "Home" };
+/** The AgentSpace sync may run after Home answers (agentspace-trigger.ts). */
+export const maxDuration = 60;
 
 type Params = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
@@ -67,6 +73,8 @@ const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
  */
 export default async function HomePage({ searchParams }: { searchParams: Promise<Params> }) {
   const viewer = await pageViewer();
+  // Two numbers compared and nothing more until a sync is due (about every 4 minutes); see agentspace-trigger.ts.
+  maybeSync();
   const params = await searchParams;
   const today = todayInDetroit();
   const current = monthKeyOf(today);
@@ -168,6 +176,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   };
   const right: React.ReactNode[] = [];
   let mine: PolicyListRow[] = [];
+  let mineRead = false;
   const own = canUsePolicies(viewer) && viewer.agentId;
   // The pipeline's rows (read first; the cards are drawn after): the viewer's own, a team's where the
   // viewer sees every policy on it (a manager on their own team, an admin on any), the agency's for an admin.
@@ -176,6 +185,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   try {
     if (sc.id === "me" && own) {
       mine = await listPoliciesFor(viewer, "mine");
+      mineRead = true;
       if (mine.some((p) => p.soldOn.slice(0, 7) === month)) {
         pipeRows = mine;
         pipeLink = { title: "My pipeline", scope: "mine", team: null };
@@ -330,11 +340,19 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     );
   }
 
+  // Three steps for someone with no policy yet and nobody on their team; gone once either is true.
+  let getStarted: React.ReactNode = null;
+  if (sc.id === "me" && own && me && mineRead && showGetStarted({ policies: mine.length, teammates: ctx.org.downlineOf(me).filter((id) => ctx.byId.get(id)?.active).length })) {
+    const link = await getJoinLink(me).catch(() => null);
+    getStarted = <GetStartedCard teamLink={link?.ok ? link.url : null} agency={snap.agencyName} />;
+  }
+
   const setGoalHref = sc.id === "me" && !goalCents && isAdmin(viewer) ? "/team" : undefined;
   return (
     <div className={cn("page", s.wrap)} data-scope={sc.id}>
       <PageHead title={title} sub={sub} right={segItems.length > 1 || pickTeam ? tools : undefined} />
       {viewSwitch}
+      {getStarted && <div className="mb-3 max-w-[560px]">{getStarted}</div>}
       <div className={cn(s.grid, right.length === 0 && s.noRight)}>
         <div className={cn(s.col, s.left)}>
           <ProductionCard sum={sum} clock={clock} range={rangeLabel(month, today)} noGoal={{ hide: hideGoal, note: goalNote, setGoalHref }} />
