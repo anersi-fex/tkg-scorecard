@@ -32,6 +32,8 @@ import { TeamsScreen } from "./teams-screen";
  * full screen. The cursor hides after a few seconds still.
  */
 const POLL_MS = 5000;
+/** No good answer for this long and the TV reloads itself. */
+const STALE_RELOAD_MS = 90_000;
 /** Every this many polls the TV reads the whole feed; in between it asks only whether anything changed. */
 const FULL_EVERY = 12;
 const CELEBRATE_MS = 9000;
@@ -185,6 +187,7 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
   const reloading = useRef(false);
   const stamp = useRef<string | null>(null);
   const polls = useRef(0);
+  const lastGood = useRef(Date.now());
   const gate = useRef(pollGate());
   const clock = useClock();
   useWakeLock();
@@ -243,11 +246,13 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
         return;
       }
       if (res.status === 204) {
+        lastGood.current = Date.now();
         setOffline(0);
         return;
       }
       if (!res.ok) throw new Error(String(res.status));
       const next = (await res.json()) as MonthSnapshot & { stamp?: string | null };
+      lastGood.current = Date.now();
       stamp.current = next.stamp ?? null;
       // A new deploy is live: the TV was opened once and left, so it reloads itself (once) to run it.
       if (next.build && initial.build && next.build !== initial.build && !reloading.current) {
@@ -283,6 +288,31 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
     const id = setInterval(refresh, POLL_MS);
     return () => clearInterval(id);
   }, [refresh]);
+
+  // The TV heals itself (2026-11-17: a TV that stopped updating needed someone to walk over and press
+  // refresh): no good answer from the server for 90 s (a frozen tab, a dead connection, a stuck
+  // request) reloads the page, which reads the board again on the server; and once a night, at about
+  // 4 AM Detroit, it reloads anyway so a screen left open for weeks starts fresh.
+  useEffect(() => {
+    let nightly = "";
+    const id = setInterval(() => {
+      if (reloading.current) return;
+      if (Date.now() - lastGood.current > STALE_RELOAD_MS) {
+        reloading.current = true;
+        window.location.reload();
+        return;
+      }
+      const now = new Date();
+      const hm = new Intl.DateTimeFormat("en-US", { timeZone: "America/Detroit", hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
+      const day = now.toDateString();
+      if (hm.startsWith("04:0") && nightly !== day) {
+        nightly = day;
+        reloading.current = true;
+        window.location.reload();
+      }
+    }, 10_000);
+    return () => clearInterval(id);
+  }, []);
 
   const { clock: month } = snap;
   const sound = useSoundGate(snap.sound !== "off");

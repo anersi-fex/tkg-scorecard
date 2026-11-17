@@ -79,7 +79,7 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
   if (!dbConfigured()) return bad;
 
   const key = joinKey(await clientAddress());
-  if (await loginThrottled(key, JOIN_MAX_PER_IP)) return <Closed agency={agency} title="Too many tries." line="Wait 15 minutes and try again." />;
+  if (await loginThrottled(key, JOIN_MAX_PER_IP)) return <Closed agency={agency} title="Lots of people are signing in at once." line="Wait a minute and try again." />;
 
   let invite: Invite | null;
   try {

@@ -182,10 +182,21 @@ async function nameClaimableIds(rows: ClaimRow[], logins: Set<string>, opts: { v
  * leader's own people are in the list too.
  */
 export async function claimableNames(leaderId?: string | null): Promise<string[]> {
+  // The join page is opened by about 50 people within minutes and each open costs a database read
+  // per unclaimed name: one answer is kept for 30 seconds per link (the chips are a nudge; the
+  // server's rule is checked again when someone submits, so a stale chip is harmless).
+  const key = leaderId ?? "";
+  const hit = claimableKept.get(key);
+  if (hit && Date.now() - hit.at < CLAIMABLE_KEEP_MS) return hit.names;
   const [people, logins] = await Promise.all([roster(), loginIds()]);
   const ok = await nameClaimableIds(people, logins, { vouchedBy: leaderId ?? null, everyone: people });
-  return [...new Set(people.filter((p) => ok.has(p.id)).map((p) => p.name))].sort((x, y) => x.localeCompare(y));
+  const names = [...new Set(people.filter((p) => ok.has(p.id)).map((p) => p.name))].sort((x, y) => x.localeCompare(y));
+  claimableKept.set(key, { at: Date.now(), names });
+  if (claimableKept.size > 200) claimableKept.clear();
+  return names;
 }
+const CLAIMABLE_KEEP_MS = 30_000;
+const claimableKept = new Map<string, { at: number; names: string[] }>();
 
 /** Whose team a person is on (null: the top of the tree). Refuses a loop. An admin setting it confirms it (0006). */
 export async function setUpline(id: string, uplineId: string | null): Promise<void> {
@@ -561,6 +572,7 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
     }
     if (!data?.length) return { ok: false, error: `${match.name} is already on Scorecard. Sign in, or ask an admin for your own link.`, counts: true };
     await consumeInvite(invite);
+    claimableKept.clear(); // this instance's chips drop the person who just signed up
     return { ok: true, agentId: match.id, sessionVersion: next };
   }
 
@@ -577,5 +589,6 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
     fail("people.join", error);
   }
   await consumeInvite(invite);
+  claimableKept.clear();
   return { ok: true, agentId: String(data.id), sessionVersion: Number(data.session_version) };
 }
