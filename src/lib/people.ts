@@ -158,22 +158,56 @@ async function holdsPolicies(id: string): Promise<boolean> {
 }
 
 type ClaimRow = { id: string; active: boolean; role: AgentRole; upline_id: string | null; upline_confirmed?: boolean };
+
 /**
- * The rows of `rows` a name typed on a join link may claim (see claimableRole). `everyone` is the
- * whole board (who has people under them); it defaults to `rows`.
- *
- * `vouchedBy` is the leader whose team link this is. That person's own direct people (confirmed, on
- * their team) may be claimed even when they lead a team of their own or are managers: the link
- * comes from the one person above them, who already sees everything those rows open, so the rollout
- * can go down the tree by tapping names. An admin's or the owner's row, and a row that holds a
- * policy, are never claimed by a typed name.
+ * The cell number AgentSpace has on file for each person (settings key `claim_phones`,
+ * `{ "<agent id>": "+1XXXXXXXXXX" }`, loaded 2026-11-17 from the agency's own records). A name typed
+ * on a join link claims a row that has a number on file only together with that number: the name
+ * alone is something anyone in the group chat could type, and the row opens clients.
  */
-async function nameClaimableIds(rows: ClaimRow[], logins: Set<string>, opts: { vouchedBy?: string | null; everyone?: ClaimRow[] } = {}): Promise<Set<string>> {
+async function loadClaimPhones(): Promise<Map<string, string>> {
+  const { data, error } = await db().from("settings").select("value").eq("key", "claim_phones").maybeSingle();
+  if (error) fail("people.claim_phones", error);
+  const out = new Map<string, string>();
+  const v = data?.value;
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    for (const [id, phone] of Object.entries(v as Record<string, unknown>)) {
+      if (isUuid(id) && typeof phone === "string" && /^\+1\d{10}$/.test(phone)) out.set(id, phone);
+    }
+  }
+  return out;
+}
+
+/**
+ * Which rows of `rows` a name typed on a join link may claim (see claimableRole), as a map from the
+ * row's id to the cell number that must be typed with the name (null: the name is enough).
+ * `everyone` is the whole board (who has people under them); it defaults to `rows`.
+ *
+ * A row with a number on file (`phones`) is claimable by its name and that number, whatever it
+ * opens: an owner's or an admin's row never is. A row without one is claimable by its name alone
+ * only when it opens nothing: no policy, no team of its own, not a manager (an admin sends that
+ * person their own link), the old rule. `vouchedBy` is the leader whose team link this is: that
+ * person's own direct, confirmed people may be claimed even when they lead a team or are managers
+ * (the link comes from the one person above them), so the rollout can go down the tree by tapping
+ * names; a row that holds a policy and has no number on file still needs an admin's person link.
+ */
+async function claimPlan(rows: ClaimRow[], logins: Set<string>, opts: { vouchedBy?: string | null; everyone?: ClaimRow[]; phones?: Map<string, string> } = {}): Promise<Map<string, string | null>> {
   const leads = new Set((opts.everyone ?? rows).filter((r) => r.active && r.upline_id && r.upline_id !== r.id).map((r) => r.upline_id as string));
   const vouched = (r: ClaimRow) => !!opts.vouchedBy && r.id !== opts.vouchedBy && r.upline_id === opts.vouchedBy && r.upline_confirmed !== false;
-  const candidates = rows.filter((r) => r.active && !logins.has(r.id) && (claimableRole(r.role) || (r.role === "manager" && vouched(r))) && (!leads.has(r.id) || vouched(r)));
-  const held = await Promise.all(candidates.map((r) => holdsPolicies(r.id)));
-  return new Set(candidates.filter((_, i) => !held[i]).map((r) => r.id));
+  const phones = opts.phones ?? new Map<string, string>();
+  const plan = new Map<string, string | null>();
+  const open = rows.filter((r) => r.active && !logins.has(r.id) && (r.role === "member" || r.role === "manager"));
+  const rest: ClaimRow[] = [];
+  for (const r of open) {
+    const on = phones.get(r.id);
+    if (on) plan.set(r.id, on);
+    else if ((claimableRole(r.role) || (r.role === "manager" && vouched(r))) && (!leads.has(r.id) || vouched(r))) rest.push(r);
+  }
+  const held = await Promise.all(rest.map((r) => holdsPolicies(r.id)));
+  rest.forEach((r, i) => {
+    if (!held[i]) plan.set(r.id, null);
+  });
+  return plan;
 }
 
 /**
@@ -188,8 +222,8 @@ export async function claimableNames(leaderId?: string | null): Promise<string[]
   const key = leaderId ?? "";
   const hit = claimableKept.get(key);
   if (hit && Date.now() - hit.at < CLAIMABLE_KEEP_MS) return hit.names;
-  const [people, logins] = await Promise.all([roster(), loginIds()]);
-  const ok = await nameClaimableIds(people, logins, { vouchedBy: leaderId ?? null, everyone: people });
+  const [people, logins, phones] = await Promise.all([roster(), loginIds(), loadClaimPhones()]);
+  const ok = await claimPlan(people, logins, { vouchedBy: leaderId ?? null, everyone: people, phones });
   const names = [...new Set(people.filter((p) => ok.has(p.id)).map((p) => p.name))].sort((x, y) => x.localeCompare(y));
   claimableKept.set(key, { at: Date.now(), names });
   if (claimableKept.size > 200) claimableKept.clear();
@@ -464,9 +498,9 @@ async function roster(): Promise<Roster> {
  * Joining through a link (contract decision 5), everything checked here on the server:
  *   agency  a new person, or the claim of someone already on the board with the same name who
  *           has no sign-in yet (members and managers only; an owner or admin row needs its own
- *           person link). An upline picked on the agency link waits to be confirmed (0006: the
- *           upline, a manager above them, or an admin); the leader a leader's link names is
- *           confirmed at once (the leader or an admin made that link).
+ *           person link), a row that opens clients only together with its AgentSpace number
+ *           (claimPlan). An upline picked on the agency link counts at once; the leader a leader's
+ *           link names is confirmed at once (the leader or an admin made that link).
  *   person  that one person sets their number, their password and the office mark
  *   reset   that one person sets a new password
  * One-use links are taken with a guarded update before anything is written, so a link works once.
@@ -535,16 +569,23 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
   // for them (a link an admin made stops being confirmed if that person is no longer an admin).
   const creator = invite.created_by ? people.find((p) => p.id === invite.created_by) : undefined;
   const standsFor = !invite.created_by || invite.created_by === linkLeader?.id || (!!creator && creator.active && (creator.role === "admin" || creator.role === "owner"));
-  const confirmed = !upline || (!!linkLeader && standsFor);
+  // An upline picked on the agency link counts at once (owner, 2026-11-17: "just click and select who their upline is, and they can just join like that"); an admin fixes a wrong pick on People.
+  const confirmed = !upline || !!picked || (!!linkLeader && standsFor);
   const pass_hash = await hashPassword(input.password);
   const now = new Date().toISOString();
 
   if (match) {
     if (logins.has(match.id)) return { ok: false, error: `${match.name} is already on Scorecard. Sign in, or ask an admin for your own link.`, counts: true };
-    // A row whose sign-in opens clients (a manager's, a leader's, one holding policies) is not
-    // claimed by a typed name: an admin sends that person their own link.
-    if (!(await nameClaimableIds([match], logins, { vouchedBy: linkLeader?.id ?? null, everyone: people })).has(match.id)) {
+    // A row whose sign-in opens clients (a manager's, a leader's, one holding policies) is claimed
+    // only with the cell number AgentSpace has on file for it; with none on file an admin sends
+    // that person their own link. A row that opens nothing is claimed by its name.
+    const plan = await claimPlan([match], logins, { vouchedBy: linkLeader?.id ?? null, everyone: people, phones: await loadClaimPhones() });
+    if (!plan.has(match.id)) {
       return { ok: false, error: `${match.name} is already on the board. Ask an admin for your own sign-in link.`, counts: true };
+    }
+    const need = plan.get(match.id);
+    if (need && typedPhone !== need) {
+      return { ok: false, error: `That cell number isn't the one on file for ${match.name}. Check it, or ask an admin for your own sign-in link.`, counts: true };
     }
     if (holder) await releaseParkedPhone(holder.id, typedPhone);
     // The claim: only while the row still has no sign-in (two phones at once: one wins).
@@ -557,10 +598,10 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
     // A leader's link opens with that leader already picked: that is the link's default, not a
     // pick, so it never moves someone an admin already placed (it fills an empty upline, below).
     const chose = picked;
-    // Their own pick waits to be confirmed; a row that keeps its upline keeps its confirmed state.
+    // Their own pick counts at once; a row that keeps its upline keeps its confirmed state.
     if (chose && chose.id !== match.id && !(await wouldLoop(match.id, chose.id))) {
       patch.upline_id = chose.id;
-      patch.upline_confirmed = false;
+      patch.upline_confirmed = true;
     } else if (!match.upline_id && upline && upline.id !== match.id && !(await wouldLoop(match.id, upline.id))) {
       patch.upline_id = upline.id;
       patch.upline_confirmed = confirmed;

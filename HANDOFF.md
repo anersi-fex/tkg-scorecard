@@ -1,5 +1,10 @@
 # HANDOFF.md — Scorecard
 
+## One link for everyone, merged by name (2026-11-17)
+- The agency join link now merges people already on the board by name, including the 27 sellers copied from AgentSpace (they hold policies, which used to block a claim by name and would have sent every one of them to an admin). Proof: the cell number AgentSpace has on file (`settings.claim_phones`, 27 people, loaded by SQL on 2026-11-17; PII, server-only, refresh it the same way for new agents: name to number). Name plus a wrong number is refused; no number on file keeps the old rule. A pick of an upline counts at once. The upline picker shows the team leaders as one-tap buttons.
+- Loaded from the agency's AgentSpace records: all 35 agents had a number; 27 matched board rows (8 are not on the board). `claim_phones` is not in git.
+- Checks: unit tests 234, smoke 486 (steps for the waiting joiner replaced: picks count at once).
+
 ## Team links (2026-11-16, the rollout: the link goes down the tree)
 - Every person with their own sign-in has a "My team link" on People (Copy, Share, Make a new link that turns off only their own); a joiner on it lands on that person's team, confirmed at once. The join page says "Join <first name>'s team", no upline picker, "Not your team? Ask <name> for the right link.", and the tap-your-name chips. Home shows one small three-step card (Log a sale, See your policies, Send your team link) until the person has a policy or a teammate.
 - Rules changed (only what the link needed): `canGetJoinLink` and `joinLinkChoices` (own team for every person), `canConfirmJoiner` (an agent upline no longer confirms: only a manager upline, a manager above, or an admin), a team link ignores the posted upline, `readInvite` kills a team link whose leader or maker is off the board, `resetJoinLink` turns off the agency link only, demoting a manager no longer revokes their team link. Privacy rule unchanged (seller, people above on the confirmed chain, admins).

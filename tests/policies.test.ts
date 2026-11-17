@@ -365,7 +365,7 @@ test("Make a new link: only the person's own team link is turned off", async () 
   assert.ok(await invites.readInvite(tokenOf(b1.url)), "Ben's link survives the agency's new link");
 });
 
-test("joining: a picked upline waits to be confirmed; a leader's own link is confirmed at once; a claimed row keeps its own", async () => {
+test("joining: a picked upline counts at once; a leader's own link is confirmed at once; a claimed row keeps its own", async () => {
   reset();
   const peopleLib = req("../src/lib/people") as typeof import("../src/lib/people");
   const invites = req("../src/lib/invites") as typeof import("../src/lib/invites");
@@ -377,7 +377,7 @@ test("joining: a picked upline waits to be confirmed; a leader's own link is con
   const picked = await join(agency.token, "Pat Picker", "248 555 0131", id(mia));
   assert.ok(picked.ok);
   assert.equal(row(picked.agentId).upline_id, id(mia));
-  assert.equal(row(picked.agentId).upline_confirmed, false, "a pick on the agency link waits");
+  assert.equal(row(picked.agentId).upline_confirmed, true, "a pick on the agency link counts at once (owner, 2026-11-17)");
 
   const viaLink = await join(miaLink.token, "Lee Linked", "248 555 0132", id(mia));
   assert.ok(viaLink.ok);
@@ -426,6 +426,45 @@ test("joining: a picked upline waits to be confirmed; a leader's own link is con
   assert.equal(refused.ok, false);
   assert.equal(peopleLib.claimableRole("manager"), false);
   assert.equal(peopleLib.claimableRole("admin"), false);
+});
+
+test("joining: a row with a cell number on file is claimed with its name AND that number, whatever it opens", async () => {
+  reset();
+  const peopleLib = req("../src/lib/people") as typeof import("../src/lib/people");
+  const invites = req("../src/lib/invites") as typeof import("../src/lib/invites");
+  const agency = await invites.createInvite({ kind: "agency" });
+  const join = (name: string, phone: string) => peopleLib.joinWithInvite({ token: agency.token, name, phone, password: "a long password", uplineId: null, inOffice: false });
+  // A seller holding a policy, a leader with a team, a manager, an admin and an agent with nothing yet.
+  const sam = person("Sam Seller", { pass_hash: null, upline_id: id(admin) });
+  const lou = person("Lou Leaderrow", { pass_hash: null, upline_id: id(admin) });
+  const max = person("Max Managerrow", { role: "manager", pass_hash: null, upline_id: id(admin) });
+  const ada = person("Ada Adminfile", { role: "admin", pass_hash: null });
+  const neo = person("Neo Newagent", { pass_hash: null, upline_id: id(admin) });
+  tables.agents.push(sam, lou, max, ada, neo, person("Una Underlou", { upline_id: id(lou) }));
+  tables.sales.push({ id: randomUUID(), agent_id: id(sam), status: "Submitted", premium_cents: 120_000, policies: 1, sold_on: today(), created_at: new Date().toISOString(), deleted_at: null });
+  // Without a number on file the old rule holds: a policy, a team or the manager role needs an admin's link.
+  assert.equal((await join("Sam Seller", "248 555 0201")).ok, false);
+  assert.equal(sam.pass_hash, null);
+  // The numbers AgentSpace has on file.
+  tables.settings.push({ key: "claim_phones", value: { [id(sam)]: "+12485550201", [id(lou)]: "+12485550202", [id(max)]: "+12485550203", [id(ada)]: "+12485550204", [id(neo)]: "+12485550205" }, updated_at: new Date().toISOString() });
+  // The name alone, or the name with somebody else's number, claims nothing.
+  const wrong = await join("Sam Seller", "248 555 0999");
+  assert.equal(wrong.ok, false);
+  assert.match((wrong as { error: string }).error, /isn't the one on file/);
+  assert.equal(sam.pass_hash, null);
+  // The name with its number claims the row (a seller, a leader and a manager alike) and keeps its upline.
+  for (const [row, name, phone] of [[sam, "sam seller", "248 555 0201"], [lou, "Lou Leaderrow", "(248) 555-0202"], [max, "Max Managerrow", "248-555-0203"], [neo, "Neo Newagent", "2485550205"]] as const) {
+    const res = await join(name, phone);
+    assert.ok(res.ok, name);
+    assert.equal(res.agentId, id(row));
+    assert.equal(row.upline_id, id(admin));
+  }
+  // An admin's row is never claimed by a name, even with its number.
+  assert.equal((await join("Ada Adminfile", "248 555 0204")).ok, false);
+  assert.equal(ada.pass_hash, null);
+  // The card lists the names that can be claimed (with their number): the admin's is not one.
+  const names = await peopleLib.claimableNames();
+  assert.ok(!names.includes("Ada Adminfile"));
 });
 
 test("claiming by name on a team link: a row keeps its team; the leader's own legs (leaders too) are claimable only on that leader's link; never an admin's", async () => {

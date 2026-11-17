@@ -614,13 +614,8 @@ try {
   const afterDana = await feedUntil((j) => j.agents.some((p) => p.name === DANA));
   const danaLine = afterDana.agents.find((p) => p.name === DANA);
   ID[DANA] = danaLine?.id ?? null;
-  check(afterDana.agents.length === 8 && danaLine?.inOffice === true && danaLine?.uplineId == null, "the new person is on the board and in the office, on nobody's team until the upline they picked is confirmed");
-  check(sql(`select upline_id || '|' || upline_confirmed from agents where id = '${ID[DANA]}'`) === `${ID[IVY]}|false`, "the upline picked on the agency link is kept, waiting to be confirmed");
-  // The owner confirms her on People ("Wants to join"): then she is on Ivy's team
-  await go(o, "/team", "input[aria-label='Find a person']");
-  check((await o.locator(`[data-joiners] [data-joiner="${ID[DANA]}"]`).count()) === 1 && (await o.textContent(`[data-joiner="${ID[DANA]}"]`)).includes(`Picked ${IVY} as their upline`), "People shows the owner the joiner who waits to be confirmed, with the upline they picked");
-  await o.click(`[data-joiner="${ID[DANA]}"] button:has-text("Confirm")`);
-  check((await appears(o, `text=${DANA} is on Ivy's team.`)) && (await feedUntil((j) => j.agents.find((p) => p.id === ID[DANA])?.uplineId === ID[IVY])).agents.find((p) => p.id === ID[DANA])?.uplineId === ID[IVY], "Confirm puts the joiner on the team of the upline they picked");
+  check(afterDana.agents.length === 8 && danaLine?.inOffice === true && danaLine?.uplineId === ID[IVY], "the new person is on the board and in the office, on the team of the upline they picked, at once");
+  check(sql(`select upline_id || '|' || upline_confirmed from agents where id = '${ID[DANA]}'`) === `${ID[IVY]}|true`, "the upline picked on the agency link is kept, confirmed at once");
   check(!JSON.stringify(afterDana).includes("5550142") && !/pass_hash|"phone"/.test(JSON.stringify(afterDana)), "the board feed carries no phone number and no password hash");
   // The phone guide, by phone: the iPhone steps, the Android ones, each detected from the phone itself
   for (const [label, userAgent, kind, lines] of [
@@ -1550,21 +1545,20 @@ try {
       await go(rp, freshPath, "form[data-join=agency]");
       await rp.fill("#name", RHEA);
       await rp.fill("#phone", PHONE[RHEA]);
-      await rp.fill("#upline-search", "nora");
-      await rp.click(`#upline-list button:has-text("${NORA}")`);
+      check((await rp.locator(`[data-upline-leaders] button:has-text("${NORA}")`).count()) === 1, "the agency link shows the people who lead a team as one tap each");
+      await rp.click(`[data-upline-leaders] button:has-text("${NORA}")`);
       await rp.fill("#password", "rhea-first-pass");
       await Promise.all([rp.waitForURL((u) => u.pathname === "/install"), rp.click("form[data-join] button[type=submit]")]);
       ID[RHEA] = (await feedUntil((j) => j.agents.some((p) => p.name === RHEA))).agents.find((p) => p.name === RHEA)?.id ?? null;
       OTHERS.push(RHEA);
       const rheaSale = await logged(rp, RHEA, "180", "Foresters", "TERM", { picker: false });
+      // An upline picked on the agency link counts at once (owner, 2026-11-17): no waiting, no Confirm.
       const waitingFeed = await feedUntil((j) => j.agents.find((p) => p.id === ID[RHEA])?.lifeCents === 216_000);
       const noraTeamBefore = waitingFeed.scoreboard?.teams?.find((t) => t.leaderId === ID[NORA]);
-      check(waitingFeed.agents.find((p) => p.id === ID[RHEA])?.lifeCents === 216_000 && waitingFeed.agents.find((p) => p.id === ID[RHEA])?.uplineId == null && !(noraTeamBefore?.memberIds ?? []).includes(ID[RHEA]), "a joiner who waits for their upline counts on the agency board, and is on nobody's team yet");
-      check((await openPolicy(np, rheaSale.id)) === 404 && !(await policiesFile(nora.ctx, "?scope=team")).text.includes(rheaSale.client.last), "until the manager confirms them, the manager sees none of the joiner's policies or clients");
+      check(waitingFeed.agents.find((p) => p.id === ID[RHEA])?.lifeCents === 216_000 && waitingFeed.agents.find((p) => p.id === ID[RHEA])?.uplineId === ID[NORA] && (noraTeamBefore?.memberIds ?? []).includes(ID[RHEA]), "a joiner who picks their upline is on that team at once, with their sale counted");
+      check((await openPolicy(np, rheaSale.id)) === 200 && (await policiesFile(nora.ctx, "?scope=team")).text.includes(rheaSale.client.last), "the manager sees the joiner's policy and client at once");
       await go(np, "/team", "input[aria-label='Find a person']");
-      check(((await np.textContent(`[data-joiners] [data-joiner="${ID[RHEA]}"]`).catch(() => "")) ?? "").includes("Picked you as their upline"), "the manager's People says who wants to join their team");
-      await np.click(`[data-joiner="${ID[RHEA]}"] button:has-text("Confirm")`);
-      check(await appears(np, `text=${RHEA} is on Nora's team.`), "the manager confirms the joiner");
+      check((await np.locator(`[data-joiners] [data-joiner="${ID[RHEA]}"]`).count()) === 0, "nobody is left waiting to be confirmed");
       NORA_TEAM.push(RHEA);
       check((await openPolicy(np, rheaSale.id)) === 200 && (await np.textContent("h1")).includes(rheaSale.client.last) && (await policiesFile(nora.ctx, "?scope=team")).text.includes(rheaSale.client.last), "once confirmed, the manager sees the joiner's policies and clients");
       check((await feedUntil((j) => j.agents.find((p) => p.id === ID[RHEA])?.uplineId === ID[NORA])).agents.find((p) => p.id === ID[RHEA])?.uplineId === ID[NORA], "and the joiner is on the manager's team on the board");
