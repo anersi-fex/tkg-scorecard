@@ -227,7 +227,8 @@ export async function claimableNames(leaderId?: string | null): Promise<string[]
   if (hit && Date.now() - hit.at < CLAIMABLE_KEEP_MS) return hit.names;
   const [people, logins, phones] = await Promise.all([roster(), loginIds(), loadClaimPhones()]);
   const ok = await claimPlan(people, logins, { vouchedBy: leaderId ?? null, everyone: people, phones });
-  const names = [...new Set(people.filter((p) => ok.has(p.id)).map((p) => p.name))].sort((x, y) => x.localeCompare(y));
+  // Only the names a tap alone can claim: someone with a number on file is found by their number (lookupJoinPhone).
+  const names = [...new Set(people.filter((p) => ok.has(p.id) && ok.get(p.id) === null && !p.phone).map((p) => p.name))].sort((x, y) => x.localeCompare(y));
   claimableKept.set(key, { at: Date.now(), names });
   if (claimableKept.size > 200) claimableKept.clear();
   return names;
@@ -473,13 +474,97 @@ export interface JoinInput {
   password: string;
   uplineId: string | null;
   inOffice: boolean;
+  /** The person said "No, I'm someone new" to "Is this you?": a look-alike name no longer stops them. */
+  notThem?: boolean;
 }
 /**
  * `counts` marks a refusal that says something about who is on Scorecard (a dead link, a number or
  * a name that already has a sign-in): the join screen counts those toward the address's throttle.
  * A typo (a short password, a number that is not one) never counts.
  */
-export type JoinResult = { ok: true; agentId: string; sessionVersion: number } | { ok: false; error: string; counts?: boolean };
+export type JoinResult = { ok: true; agentId: string; sessionVersion: number } | { ok: false; error: string; counts?: boolean; maybe?: string };
+
+const nameWords = (n: string) =>
+  n
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/['\u2018\u2019.]/g, "")
+    .replace(/[^a-z\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+/** Two words that are likely the same name written two ways: one starts the other ("matt", "matthew"), or they share their first three letters. */
+const wordAlike = (a: string, b: string) => a.startsWith(b) || b.startsWith(a) || (a.length >= 3 && b.length >= 3 && a.slice(0, 3) === b.slice(0, 3));
+
+/**
+ * Is `typed` probably the person already on the board as `board`? (2026-11-17: "Jeremiah" typed
+ * made a second row next to "Jeremiah Moe".) One word typed: it is their first or last name. Two
+ * or more: the first names are alike and the last names are alike ("Matthew Clayton" and "Matt
+ * Clayton", "Troy Tymchuck" and "Troy Tymchuk"). Pure; tested.
+ */
+export function looksLike(typed: string, board: string): boolean {
+  const t = nameWords(typed);
+  const b = nameWords(board);
+  if (!t.length || !b.length) return false;
+  if (t.join(" ") === b.join(" ")) return true;
+  if (t.length === 1) return t[0] === b[0] || t[0] === b[b.length - 1] || (b.length === 1 && wordAlike(t[0], b[0]));
+  if (b.length === 1) return wordAlike(b[0], t[0]) && t.length === 1;
+  return wordAlike(t[0], b[0]) && wordAlike(t[t.length - 1], b[b.length - 1]);
+}
+
+/**
+ * The number a person's row may be claimed with: the one AgentSpace has on file (claim_phones), or
+ * the one already stored on a row that has no sign-in yet (an admin typed it). Members and
+ * managers only: an owner's or an admin's row is never claimed through a join link.
+ */
+function claimNumbers(people: Roster, logins: Set<string>, claimPhones: Map<string, string>): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const p of people) {
+    if (!p.active || logins.has(p.id) || (p.role !== "member" && p.role !== "manager")) continue;
+    const n = claimPhones.get(p.id) ?? p.phone ?? null;
+    if (n && n !== "invalid") out.set(p.id, n);
+  }
+  return out;
+}
+
+export type PhoneLookup =
+  | { kind: "bad_link" }
+  | { kind: "bad_phone"; error: string }
+  | { kind: "signin" }
+  | { kind: "off"; error: string }
+  | { kind: "ask_admin"; error: string }
+  | { kind: "claim"; name: string; upline: string | null }
+  | { kind: "new"; names: string[] };
+
+/**
+ * Step one of the agency or team link (owner, 2026-11-17: "if somebody signs up with the phone
+ * number that's already on file ... then it simply asks them to create a password"): what the
+ * typed cell number says. A number on file for someone on the board with no sign-in is them
+ * ("claim", with their name as the board spells it and their upline's name); a number that already
+ * has a sign-in is told to sign in; anything else is a new person ("new", with the names on the
+ * board that may still be claimed by name alone). Nothing is written.
+ */
+export async function lookupJoinPhone(token: string, phone: string): Promise<PhoneLookup> {
+  const invite = await readInvite(token);
+  if (!invite || invite.kind !== "agency") return { kind: "bad_link" };
+  const typed = normalizePhone(phone);
+  if (!typed) return { kind: "bad_phone", error: PHONE_HELP };
+  const [people, logins, claimPhones] = await Promise.all([roster(), loginIds(), loadClaimPhones()]);
+  if (invite.upline_id && !people.some((p) => p.id === invite.upline_id && p.active)) return { kind: "bad_link" };
+  const holder = people.find((p) => p.phone === typed);
+  if (holder && !holder.active) return { kind: "off", error: OFF_BOARD };
+  if (holder && logins.has(holder.id)) return { kind: "signin" };
+  const numbers = claimNumbers(people, logins, claimPhones);
+  const mine = people.find((p) => numbers.get(p.id) === typed);
+  if (mine) {
+    const up = mine.upline_id ? people.find((p) => p.id === mine.upline_id && p.active) : undefined;
+    const leader = invite.upline_id ? people.find((p) => p.id === invite.upline_id) : undefined;
+    return { kind: "claim", name: mine.name, upline: up?.name ?? leader?.name ?? null };
+  }
+  // A number stored on an owner's or an admin's row that has no sign-in yet: that person gets their own link.
+  if (holder) return { kind: "ask_admin", error: `${holder.name} is already on the board. Ask Anersi for your own sign-in link.` };
+  return { kind: "new", names: await claimableNames(invite.upline_id) };
+}
 
 type Roster = { id: string; name: string; active: boolean; role: AgentRole; upline_id: string | null; upline_confirmed: boolean; phone: string | null; session_version: number }[];
 async function roster(): Promise<Roster> {
@@ -550,18 +635,31 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
   }
 
   // The agency link.
-  const name = cleanName(input.name);
-  if (!name) return { ok: false, error: "Type your first and last name." };
   if (!typedPhone) return { ok: false, error: PHONE_HELP };
+  const claimPhones = await loadClaimPhones();
+  const numbers = claimNumbers(people, logins, claimPhones);
+  // The number decides first: a number on file for someone on the board with no sign-in is that
+  // person, whatever name was typed (or none), so nobody makes a second row of themself.
+  const byNumber = people.find((p) => numbers.get(p.id) === typedPhone);
+  const name = byNumber ? byNumber.name : cleanName(input.name);
+  if (!name) return { ok: false, error: "Type your first and last name." };
   const holder = people.find((p) => p.phone === typedPhone);
-  const matches = people.filter((p) => sameName(p.name, name));
+  const matches = byNumber ? [byNumber] : people.filter((p) => sameName(p.name, name));
   // A row with no sign-in yet is the one a name means, even when another row of the same name has one.
   const match = matches.find((p) => p.active && !logins.has(p.id)) ?? matches.find((p) => p.active) ?? matches[0];
+  if (!match) {
+    // A name like someone already on the board ("Jeremiah" for "Jeremiah Moe") asks first instead
+    // of making a second row: "Is this you?" A yes sends the board's spelling; a no sends notThem.
+    if (!input.notThem) {
+      const like = people.find((p) => p.active && looksLike(name, p.name));
+      if (like) return { ok: false, error: `Is this you: ${like.name}?`, maybe: like.name };
+    }
+    if (nameWords(name).length < 2) return { ok: false, error: "Type your first and last name." };
+  }
   // A number held by a row that has no sign-in because it was stored there is that row's own: its claim is not blocked by it.
   if (holder?.active && !(match && holder.id === match.id && !logins.has(holder.id))) return { ok: false, error: PHONE_TAKEN, counts: true };
   // A number AgentSpace has on file for somebody who has not joined yet is theirs: a stranger cannot take it
   // (under a new name, or with another person's name) and so lock that person out.
-  const claimPhones = await loadClaimPhones();
   const onFileFor = [...claimPhones].find(([id, ph]) => ph === typedPhone && people.some((p) => p.id === id && p.active && !logins.has(p.id)))?.[0];
   if (onFileFor && onFileFor !== match?.id) return { ok: false, error: "That cell number is already on the board under another name. Check it, or ask an admin for your own sign-in link.", counts: true };
   // Someone who was taken off the board does not come back through the link: not as themself
@@ -589,7 +687,7 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
     // A row whose sign-in opens clients (a manager's, a leader's, one holding policies) is claimed
     // only with the cell number AgentSpace has on file for it; with none on file an admin sends
     // that person their own link. A row that opens nothing is claimed by its name.
-    const plan = await claimPlan([match], logins, { vouchedBy: linkLeader?.id ?? null, everyone: people, phones: claimPhones });
+    const plan = await claimPlan([match], logins, { vouchedBy: linkLeader?.id ?? null, everyone: people, phones: new Map([...claimPhones, ...numbers]) });
     if (!plan.has(match.id)) {
       return { ok: false, error: `${match.name} is already on the board. Ask an admin for your own sign-in link.`, counts: true };
     }

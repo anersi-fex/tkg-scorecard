@@ -126,7 +126,7 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
   const title = teamOf ? `Join ${teamOf}'s team` : props.kind === "agency" ? `Join ${agency} on Scorecard` : props.kind === "person" ? `Hi ${props.firstName}, set up your sign-in` : "Set a new password";
   const line =
     props.kind === "agency"
-      ? "It takes a minute: tap your name, tap your upline, add your cell number and make a password. That is how you sign in from now on."
+      ? "Start with your cell number. Already on the board? You just make a password. New? Add your name and upline."
       : props.kind === "person"
         ? "Your cell number and a password are how you sign in from now on."
         : `${props.firstName}, pick a new password. It signs your other phones and computers out.`;

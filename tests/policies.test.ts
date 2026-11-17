@@ -466,10 +466,12 @@ test("joining: a row with a cell number on file is claimed with its name AND tha
   const rex = person("Rex Rowboat", { pass_hash: null, upline_id: id(admin) });
   tables.agents.push(rex);
   tables.settings.find((r) => r.key === "claim_phones")!.value = { ...(tables.settings.find((r) => r.key === "claim_phones")!.value as object), [id(rex)]: "+12485550210" };
-  const squat = await join("Zed Nobody", "248 555 0210");
-  assert.equal(squat.ok, false);
-  assert.match((squat as { error: string }).error, /already on the board under another name/);
-  assert.equal((await join("Rex Rowboat", "248 555 0210")).ok, true, "the real person still claims their row with the number");
+  // The number decides (2026-11-17, phone first): whatever name is typed, a number on file opens that person's own row, never a second one.
+  const byNumber = await join("Zed Nobody", "248 555 0210");
+  assert.ok(byNumber.ok);
+  assert.equal(byNumber.agentId, id(rex));
+  assert.equal(rex.name, "Rex Rowboat");
+  assert.equal(tables.agents.filter((a) => a.name === "Zed Nobody").length, 0);
   // An entry that is not a +1 number protects its row: nobody claims it by name, an admin sends a link.
   const ivo = person("Ivo Invalidrow", { pass_hash: null, upline_id: id(admin) });
   tables.agents.push(ivo);
@@ -545,4 +547,69 @@ test("claiming by name on a team link: a row keeps its team; the leader's own le
   assert.ok(fresh.ok);
   assert.equal(row(fresh.agentId).upline_id, id(top));
   assert.equal(row(fresh.agentId).role, "member");
+});
+
+test("joining phone first: a number on file greets the person by name; a look-alike name asks 'Is this you?' instead of making a second row", async () => {
+  reset();
+  const peopleLib = req("../src/lib/people") as typeof import("../src/lib/people");
+  const invites = req("../src/lib/invites") as typeof import("../src/lib/invites");
+  const agency = await invites.createInvite({ kind: "agency" });
+  const join = (name: string, phone: string, notThem = false) => peopleLib.joinWithInvite({ token: agency.token, name, phone, password: "a long password", uplineId: null, inOffice: false, notThem });
+  const jer = person("Jeremiah Moe", { role: "admin", pass_hash: null, upline_id: id(admin) });
+  const ted = person("Ted Onfile", { pass_hash: null, upline_id: id(admin) });
+  const matt = person("Matt Clayton", { pass_hash: null, upline_id: id(admin) });
+  tables.agents.push(jer, ted, matt);
+  tables.sales.push({ id: randomUUID(), agent_id: id(matt), status: "Submitted", premium_cents: 120_000, policies: 1, sold_on: today(), created_at: new Date().toISOString(), deleted_at: null });
+  tables.settings.push({ key: "claim_phones", value: { [id(ted)]: "+12485550301" }, updated_at: new Date().toISOString() });
+  const count = () => tables.agents.length;
+
+  // Step one: the number. On file: "claim" with the board's name and the upline's name.
+  const found = await peopleLib.lookupJoinPhone(agency.token, "(248) 555-0301");
+  assert.equal(found.kind, "claim");
+  assert.equal((found as { name: string }).name, "Ted Onfile");
+  // Not on file: a new person.
+  assert.equal((await peopleLib.lookupJoinPhone(agency.token, "248 555 0399")).kind, "new");
+  // Not a number: says how to type it.
+  assert.equal((await peopleLib.lookupJoinPhone(agency.token, "12")).kind, "bad_phone");
+  // A dead link says nothing.
+  assert.equal((await peopleLib.lookupJoinPhone("not-a-token", "248 555 0301")).kind, "bad_link");
+
+  // "Jeremiah" (first name only) for "Jeremiah Moe" (an admin row): asked, not added.
+  const before = count();
+  const jeremiah = await join("Jeremiah", "248 555 0302");
+  assert.equal(jeremiah.ok, false);
+  assert.equal((jeremiah as { maybe?: string }).maybe, "Jeremiah Moe");
+  assert.equal(count(), before);
+  // "Yes, that's me": the board's spelling; an admin's row is never claimed by a name, so no second row either.
+  const yes = await join("Jeremiah Moe", "248 555 0302");
+  assert.equal(yes.ok, false);
+  assert.match((yes as { error: string }).error, /already on the board/);
+  assert.equal(count(), before);
+  // "Matthew Clayton" for "Matt Clayton": asked.
+  assert.equal(((await join("Matthew Clayton", "248 555 0303")) as { maybe?: string }).maybe, "Matt Clayton");
+  assert.equal(count(), before);
+  // "No, I'm someone new": a real second person with a look-alike name is added.
+  const other = await join("Matthew Clayton", "248 555 0303", true);
+  assert.ok(other.ok);
+  assert.equal(count(), before + 1);
+  // One word, nobody like it: asked for a last name.
+  const one = await join("Zorro", "248 555 0304");
+  assert.equal(one.ok, false);
+  assert.match((one as { error: string }).error, /first and last name/);
+  // A different person whose names are unlike anyone's goes straight in.
+  assert.ok((await join("Priya Unrelated", "248 555 0305")).ok);
+  // The person on file: their number alone, name typed wrong or not, opens their own row.
+  const ted2 = await join("Teddy O", "248 555 0301");
+  assert.ok(ted2.ok);
+  assert.equal(ted2.agentId, id(ted));
+  // And now that number has a sign-in: step one says sign in.
+  assert.equal((await peopleLib.lookupJoinPhone(agency.token, "248 555 0301")).kind, "signin");
+});
+
+test("looksLike: the same person written two ways, never two different people", () => {
+  const peopleLib = req("../src/lib/people") as typeof import("../src/lib/people");
+  const yes: [string, string][] = [["Jeremiah", "Jeremiah Moe"], ["Moe", "Jeremiah Moe"], ["Matthew Clayton", "Matt Clayton"], ["Troy Tymchuck", "Troy Tymchuk"], ["chris nidelkoff", "Chris Nidelkoff"], ["Declan OConnor", "Declan O'Connor"], ["Gabriel Howard Mensah", "Gabriel Howard-Mensah"]];
+  const no: [string, string][] = [["Daniel Rodriguez", "Kayleen Rodriguez"], ["Matt Fouchey", "Matt Clayton"], ["Alex Chmielewski", "Alex Alekseyev"], ["Jack Gariglio", "Jacob Newman"], ["Austin Kettlewell", "Austin Biasucci"]];
+  for (const [a, b] of yes) assert.equal(peopleLib.looksLike(a, b), true, `${a} / ${b}`);
+  for (const [a, b] of no) assert.equal(peopleLib.looksLike(a, b), false, `${a} / ${b}`);
 });
