@@ -4,9 +4,9 @@ import { redirect } from "next/navigation";
 import { beginTry, clientAddress, JOIN_MAX_PER_IP, JOINED_MAX_PER_IP, joinKey, joinedKey, startPersonSession, type Try } from "@/lib/auth";
 import { touchBoard } from "@/lib/data";
 import { readInvite, type Invite } from "@/lib/invites";
-import { BAD_LINK, joinWithInvite, type JoinResult } from "@/lib/people";
+import { BAD_LINK, joinWithInvite, lookupJoinPhone, type JoinResult, type PhoneLookup } from "@/lib/people";
 
-export type JoinState = { error: string | null };
+export type JoinState = { error: string | null; maybe?: string };
 
 const TOO_MANY = "Lots of people are signing in at once. Wait a minute and try again.";
 const DOWN = "Scorecard couldn't save that. Try again in a minute.";
@@ -58,6 +58,7 @@ export async function join(form: FormData): Promise<JoinState> {
       password: String(form.get("password") ?? ""),
       uplineId: upline || null,
       inOffice: String(form.get("in_office") ?? "") === "1",
+      notThem: String(form.get("not_them") ?? "") === "1",
     });
   } catch {
     await made?.takeBack();
@@ -68,7 +69,7 @@ export async function join(form: FormData): Promise<JoinState> {
     // Nobody was made; a refusal that says something about who is on Scorecard stays counted, a typo does not.
     await made?.takeBack();
     if (!result.counts) await probe.takeBack();
-    return { error: result.error };
+    return { error: result.error, maybe: result.maybe };
   }
   // They are in: the try was not a wrong one (the "joined" row stays: a person was made).
   await probe.takeBack();
@@ -77,4 +78,28 @@ export async function join(form: FormData): Promise<JoinState> {
   await startPersonSession(result.agentId, result.sessionVersion);
   // A new sign-in goes to the phone guide; a new password for an old one goes straight in.
   redirect(invite.kind === "reset" ? "/" : "/install?welcome=1");
+}
+
+export type PhoneStep = PhoneLookup | { kind: "error"; error: string };
+
+/**
+ * Step one of the agency or team link: the cell number. Says whether it is someone already on the
+ * board (then they only make a password), someone who already has a sign-in, or a new person.
+ * Counted like a join try ("join:<address>"): a number that turns out to be new takes its row back,
+ * so only answers that say who is on Scorecard count toward the address's limit.
+ */
+export async function checkJoinPhone(form: FormData): Promise<PhoneStep> {
+  const address = await clientAddress();
+  const probe = await beginTry(joinKey(address), JOIN_MAX_PER_IP);
+  if (probe.closed) return { kind: "error", error: TOO_MANY };
+  let found: PhoneLookup;
+  try {
+    found = await lookupJoinPhone(String(form.get("token") ?? ""), String(form.get("phone") ?? ""));
+  } catch {
+    await probe.takeBack();
+    return { kind: "error", error: DOWN };
+  }
+  if (found.kind === "new" || found.kind === "bad_phone") await probe.takeBack();
+  if (found.kind === "bad_link") return { kind: "error", error: BAD_LINK };
+  return found;
 }

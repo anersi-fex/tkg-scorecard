@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState, useTransition, type FormEvent } from "react";
-import { Button, Input, Label, Notice, cn } from "@/components/ui";
+import { Button, Input, Label, LinkButton, Notice, cn } from "@/components/ui";
 import { Switch } from "@/components/switch";
 import { PasswordField } from "@/app/login/password-field";
-import { join, type JoinState } from "./actions";
+import { checkJoinPhone, join, type JoinState, type PhoneStep } from "./actions";
 
 export interface JoinFormProps {
   token: string;
@@ -32,7 +32,248 @@ const FIELD = "text-[15px]";
  * The join card's form. Submits through onSubmit, so a refused try keeps everything that was
  * typed. Nothing is decided here: the server checks the link, the name, the number and the password.
  */
-export function JoinForm({ token, kind, people, unclaimed = [], leaderId, leaderName, needsPhone, inOffice }: JoinFormProps) {
+export function JoinForm(props: JoinFormProps) {
+  return props.kind === "agency" ? <AgencyJoin {...props} /> : <LinkJoin {...props} />;
+}
+
+const DIDNT_ANSWER = "Scorecard didn't answer. Check your connection and try again.";
+const firstWord = (n: string) => n.trim().split(/\s+/)[0] || n;
+
+/**
+ * The agency link and a leader's team link, cell number first (owner, 2026-11-17: "if somebody
+ * signs up with the phone number that's already on file ... then it simply asks them to create a
+ * password"). Step one asks only the number. Someone already on the board is greeted by name and
+ * makes a password; someone with a sign-in is sent to sign in; a new person adds their name and
+ * upline. A new name like one already on the board asks "Is this you?" before making a second row.
+ */
+function AgencyJoin({ token, people, leaderId, leaderName }: JoinFormProps) {
+  const [step, setStep] = useState<"phone" | "claim" | "signin" | "new">("phone");
+  const [phone, setPhone] = useState("");
+  const [claim, setClaim] = useState<{ name: string; upline: string | null } | null>(null);
+  const [names, setNames] = useState<string[]>([]);
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [maybe, setMaybe] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [office, setOffice] = useState(false);
+  const [upline, setUpline] = useState<string | null>(leaderId);
+  const [unsure, setUnsure] = useState(false);
+
+  function restart() {
+    setStep("phone");
+    setClaim(null);
+    setError(null);
+    setMaybe(null);
+  }
+
+  function onPhone(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (pending) return;
+    const form = new FormData(e.currentTarget);
+    setError(null);
+    startTransition(async () => {
+      let r: PhoneStep;
+      try {
+        r = await checkJoinPhone(form);
+      } catch {
+        r = { kind: "error", error: DIDNT_ANSWER };
+      }
+      if (r.kind === "claim") {
+        setClaim({ name: r.name, upline: r.upline });
+        setStep("claim");
+      } else if (r.kind === "new") {
+        setNames(r.names);
+        setStep("new");
+      } else if (r.kind === "signin") setStep("signin");
+      else if (r.kind === "bad_link") setError("This link isn't good anymore. Ask for a new one.");
+      else setError(r.error);
+    });
+  }
+
+  function send(form: FormData) {
+    setError(null);
+    setMaybe(null);
+    startTransition(async () => {
+      let state: JoinState;
+      try {
+        state = await join(form);
+      } catch {
+        state = { error: DIDNT_ANSWER };
+      }
+      // A join that worked never comes back here: the action sends the phone on.
+      if (state?.maybe) setMaybe(state.maybe);
+      else if (state?.error) setError(state.error);
+    });
+  }
+
+  function onJoin(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (pending) return;
+    send(new FormData(e.currentTarget));
+  }
+
+  /** "Is this you?" answered: yes sends the board's spelling, no says they are someone new. */
+  function answer(form: HTMLFormElement | null, yes: boolean) {
+    if (!form || !maybe || pending) return;
+    const f = new FormData(form);
+    if (yes) {
+      f.set("name", maybe);
+      setName(maybe);
+    } else f.set("not_them", "1");
+    send(f);
+  }
+
+  if (step === "phone") {
+    return (
+      <form method="post" onSubmit={onPhone} className="space-y-[18px]" data-join="agency" data-step="phone">
+        <input type="hidden" name="token" value={token} />
+        <div>
+          <Label htmlFor="phone">
+            Your cell number
+          </Label>
+          <Input id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="248 555 0100" className={FIELD} value={phone} onChange={(e) => setPhone(e.target.value)} required autoFocus />
+          <p className="mt-1.5 text-[12.5px] leading-snug text-fg-2">Already on the board? We&apos;ll find you by your number. Your sales come with you.</p>
+        </div>
+        {error && <Notice tone="red">{error}</Notice>}
+        <Button type="submit" className="min-h-[46px] w-full text-[15px]" disabled={pending}>
+          {pending ? "One moment..." : "Next"}
+        </Button>
+      </form>
+    );
+  }
+
+  if (step === "signin") {
+    return (
+      <div className="space-y-[18px]" data-step="signin">
+        <Notice tone="blue">That number already has a sign-in. Sign in with it and your password.</Notice>
+        <LinkButton href="/login?way=person" className="flex min-h-[46px] w-full items-center justify-center text-[15px]">
+          Sign in
+        </LinkButton>
+        <button type="button" onClick={restart} className="w-full min-h-10 rounded-lg text-[13.5px] font-medium text-accent-text hover:underline">
+          Use a different number
+        </button>
+      </div>
+    );
+  }
+
+  const office_ = (
+    <div className="flex min-h-12 items-center justify-between gap-3 rounded-[10px] bg-input px-3.5 py-2.5">
+      <div className="min-w-0">
+        <p className="text-[14px] font-medium text-fg">I work in the office</p>
+        <p className="text-[12.5px] leading-snug text-fg-2">The office group is at the top of the board.</p>
+      </div>
+      <Switch checked={office} onChange={setOffice} label="I work in the office" />
+    </div>
+  );
+  const password = (
+    <div>
+      <Label htmlFor="password">
+        Make a password
+      </Label>
+      <PasswordField id="password" name="password" autoComplete="new-password" minLength={8} maxLength={200} required />
+      <p className="mt-1.5 text-[12.5px] text-fg-2">8 characters or more. You pick it; nobody else sees it.</p>
+    </div>
+  );
+  const picker =
+    leaderId && leaderName ? (
+      <p className="-mt-1 text-[12.5px] leading-snug text-fg-2" data-join-team={leaderId}>
+        You&apos;ll be on {leaderName}&apos;s team. Not your team? Ask {firstWord(leaderName)} for the right link.
+      </p>
+    ) : (
+      <UplinePicker
+        people={people}
+        picked={unsure ? null : upline}
+        unsure={unsure}
+        onPick={(id) => {
+          setUpline(id);
+          setUnsure(false);
+        }}
+        onUnsure={() => {
+          setUpline(null);
+          setUnsure(true);
+        }}
+        onClear={() => {
+          setUpline(null);
+          setUnsure(false);
+        }}
+      />
+    );
+  const hidden = (
+    <>
+      <input type="hidden" name="token" value={token} />
+      <input type="hidden" name="phone" value={phone} />
+      <input type="hidden" name="in_office" value={office ? "1" : "0"} />
+      <input type="hidden" name="upline_id" value={unsure ? "" : (upline ?? "")} />
+    </>
+  );
+
+  if (step === "claim" && claim) {
+    return (
+      <form method="post" onSubmit={onJoin} className="space-y-[18px]" data-join="agency" data-step="claim">
+        {hidden}
+        <input type="hidden" name="name" value={claim.name} />
+        <div className="rounded-[12px] border border-line-2 bg-surface-2 px-4 py-3.5 text-center" data-claim-found={claim.name}>
+          <p className="text-[13px] text-fg-2">Welcome, {firstWord(claim.name)}! We found you.</p>
+          <p className="mt-0.5 text-[19px] font-semibold text-fg">{claim.name}</p>
+          <p className="mt-1 text-[12.5px] leading-snug text-fg-2">Your sales are already here. Just make a password.</p>
+          {claim.upline && <p className="mt-1.5 text-[12.5px] text-fg-2">Upline: <span className="font-medium text-fg">{claim.upline}</span></p>}
+        </div>
+        {!claim.upline && picker}
+        {password}
+        {office_}
+        {error && <Notice tone="red">{error}</Notice>}
+        <Button type="submit" className="min-h-[46px] w-full text-[15px]" disabled={pending}>
+          {pending ? "One moment..." : "Make my password"}
+        </Button>
+        <button type="button" onClick={restart} className="w-full min-h-10 rounded-lg text-[13.5px] font-medium text-accent-text hover:underline">
+          Not you? Use a different number
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <form method="post" onSubmit={onJoin} className="space-y-[18px]" data-join="agency" data-step="new">
+      {hidden}
+      <div>
+        <Label htmlFor="name">
+          First and last name
+        </Label>
+        <Input id="name" name="name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" autoCapitalize="words" maxLength={60} placeholder="Alex Smith" className={FIELD} required autoFocus />
+        {names.length > 0 && <ClaimNames names={names} typed={name} onPick={setName} />}
+      </div>
+      {picker}
+      {password}
+      {office_}
+      {maybe && (
+        <div className="rounded-[12px] border border-accent bg-accent-soft px-4 py-3.5" data-maybe={maybe}>
+          <p className="text-[14.5px] font-medium text-fg">Is this you: {maybe}?</p>
+          <p className="mt-0.5 text-[12.5px] leading-snug text-fg-2">{maybe} is already on the board.</p>
+          <div className="mt-3 flex gap-2">
+            <Button type="button" className="flex-1" disabled={pending} onClick={(e) => answer(e.currentTarget.form, true)}>
+              Yes, that&apos;s me
+            </Button>
+            <Button type="button" variant="secondary" className="flex-1" disabled={pending} onClick={(e) => answer(e.currentTarget.form, false)}>
+              No, I&apos;m someone new
+            </Button>
+          </div>
+        </div>
+      )}
+      {error && <Notice tone="red">{error}</Notice>}
+      {!maybe && (
+        <Button type="submit" className="min-h-[46px] w-full text-[15px]" disabled={pending}>
+          {pending ? "One moment..." : "Join"}
+        </Button>
+      )}
+      <button type="button" onClick={restart} className="w-full min-h-10 rounded-lg text-[13.5px] font-medium text-accent-text hover:underline">
+        Use a different number
+      </button>
+    </form>
+  );
+}
+
+/** A personal link or a reset link: one person, already known. */
+function LinkJoin({ token, kind, people, unclaimed = [], leaderId, leaderName, needsPhone, inOffice }: JoinFormProps) {
   const [error, setError] = useState<string | null>(null);
   // The name is kept here so a tap on "Already on the board?" can write the board's spelling into it.
   const [name, setName] = useState("");
