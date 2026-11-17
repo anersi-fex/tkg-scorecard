@@ -169,11 +169,14 @@ async function loadClaimPhones(): Promise<Map<string, string>> {
   const { data, error } = await db().from("settings").select("value").eq("key", "claim_phones").maybeSingle();
   if (error) fail("people.claim_phones", error);
   const out = new Map<string, string>();
-  const v = data?.value;
-  if (v && typeof v === "object" && !Array.isArray(v)) {
-    for (const [id, phone] of Object.entries(v as Record<string, unknown>)) {
-      if (isUuid(id) && typeof phone === "string" && /^\+1\d{10}$/.test(phone)) out.set(id, phone);
-    }
+  if (!data) return out; // no row: nobody has a number on file, the old rule holds
+  const v = data.value;
+  // A row that is there but not an object is broken data: joining stops (the person sees "try again") rather than falling back to names alone.
+  if (!v || typeof v !== "object" || Array.isArray(v)) fail("people.claim_phones", { message: "claim_phones is not an object" });
+  for (const [id, phone] of Object.entries(v as Record<string, unknown>)) {
+    if (!isUuid(id)) continue;
+    // An entry that is not a +1 number still protects its row: it can never be matched, so that person gets an admin's link.
+    out.set(id, typeof phone === "string" && /^\+1\d{10}$/.test(phone) ? phone : "invalid");
   }
   return out;
 }
@@ -551,9 +554,16 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
   if (!name) return { ok: false, error: "Type your first and last name." };
   if (!typedPhone) return { ok: false, error: PHONE_HELP };
   const holder = people.find((p) => p.phone === typedPhone);
-  if (holder?.active) return { ok: false, error: PHONE_TAKEN, counts: true };
   const matches = people.filter((p) => sameName(p.name, name));
-  const match = matches.find((p) => p.active) ?? matches[0];
+  // A row with no sign-in yet is the one a name means, even when another row of the same name has one.
+  const match = matches.find((p) => p.active && !logins.has(p.id)) ?? matches.find((p) => p.active) ?? matches[0];
+  // A number held by a row that has no sign-in because it was stored there is that row's own: its claim is not blocked by it.
+  if (holder?.active && !(match && holder.id === match.id && !logins.has(holder.id))) return { ok: false, error: PHONE_TAKEN, counts: true };
+  // A number AgentSpace has on file for somebody who has not joined yet is theirs: a stranger cannot take it
+  // (under a new name, or with another person's name) and so lock that person out.
+  const claimPhones = await loadClaimPhones();
+  const onFileFor = [...claimPhones].find(([id, ph]) => ph === typedPhone && people.some((p) => p.id === id && p.active && !logins.has(p.id)))?.[0];
+  if (onFileFor && onFileFor !== match?.id) return { ok: false, error: "That cell number is already on the board under another name. Check it, or ask an admin for your own sign-in link.", counts: true };
   // Someone who was taken off the board does not come back through the link: not as themself
   // (their name), and not as a second row (another spelling of the name, with the number their
   // old row still holds). An admin puts them back.
@@ -579,7 +589,7 @@ export async function joinWithInvite(input: JoinInput): Promise<JoinResult> {
     // A row whose sign-in opens clients (a manager's, a leader's, one holding policies) is claimed
     // only with the cell number AgentSpace has on file for it; with none on file an admin sends
     // that person their own link. A row that opens nothing is claimed by its name.
-    const plan = await claimPlan([match], logins, { vouchedBy: linkLeader?.id ?? null, everyone: people, phones: await loadClaimPhones() });
+    const plan = await claimPlan([match], logins, { vouchedBy: linkLeader?.id ?? null, everyone: people, phones: claimPhones });
     if (!plan.has(match.id)) {
       return { ok: false, error: `${match.name} is already on the board. Ask an admin for your own sign-in link.`, counts: true };
     }

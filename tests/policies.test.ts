@@ -462,6 +462,26 @@ test("joining: a row with a cell number on file is claimed with its name AND tha
   // An admin's row is never claimed by a name, even with its number.
   assert.equal((await join("Ada Adminfile", "248 555 0204")).ok, false);
   assert.equal(ada.pass_hash, null);
+  // A stranger cannot take a number AgentSpace has on file for someone who has not joined (under a new name, or another's name).
+  const rex = person("Rex Rowboat", { pass_hash: null, upline_id: id(admin) });
+  tables.agents.push(rex);
+  tables.settings.find((r) => r.key === "claim_phones")!.value = { ...(tables.settings.find((r) => r.key === "claim_phones")!.value as object), [id(rex)]: "+12485550210" };
+  const squat = await join("Zed Nobody", "248 555 0210");
+  assert.equal(squat.ok, false);
+  assert.match((squat as { error: string }).error, /already on the board under another name/);
+  assert.equal((await join("Rex Rowboat", "248 555 0210")).ok, true, "the real person still claims their row with the number");
+  // An entry that is not a +1 number protects its row: nobody claims it by name, an admin sends a link.
+  const ivo = person("Ivo Invalidrow", { pass_hash: null, upline_id: id(admin) });
+  tables.agents.push(ivo);
+  (tables.settings.find((r) => r.key === "claim_phones")!.value as Record<string, string>)[id(ivo)] = "not a number";
+  assert.equal((await join("Ivo Invalidrow", "248 555 0211")).ok, false);
+  assert.equal(ivo.pass_hash, null);
+  // A broken row (not an object) stops joining by name instead of falling back to the name alone.
+  const bad = tables.settings.find((r) => r.key === "claim_phones")!;
+  const keep = bad.value;
+  bad.value = "oops";
+  await assert.rejects(() => join("Another Person", "248 555 0212"));
+  bad.value = keep;
   // The card lists the names that can be claimed (with their number): the admin's is not one.
   const names = await peopleLib.claimableNames();
   assert.ok(!names.includes("Ada Adminfile"));
