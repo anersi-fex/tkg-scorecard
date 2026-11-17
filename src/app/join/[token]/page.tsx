@@ -108,7 +108,9 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
       } else {
         // Names only (never a number): the list a new person picks their upline from.
         const board = await listPeople();
-        props = { kind: "agency", people: board.map((a) => ({ id: a.id, name: a.name })), unclaimed, leaderId: null, needsPhone: true, inOffice: false };
+        // Who leads a team (someone confirmed is under them): those names are one tap each.
+        const leads = new Set(board.filter((a) => a.upline_id && a.upline_confirmed !== false).map((a) => a.upline_id as string));
+        props = { kind: "agency", people: board.map((a) => ({ id: a.id, name: a.name, lead: leads.has(a.id) })), unclaimed, leaderId: null, needsPhone: true, inOffice: false };
       }
     } else {
       const person = invite.agent_id ? await getPerson(invite.agent_id) : null;
@@ -124,7 +126,7 @@ export default async function JoinPage({ params }: { params: Promise<{ token: st
   const title = teamOf ? `Join ${teamOf}'s team` : props.kind === "agency" ? `Join ${agency} on Scorecard` : props.kind === "person" ? `Hi ${props.firstName}, set up your sign-in` : "Set a new password";
   const line =
     props.kind === "agency"
-      ? "It takes a minute. Your cell number and a password are how you sign in from now on."
+      ? "It takes a minute: tap your name, tap your upline, add your cell number and make a password. That is how you sign in from now on."
       : props.kind === "person"
         ? "Your cell number and a password are how you sign in from now on."
         : `${props.firstName}, pick a new password. It signs your other phones and computers out.`;

@@ -12,7 +12,7 @@ export interface JoinFormProps {
   /** The person a personal or reset link is for. */
   firstName?: string;
   /** Everyone on the board, names only: who a new person can pick as their upline. */
-  people: { id: string; name: string }[];
+  people: { id: string; name: string; lead?: boolean }[];
   /**
    * The agency link only: the people already on the board with no sign-in yet, as the board
    * spells them. Names and nothing else (no id, no number).
@@ -215,7 +215,7 @@ function UplinePicker({
   onUnsure,
   onClear,
 }: {
-  people: { id: string; name: string }[];
+  people: { id: string; name: string; lead?: boolean }[];
   picked: string | null;
   unsure: boolean;
   onPick: (id: string) => void;
@@ -257,11 +257,22 @@ function UplinePicker({
     );
   }
 
+  // The people who lead a team, one tap each: most people pick their upline from here without typing.
+  const leaders = people.filter((p) => p.lead).slice(0, 14);
   return (
     <div>
       <Label htmlFor="upline-search">
         Who is your upline?
       </Label>
+      {leaders.length > 0 && (
+        <div className="mb-2.5 flex flex-wrap gap-2" data-upline-leaders>
+          {leaders.map((p) => (
+            <button key={p.id} type="button" onClick={() => onPick(p.id)} className="min-h-10 rounded-full border border-line-2 bg-surface-2 px-3.5 text-[13.5px] font-medium text-fg hover:bg-hover">
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
       <Input
         id="upline-search"
         type="search"
@@ -275,7 +286,7 @@ function UplinePicker({
         }}
         autoComplete="off"
         enterKeyHint="search"
-        placeholder="Type their name"
+        placeholder="Not listed? Type their name"
         className={FIELD}
         aria-controls="upline-list"
       />
