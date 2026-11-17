@@ -188,6 +188,8 @@ export async function listPoliciesFor(viewer: Viewer, scope: PolicyScope, teamLe
   const ids = policyAgentIds(viewer, use, teamLeaderId ?? null, ctx);
   if (ids && ids.size === 0) return [];
   const out: PolicyListRow[] = [];
+  // A sale logged between two page reads shifts the rows, so one can come back on two pages: each counts once.
+  const seen = new Set<string>();
   const today = todayInDetroit();
   for (let page = 0; page < MAX_PAGES; page++) {
     let q = db().from("sales").select(LIST_COLUMNS).is("deleted_at", null);
@@ -202,6 +204,8 @@ export async function listPoliciesFor(viewer: Viewer, scope: PolicyScope, teamLe
     const rows = (data ?? []) as unknown as Row[];
     for (const r of rows) {
       const row = toListRow(r, today);
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
       if (canSeeClient(viewer, row, ctx)) out.push(row);
     }
     if (rows.length < PAGE) break;
@@ -253,6 +257,7 @@ export async function pipelineCounts(agentIds: string[] | null, month: string, t
   const days = datesOfMonth(month);
   const from = days[0];
   const to = days[days.length - 1];
+  const seen = new Set<string>();
   for (let page = 0; page < MAX_PAGES; page++) {
     let q = db().from("sales").select("id, status, sold_on, policies, premium_cents, source").is("deleted_at", null).gte("sold_on", from).lte("sold_on", to);
     if (agentIds) q = q.in("agent_id", agentIds);
@@ -261,6 +266,9 @@ export async function pipelineCounts(agentIds: string[] | null, month: string, t
     if (error) fail("policies.pipeline", error);
     const rows = data ?? [];
     for (const r of rows) {
+      const id = String(r.id);
+      if (seen.has(id)) continue;
+      seen.add(id);
       out.total += Number(r.policies) || 1;
       const status = isPolicyStatus(r.status) ? r.status : null;
       if (!status) {

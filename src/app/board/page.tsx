@@ -5,6 +5,7 @@ import { loadMonthSnapshot, type MonthSnapshot } from "@/lib/board";
 import { monthKeyOf, todayInDetroit } from "@/lib/month";
 import { BoardView } from "@/components/board/board-view";
 import { ScoreLockup } from "@/components/brand";
+import { Reconnecting } from "./reconnect";
 
 export const metadata: Metadata = { title: "TV board" };
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ export default async function BoardPage() {
       <main className="flex flex-1 flex-col items-center justify-center gap-6 p-10 text-center">
         <ScoreLockup size={64} />
         <p className="max-w-md text-[20px] font-semibold text-gray-600">{problem}</p>
+        <Reconnecting />
       </main>
     );
   }

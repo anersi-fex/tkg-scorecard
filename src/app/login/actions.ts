@@ -11,7 +11,7 @@ export type LoginState = { error: string | null };
 
 const TOO_MANY = "Too many tries. Wait 15 minutes and try again.";
 /** The personal form's own limit (an office is one address): the shared-password form is not closed with it. */
-const TOO_MANY_PERSONAL = "Too many tries from this network. Wait a few minutes, or ask an admin for a new sign-in link.";
+const TOO_MANY_PERSONAL = "Lots of people are signing in at once. Wait a minute and try again.";
 
 /**
  * The shared passwords (the team's, the TV's and the owner's), as they always worked. Ten wrong

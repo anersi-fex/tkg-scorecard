@@ -132,9 +132,9 @@ export function roleForPassword(supplied: string): Role | null {
 // per-instance map in front. Each sign-in form keeps its own count for an address, so an office
 // behind one address never locks itself out of the other form:
 //   the shared-password form (owner / team password)   "<address>"          10
-//   a person's own sign-in                              "signin:<address>"   60 (an office is one address)
-//   a join link's wrong tries                           "join:<address>"     30
-//   people who joined through the agency link           "joined:<address>"   60
+//   a person's own sign-in                              "signin:<address>"   200 (an office is one address)
+//   a join link's wrong tries                           "join:<address>"     150
+//   people who joined through the agency link           "joined:<address>"   150
 // plus a high flood cap across every address, and a count per account ("acct:<id>", 20, in
 // people.ts). The "acct:" and "joined:" rows stay out of the flood cap, so a locked account never
 // closes sign-in for all.
@@ -145,7 +145,7 @@ export function roleForPassword(supplied: string): Role | null {
 // owner password without limit otherwise); only the owner password does.
 const WINDOW_MS = 15 * 60 * 1000;
 export const MAX_PER_IP = 10;
-const MAX_GLOBAL = 500;
+const MAX_GLOBAL = 1500;
 const failures = new Map<string, { count: number; resetAt: number }>();
 
 /** The address a request came from, for the throttle (never logged; "unknown" when the host does not say). */
@@ -161,21 +161,21 @@ export async function clientAddress(): Promise<string> {
  * a guesser at 20 (people.ts), so the address gets room for a whole office.
  */
 export const signInKey = (ip: string): string => `signin:${ip}`.slice(0, 64);
-export const SIGNIN_MAX_PER_IP = 60;
+export const SIGNIN_MAX_PER_IP = 200;
 /**
  * The key a join link's wrong tries are counted under: beside the sign-in count, never in it, so
  * a bad link opened in the office cannot lock the office's sign-ins (and the other way round).
  */
 export const joinKey = (ip: string): string => `join:${ip}`.slice(0, 64);
 /** A whole office joins from one address on the first day, so the join count allows more wrong tries. */
-export const JOIN_MAX_PER_IP = 30;
+export const JOIN_MAX_PER_IP = 150;
 /**
  * People who joined through the agency link from one address, counted under their own key, so a
  * link that got out cannot fill the board with made-up people at full speed. The limit sits well
  * above one office's first day.
  */
 export const joinedKey = (ip: string): string => `joined:${ip}`.slice(0, 64);
-export const JOINED_MAX_PER_IP = 60;
+export const JOINED_MAX_PER_IP = 150;
 
 /** Rows in the window under one key (null when the table cannot be read). */
 async function rowsUnder(key: string): Promise<number | null> {
