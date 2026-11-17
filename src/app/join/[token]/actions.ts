@@ -8,7 +8,7 @@ import { BAD_LINK, joinWithInvite, type JoinResult } from "@/lib/people";
 
 export type JoinState = { error: string | null };
 
-const TOO_MANY = "Too many tries. Wait 15 minutes and try again.";
+const TOO_MANY = "Lots of people are signing in at once. Wait a minute and try again.";
 const DOWN = "Scorecard couldn't save that. Try again in a minute.";
 const TOO_MANY_JOINED = "A lot of people just joined from this Wi-Fi. Wait 15 minutes and try again.";
 
@@ -19,10 +19,10 @@ const TOO_MANY_JOINED = "A lot of people just joined from this Wi-Fi. Wait 15 mi
  *
  * Both counts are written BEFORE anything is checked (auth.ts beginTry), so tries sent at the
  * same moment cannot all get under a limit:
- *   "join:<address>"    30  tries that say something about who is on Scorecard (a dead link, a
+ *   "join:<address>"    150  tries that say something about who is on Scorecard (a dead link, a
  *                           number or a name that already has a sign-in); a join that works, or a
  *                           typo, takes its row back
- *   "joined:<address>"  60  people made through the agency link; a try that makes nobody takes its row back
+ *   "joined:<address>"  150  people made through the agency link; a try that makes nobody takes its row back
  */
 export async function join(form: FormData): Promise<JoinState> {
   const token = String(form.get("token") ?? "");

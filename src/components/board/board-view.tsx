@@ -17,6 +17,7 @@ import { LifeScreen } from "./life-screen";
 import { ViewDot } from "./parts";
 import { MainScreen, PcScreen } from "./pc-screens";
 import { ProductionScreen } from "./production-screen";
+import { fetchWithin, pollGate } from "./poll";
 import { ScoreboardScreen } from "./scoreboard-screen";
 import { TeamsScreen } from "./teams-screen";
 
@@ -184,6 +185,7 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
   const reloading = useRef(false);
   const stamp = useRef<string | null>(null);
   const polls = useRef(0);
+  const gate = useRef(pollGate());
   const clock = useClock();
   useWakeLock();
   useIdleCursor();
@@ -228,12 +230,14 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
   );
 
   const refresh = useCallback(async () => {
+    // One poll at a time: a tick that finds the last one still waiting (a slow database) lets it finish.
+    if (!gate.current.begin()) return;
     try {
       // Most polls only ask "anything new?" (the stamp the last full answer carried); a new or
       // removed sale and a Settings change answer in full at once, everything else once a minute.
       const held = polls.current % FULL_EVERY === 0 ? null : stamp.current;
       polls.current += 1;
-      const res = await fetch(held ? `/api/board?stamp=${encodeURIComponent(held)}` : "/api/board", { cache: "no-store" });
+      const res = await fetchWithin(held ? `/api/board?stamp=${encodeURIComponent(held)}` : "/api/board");
       if (res.status === 401) {
         router.push("/login?next=/board");
         return;
@@ -268,7 +272,10 @@ export function BoardView({ initial }: { initial: MonthSnapshot }) {
         flashTimer.current = setTimeout(() => setFlash([]), 3000);
       }
     } catch {
+      // A failed or timed-out poll keeps the screen as it is; the next success clears the warning.
       setOffline((n) => n + 1);
+    } finally {
+      gate.current.end();
     }
   }, [router, showNext, initial.build]);
 

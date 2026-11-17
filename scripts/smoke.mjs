@@ -770,10 +770,10 @@ try {
   // the first time from one network, next to the TV.) Each form keeps a count of its own, a try is
   // counted before it is looked at, and a number nobody has is typed here, so no account is touched.
   {
-    const PERSONAL_LIMIT = 60;
+    const PERSONAL_LIMIT = 200;
     const SHARED_LIMIT = 10;
     const NO_MATCH = "That phone number and password don't match.";
-    const CLOSED_PERSONAL = "Too many tries from this network. Wait a few minutes, or ask an admin for a new sign-in link.";
+    const CLOSED_PERSONAL = "Lots of people are signing in at once. Wait a minute and try again.";
     const at = (addr) => browser.newContext({ viewport: { width: 1280, height: 900 }, extraHTTPHeaders: { "x-forwarded-for": addr } });
     /** Types a shared password on the team form: true once it signed in, false when the form answered instead. */
     /** True once the page has left /login; false when the form said to wait, or nothing came. */
@@ -781,6 +781,7 @@ try {
       (await Promise.race([
         page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 10000 }).then(() => "in", () => "no"),
         page.waitForSelector("text=Too many tries", { timeout: 10000 }).then(() => "wait", () => "no"),
+        page.waitForSelector("text=Lots of people are signing in at once", { timeout: 10000 }).then(() => "wait", () => "no"),
       ])) === "in";
     const sharedSignsIn = async (page, password) => {
       await go(page, "/login?way=team", "form[data-way=team]");
@@ -805,7 +806,12 @@ try {
     await tvp.goto(`${APP}/board`);
     check(looked === 10 && teamIn && (await appears(tvp, "main[data-screen]")) && tvp.url() === `${APP}/board`, `ten wrong tries on people's own sign-in (${looked} looked at) leave the team password and the TV's sign-in open for that address`);
     await tvSide.close();
-    // The personal form closes at its own limit, 60 for an address: the 61st try is refused whatever was typed
+    // The personal form closes at its own limit, 200 for an address: the 201st try is refused whatever was typed.
+    // Most of the 200 are written to the table the way wrong tries leave them (tests/throttle.test.ts types
+    // every one through the real action); the last three are typed here.
+    const seeded = PERSONAL_LIMIT - looked - 3;
+    sql(`insert into login_attempts (ip, at) select 'signin:${office}', now() from generate_series(1, ${seeded})`);
+    looked += seeded;
     for (let i = looked; i < PERSONAL_LIMIT; i++) if ((await again(desk, wrongPersonal, office)).includes(NO_MATCH)) looked++;
     const past = await again(desk, wrongPersonal, office);
     await k.fill("#phone", PHONE[IVY]);

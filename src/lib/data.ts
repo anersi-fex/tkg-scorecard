@@ -129,10 +129,29 @@ export async function salesForMonth(month: string): Promise<SaleWithAgent[]> {
   return salesBetween(dates[0], dates[dates.length - 1]);
 }
 
+/**
+ * Reads a list a page at a time until a short page, counting each id once: a sale logged between
+ * two page reads shifts the rows, so one can come back on two pages (never dropped, never doubled).
+ * `readPage` gets the page's first and last row index.
+ */
+export async function readAllPages<T extends { id: string }>(readPage: (from: number, to: number) => Promise<T[]>): Promise<T[]> {
+  const out: T[] = [];
+  const seen = new Set<string>();
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const rows = await readPage(page * PAGE, page * PAGE + PAGE - 1);
+    for (const r of rows) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      out.push(r);
+    }
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
 /** Sales counted from one day through another (both included, not deleted), oldest first. Every row, however many. */
 export async function salesBetween(from: string, to: string): Promise<SaleWithAgent[]> {
-  const out: SaleWithAgent[] = [];
-  for (let page = 0; page < MAX_PAGES; page++) {
+  const rows = await readAllPages(async (a, b) => {
     const { data, error } = await db()
       .from("sales")
       .select(SALE_COLUMNS)
@@ -143,13 +162,11 @@ export async function salesBetween(from: string, to: string): Promise<SaleWithAg
       .order("created_at")
       // id last: two rows with the same instant keep one order across pages.
       .order("id")
-      .range(page * PAGE, page * PAGE + PAGE - 1);
+      .range(a, b);
     if (error) fail("sales.month", error);
-    const rows = (data ?? []) as unknown as SaleRow[];
-    for (const r of rows) out.push(toSale(r));
-    if (rows.length < PAGE) break;
-  }
-  return out;
+    return (data ?? []) as unknown as (SaleRow & { id: string })[];
+  });
+  return rows.map(toSale);
 }
 
 /** The newest sales (not deleted), newest first. */
