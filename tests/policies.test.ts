@@ -613,3 +613,13 @@ test("looksLike: the same person written two ways, never two different people", 
   for (const [a, b] of yes) assert.equal(peopleLib.looksLike(a, b), true, `${a} / ${b}`);
   for (const [a, b] of no) assert.equal(peopleLib.looksLike(a, b), false, `${a} / ${b}`);
 });
+
+test("a new deal's Discord message is the owner's format, board fields only", () => {
+  const discord = req("../src/lib/discord") as typeof import("../src/lib/discord");
+  assert.equal(
+    discord.dealMessage({ agent: "Ann Agent", carrier: "Americo", product: "WL/FEX", annualCents: 113_496 }),
+    "New Deal Posted!\n\nAgent: Ann Agent\nCarrier: Americo\nProduct: WL/FEX\nAnnual Premium: $1,134.96",
+  );
+  assert.equal(discord.dealMessage({ agent: "Bo  Seller ", carrier: null, product: "", annualCents: 120_000 }), "New Deal Posted!\n\nAgent: Bo Seller\nCarrier: —\nProduct: —\nAnnual Premium: $1,200");
+  assert.equal(discord.NUMBERS_CHAT_CHANNEL_ID, "1556762836133355540");
+});

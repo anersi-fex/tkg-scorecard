@@ -166,3 +166,13 @@ If the card says AgentSpace did not accept the key, make a new agency key (Step 
 - Once the Lineage update (built 2026-11-12) is live: each person also has their own sign-in (cell number and password, made through a join link; see Getting everyone on). Four levels: you (the owner password, or your own sign-in), admins (goals, people, this month's sales, the board; two things wait for your yes under Approvals), members (their own sales and profile), and the team password (the TV and phones that have not joined yet; whether it can still log sales is your switch under Settings > Sign-ins). After the CRM update (Phase 1 Step 3, item 9): five, with **Manager** between admin and agent (their own sales and their team's: logging for a teammate, a teammate's status and notes, confirming who joins their team), members are called **Agent**, and the team password only shows the boards. A person's own password is theirs to change under their initials > Your profile; Sign out everywhere is there too.
 - With that update the wrong tries are counted per address, and an office Wi-Fi is one address. The two sign-in screens are counted apart, so one never closes the other: ten wrong owner or team passwords in 15 minutes close that screen for everyone on the address; people's own sign-ins (cell number and password) have their own, larger count, 60 from one address and 20 on one person's account, and when that screen closes it says "Too many tries from this network. Wait a few minutes, or ask an admin for a new sign-in link." A closed screen opens again as the tries age out, 15 minutes at most. Typing your owner password right, while its screen is still open, clears that screen's count. Phones already signed in, the TV and the join link keep working.
 - No cron jobs, no email, no AI in release 1.
+
+## Discord: new deals in 💰-numbers-chat
+
+Every new deal (Log a sale, the Shortcut, and a deal logged in AgentSpace that the sync brings in the same day) is posted by "Scorecard Bot" in the Lineage Financial Group channel 💰-numbers-chat, and only there (`src/lib/discord.ts`). It sends the agent, carrier, product and annual premium, never a client.
+
+1. Vercel > tkg-scorecard > Settings > Environment Variables.
+2. Key `DISCORD_BOT_TOKEN`, value: the bot's token (Discord Developer Portal > Scorecard Bot > Bot > Reset Token > Copy). Save.
+3. Deployments > the top one > ⋯ > Redeploy.
+
+Without the variable nothing is posted. A new token from Reset Token means updating it here and redeploying.

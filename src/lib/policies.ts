@@ -36,6 +36,7 @@ import { canLogFor, canSeeClient, earliestSoldOn, editRights, isPastMonth, polic
 import { isSaleKind, type LoggedBy, type SaleKind } from "./types";
 import { instantMs, sameSale, type LinkedPolicy, type SyncedPolicy } from "./agentspace-core";
 import { isAdmin, isOwner, type Viewer } from "./viewer";
+import { announceDeal } from "./discord";
 
 /**
  * The CRM's data (0006_crm.sql): the ONLY file that selects a policy's client and tracking columns.
@@ -483,6 +484,7 @@ export async function createPolicy(viewer: Viewer, form: PolicyForm): Promise<Po
   const id = String(data.id);
   await writeEvents(id, viewer, [seller.id === viewer.agentId ? "Logged the sale" : `Logged the sale for ${seller.name}`]);
   await touchBoard();
+  announceDeal({ agent: seller.name, carrier: v.carrier, product: v.product, annualCents: row.premium_cents });
   return { ok: true, id, message: "Logged. It's on the board." };
 }
 
@@ -537,6 +539,7 @@ export async function logBoardSale(viewer: Viewer | null, input: BoardSaleInput)
   const forSomeone = viewer && viewer.agentId !== input.agentId;
   await writeEvents(id, viewer, [forSomeone ? `Logged the sale for ${agentName}` : "Logged the sale"]);
   await touchBoard();
+  announceDeal({ agent: agentName, carrier: input.carrier, product: input.product, annualCents: input.premiumCents });
   return { id, agentName };
 }
 
