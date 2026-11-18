@@ -134,6 +134,11 @@ function AgencyJoin({ token, people, leaderId, leaderName }: JoinFormProps) {
           <Input id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="248 555 0100" className={FIELD} value={phone} onChange={(e) => setPhone(e.target.value)} required autoFocus />
           <p className="mt-1.5 text-[12.5px] leading-snug text-fg-2">Already on the board? We&apos;ll find you by your number. Your sales come with you.</p>
         </div>
+        {leaderId && leaderName && (
+          <p className="-mt-1 text-[12.5px] leading-snug text-fg-2" data-join-team={leaderId}>
+            You&apos;ll be on {leaderName}&apos;s team. Not your team? Ask {firstWord(leaderName)} for the right link.
+          </p>
+        )}
         {error && <Notice tone="red">{error}</Notice>}
         <Button type="submit" className="min-h-[46px] w-full text-[15px]" disabled={pending}>
           {pending ? "One moment..." : "Next"}

@@ -100,6 +100,16 @@ const go = async (page, path, selector) => {
     await hydrated(page, selector);
   }
 };
+/**
+ * The agency or a team link asks the cell number first (2026-11-17): types it, taps Next and waits
+ * for what comes next (the new-person form, "We found you", "already has a sign-in", or a line on
+ * the number step itself).
+ */
+const joinPhone = async (page, phone) => {
+  await page.fill("form[data-step=phone] #phone", phone);
+  await page.click("form[data-step=phone] button[type=submit]");
+  await page.waitForFunction(() => !!document.querySelector("[data-step=new], [data-step=claim], [data-step=signin]") || /\S/.test(document.querySelector("form[data-step=phone] .border")?.textContent ?? ""), null, { timeout: 15000 });
+};
 /** A CSS custom property as the page resolves it on <html> ("#86a6d6"). */
 const cssVar = (page, name) => page.evaluate((n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim(), name);
 
@@ -583,6 +593,7 @@ try {
   const ivy = await newVisitor();
   const iv = await ivy.newPage();
   await go(iv, joinPath, "form[data-join=agency]");
+  await joinPhone(iv, PHONE[IVY]);
   // The card lists the people an admin already added who have no sign-in yet (names only), so
   // nobody comes on a second time under another spelling.
   const claimNames = (page) => page.locator("[data-claim] button[data-claim-name]").evaluateAll((els) => els.map((e) => e.getAttribute("data-claim-name")));
@@ -590,7 +601,6 @@ try {
   check((await iv.getAttribute("[data-claim]", "data-claim")) === "chips" && (await iv.textContent("[data-claim]")).includes("Already on the board? Tap your name.") && (await claimNames(iv)).join() === waiting.join(), `the join card asks "Already on the board? Tap your name." over the people with no sign-in yet, A to Z (${(await claimNames(iv)).length} names, no ${DANA})`);
   await iv.fill("#name", IVY.toLowerCase());
   check((await appears(iv, "[data-claim-chosen]", 3000)) && (await iv.getAttribute(`button[data-claim-name="${IVY}"]`, "aria-pressed")) === "true", "typing the board's spelling by hand, in any case, marks that name as hers too");
-  await iv.fill("#phone", PHONE[IVY]);
   await iv.click("form[data-join] button:has-text(\"I'm not sure\")");
   await iv.fill("#password", "ivy-first-pass");
   await Promise.all([iv.waitForURL((u) => u.pathname === "/install"), iv.click("form[data-join] button[type=submit]")]);
@@ -598,8 +608,8 @@ try {
   const afterIvy = await feed();
   check(afterIvy.agents.length === 7 && afterIvy.agents.filter((p) => p.name.toLowerCase() === IVY.toLowerCase()).length === 1 && afterIvy.agents.find((p) => p.name === IVY)?.id === ID[IVY], "a name that matches an unclaimed person claims that row (no second Ivy Brandt)");
   // A new person joins: name, cell number, upline, in the office, a password of their own
+  await joinPhone(d, PHONE[DANA]);
   await d.fill("#name", DANA);
-  await d.fill("#phone", PHONE[DANA]);
   await d.fill("#upline-search", "ivy");
   await d.click(`#upline-list button:has-text("${IVY}")`);
   check((await d.getAttribute("[data-upline]", "data-upline")) === ID[IVY], "the upline is picked by typing a few letters of their name");
@@ -642,6 +652,7 @@ try {
     const wes = await newVisitor();
     const w = await wes.newPage();
     await go(w, joinPath, "form[data-join=agency]");
+    await joinPhone(w, PHONE[WES]);
     const left = await claimNames(w);
     check(left.join() === waiting.filter((n) => n !== IVY).join(), `someone who has a sign-in now is off the card's list (${left.length} names, no ${IVY})`);
     await w.fill("#name", "Wesley Calder");
@@ -649,7 +660,6 @@ try {
     await w.click(`button[data-claim-name="${WES}"]`);
     check(typed.chosen === 0 && typed.pressed === "false" && (await w.inputValue("#name")) === WES && (await w.getAttribute(`button[data-claim-name="${WES}"]`, "aria-pressed")) === "true" && ((await w.textContent("[data-claim-chosen]")) ?? "").includes("That's you on the board. Your numbers stay with you."), "a tap on a name puts the board's own spelling in the name box and says the numbers stay");
     await w.screenshot({ path: `${OUT}/16b-join-chips.png`, fullPage: true });
-    await w.fill("#phone", PHONE[WES]);
     await w.click("form[data-join] button:has-text(\"I'm not sure\")");
     await w.fill("#password", "wes-first-pass");
     await Promise.all([w.waitForURL((u) => u.pathname === "/install"), w.click("form[data-join] button[type=submit]")]);
@@ -662,13 +672,12 @@ try {
   const zed = await newVisitor();
   const z = await zed.newPage();
   await go(z, joinPath, "form[data-join=agency]");
+  await joinPhone(z, "(248) 555-0142");
+  check((await appears(z, "[data-step=signin] >> text=That number already has a sign-in.")) && (await z.locator('[data-step=signin] a[href="/login?way=person"]').count()) === 1, "a cell number that already has a sign-in is told to sign in, with a Sign in button");
+  await z.click("button:has-text('Use a different number')");
+  await joinPhone(z, "248 555 0199");
   await z.fill("#name", "Zed Quill");
-  await z.fill("#phone", "(248) 555-0142");
   await z.click("form[data-join] button:has-text(\"I'm not sure\")");
-  await z.fill("#password", "zed-long-enough");
-  await z.click("form[data-join] button[type=submit]");
-  check(await appears(z, "text=That number already has a sign-in. Sign in instead."), "a cell number that already has a sign-in is told to sign in");
-  await z.fill("#phone", "248 555 0199");
   await z.fill("#password", "");
   await z.locator("#password").pressSequentially("short");
   await z.click("form[data-join] button[type=submit]");
@@ -755,9 +764,7 @@ try {
     const earlyTeam = await sendEarly("form[data-way] button[type=submit]");
     check(earlyTeam.method === "POST" && earlyTeam.clean, "the same for the team password's form");
     await e.goto(`${APP}${joinPath}`);
-    await e.fill("#name", "Early Tapper");
     await e.fill("#phone", "248 555 0178");
-    await e.fill("#password", "typed-too-early");
     const earlyJoin = await sendEarly("form[data-join] button[type=submit]");
     check(earlyJoin.method === "POST" && earlyJoin.clean && (await e.locator("form[data-join=agency]").count()) === 1 && (await feed()).agents.length === 8, "a tap on Join before the page is ready keeps them out of the address too, and adds nobody");
     await early.addCookies(await dana.cookies());
@@ -1352,6 +1359,7 @@ try {
     await o.waitForSelector("[data-team-link] code");
     const teamUrl = ((await o.textContent("[data-team-link] code")) ?? "").trim();
     await go(lk, new URL(teamUrl).pathname, "form[data-join=agency]");
+    await joinPhone(lk, "248 555 0296");
     check(teamUrl !== freshUrl && (await lk.getAttribute("[data-join-team]", "data-join-team")) === ID[NORA] && (await lk.locator("[data-upline-picker], #upline-search").count()) === 0 && (await lk.textContent("h1")) === "Join Nora's team", "a link for one team opens the join page saying whose team it is, with the upline fixed and no picker");
     // A manager has a link of their own team, and no agency link or person editor
     await go(nora.pg, "/team", "input[aria-label='Find a person']");
@@ -1390,17 +1398,19 @@ try {
       check(/^\/join\/[A-Za-z0-9_-]{16,}$/.test(earlyPath) && openBefore && (await hp.locator("[data-join=closed]").count()) === 1 && (await hp.locator("form[data-join]").count()) === 0, "and the unused reset link that was made for them is turned off");
       // The agency link is not a way back in: not under their name, and not under a new name with their number
       const ASK = "Ask an admin to put you back on the board.";
+      let offList = true;
       const tryJoin = async (name, phone) => {
         await go(hp, freshPath, "form[data-join=agency]");
-        await hp.fill("#name", name);
-        await hp.fill("#phone", phone);
-        await hp.click("form[data-join] button:has-text(\"I'm not sure\")");
-        await hp.fill("#password", "back-in-again");
-        await hp.click("form[data-join] button[type=submit]");
+        await joinPhone(hp, phone);
+        if (await hp.locator("form[data-step=new]").count()) {
+          offList = offList && !(await hp.locator("[data-claim] button[data-claim-name]").evaluateAll((els) => els.map((e) => e.getAttribute("data-claim-name")))).includes(DANA);
+          await hp.fill("#name", name);
+          await hp.click("form[data-join] button:has-text(\"I'm not sure\")");
+          await hp.fill("#password", "back-in-again");
+          await hp.click("form[data-join] button[type=submit]");
+        }
         return (await appears(hp, `text=${ASK}`)) && new URL(hp.url()).pathname === freshPath;
       };
-      await go(hp, freshPath, "form[data-join=agency]");
-      const offList = !(await hp.locator("[data-claim] button[data-claim-name]").evaluateAll((els) => els.map((e) => e.getAttribute("data-claim-name")))).includes(DANA);
       const byName = await tryJoin(DANA, "248 555 0188");
       const byNumber = await tryJoin("Dee Whitlow", PHONE[DANA]);
       const stillOff = await feed();
@@ -1543,8 +1553,8 @@ try {
       const rhea = await newVisitor();
       const rp = await rhea.newPage();
       await go(rp, freshPath, "form[data-join=agency]");
+      await joinPhone(rp, PHONE[RHEA]);
       await rp.fill("#name", RHEA);
-      await rp.fill("#phone", PHONE[RHEA]);
       check((await rp.locator(`[data-upline-leaders] button:has-text("${NORA}")`).count()) === 1, "the agency link shows the people who lead a team as one tap each");
       await rp.click(`[data-upline-leaders] button:has-text("${NORA}")`);
       await rp.fill("#password", "rhea-first-pass");
@@ -2303,10 +2313,10 @@ try {
       const ctx = await phoneCtx();
       const pg = await ctx.newPage();
       await go(pg, path, "form[data-join=agency]");
+      await joinPhone(pg, cell[name]);
       if (shot) await pg.screenshot({ path: `${OUT}/${shot}`, fullPage: true });
       if (tap) await pg.click(`[data-claim-name="${name}"]`);
       else await pg.fill("#name", name);
-      await pg.fill("#phone", cell[name]);
       await pg.fill("#password", PASS);
       if (tamper) await pg.evaluate((id) => { document.querySelector("input[name=upline_id]").value = id; }, tamper);
       await Promise.all([pg.waitForURL((u) => u.pathname === "/install"), pg.click("form[data-join] button[type=submit]")]);
@@ -2339,6 +2349,7 @@ try {
     const peek = await phoneCtx();
     const pk = await peek.newPage();
     await go(pk, remyPath, "form[data-join=agency]");
+    await joinPhone(pk, "248 555 0298");
     const peekInfo = await pk.evaluate(() => ({ h1: document.querySelector("h1")?.textContent, team: document.querySelector("[data-join-team]")?.textContent?.replace(/\s+/g, " ") ?? "", picker: !!document.querySelector("[data-upline-picker], #upline-search"), unsure: document.body.innerText.includes("I'm not sure"), chips: [...document.querySelectorAll("[data-claim-name]")].map((b) => b.getAttribute("data-claim-name")), wide: document.documentElement.scrollWidth > window.innerWidth + 1 }));
     check(peekInfo.h1 === "Join Remy's team" && peekInfo.team.includes("Not your team? Ask Remy for the right link.") && !peekInfo.picker && !peekInfo.unsure, "a team link opens \"Join Remy's team\", with the upline fixed, no picker and the \"Not your team?\" line");
     check(peekInfo.chips.includes(CORA) && peekInfo.chips.includes(UNA) && !peekInfo.chips.includes(REMY) && !peekInfo.wide, "and the same \"tap your name\" chips (the people on the board are there; the admin is not), no sideways scroll at 390 px");
@@ -2350,6 +2361,7 @@ try {
       const ctx = await phoneCtx();
       const ap = await ctx.newPage();
       await go(ap, agencyPath, "form[data-join=agency]");
+      await joinPhone(ap, "248 555 0297");
       const info = await ap.evaluate(() => ({ h1: document.querySelector("h1")?.textContent, picker: !!document.querySelector("#upline-search"), unsure: document.body.innerText.includes("I'm not sure"), team: !!document.querySelector("[data-join-team]") }));
       check(info.h1 === `Join ${AGENCY} on Scorecard` && info.picker && info.unsure && !info.team, "the agency link still asks \"Who is your upline?\" with \"I'm not sure\" as an answer");
       await ctx.close();
@@ -2387,8 +2399,8 @@ try {
       const ctx = await phoneCtx();
       const pg = await ctx.newPage();
       await go(pg, coraPath, "form[data-join=agency]");
+      await joinPhone(pg, "248 555 0299");
       await pg.fill("#name", REMY);
-      await pg.fill("#phone", "248 555 0299");
       await pg.fill("#password", PASS);
       await pg.click("form[data-join] button[type=submit]");
       check(await appears(pg, "text=already on Scorecard"), "a team link never claims an admin's row");
