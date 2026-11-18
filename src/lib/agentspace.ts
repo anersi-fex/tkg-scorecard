@@ -2,7 +2,6 @@ import "server-only";
 import { db } from "./supabase";
 import { addAgent, listAgents, touchBoard } from "./data";
 import { todayInDetroit } from "./month";
-import { postDeal } from "./discord";
 import {
   ERROR_LINE,
   FRESH_MS,
@@ -733,8 +732,7 @@ async function place(p: SyncedPolicy, agentId: string, people: People, celebrate
   const id = await insertSyncedPolicy(p, agentId, at);
   if (!id) return null;
   counts.inserted++;
-  // A deal new today that was logged in AgentSpace instead of here is posted like one logged here; an older one is not news.
-  if (fresh) await postDeal({ agent: people.names().get(agentId) ?? "An agent", carrier: p.carrier, product: p.product, annualCents: p.premiumCents });
+  // Not posted to Discord: AgentSpace's own deal bot already posts every AgentSpace deal in the same channel.
   return "inserted";
 }
 

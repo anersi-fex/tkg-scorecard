@@ -7,6 +7,9 @@ import { after } from "next/server";
  * token in `DISCORD_BOT_TOKEN` (Vercel); without it nothing is sent. The channel is fixed here, on
  * purpose not a setting: the bot posts in that one channel and nowhere else.
  *
+ * Only deals logged in Scorecard (Log a sale, the Shortcut) are posted: AgentSpace's own "AgentSpace Deal
+ * Bot" already posts the deals logged there, in the same channel, so the sync never posts.
+ *
  * Only board fields go out (the seller's name, carrier, product, annual premium): never a client,
  * a policy number or a note. Best effort: a post that fails never fails the sale, and the log holds
  * the error class only. No @mentions are ever parsed, so a name can never ping anyone.
@@ -33,7 +36,7 @@ export function dealMessage(d: DealPost): string {
   return ["New Deal Posted!", "", `Agent: ${clean(d.agent)}`, `Carrier: ${clean(d.carrier)}`, `Product: ${clean(d.product)}`, `Annual Premium: ${annualDollars(d.annualCents)}`].join("\n");
 }
 
-/** Posts a new deal now and waits for Discord (at most 8 seconds); never throws. The AgentSpace sync, already running after its response, uses this. */
+/** Posts a new deal now and waits for Discord (at most 8 seconds); never throws. */
 export async function postDeal(d: DealPost): Promise<void> {
   const token = process.env.DISCORD_BOT_TOKEN?.trim();
   if (!token) return;

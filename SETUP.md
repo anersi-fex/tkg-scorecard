@@ -169,7 +169,7 @@ If the card says AgentSpace did not accept the key, make a new agency key (Step 
 
 ## Discord: new deals in 💰-numbers-chat
 
-Every new deal (Log a sale, the Shortcut, and a deal logged in AgentSpace that the sync brings in the same day) is posted by "Scorecard Bot" in the Lineage Financial Group channel 💰-numbers-chat, and only there (`src/lib/discord.ts`). It sends the agent, carrier, product and annual premium, never a client.
+Every new deal logged in Scorecard (Log a sale, the Shortcut) is posted by "Scorecard Bot" in the Lineage Financial Group channel 💰-numbers-chat, and only there (`src/lib/discord.ts`). It sends the agent, carrier, product and annual premium, never a client. Deals logged in AgentSpace are not posted by Scorecard: AgentSpace's own deal bot already posts them in that channel.
 
 1. Vercel > tkg-scorecard > Settings > Environment Variables.
 2. Key `DISCORD_BOT_TOKEN`, value: the bot's token (Discord Developer Portal > Scorecard Bot > Bot > Reset Token > Copy). Save.
